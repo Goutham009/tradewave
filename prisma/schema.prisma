@@ -1,0 +1,582 @@
+// Tradewave Prisma Schema
+// B2B Trade & Logistics Platform with Blockchain Integration
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// USER & AUTHENTICATION
+// =============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String
+  role          UserRole  @default(BUYER)
+  status        UserStatus @default(PENDING)
+  companyName   String?
+  phone         String?
+  avatar        String?
+  walletAddress String?
+  industry      String?
+  department    String?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  emailVerified DateTime?
+  
+  // Relations
+  requirements      Requirement[]
+  quotations        Quotation[]
+  buyerTransactions Transaction[] @relation("BuyerTransactions")
+  auditLogs         AuditLog[]
+  sessions          Session[]
+  accounts          Account[]
+  
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+enum UserRole {
+  BUYER
+  ADMIN
+  SUPPLIER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+  SUSPENDED
+}
+
+// =============================================================================
+// REQUIREMENTS
+// =============================================================================
+
+model Requirement {
+  id               String            @id @default(cuid())
+  buyerId          String
+  title            String
+  description      String            @db.Text
+  category         String
+  subcategory      String?
+  specifications   Json              @default("{}")
+  quantity         Int
+  unit             String
+  targetPrice      Decimal?          @db.Decimal(15, 2)
+  currency         String            @default("USD")
+  deliveryLocation String
+  deliveryDeadline DateTime
+  priority         RequirementPriority @default(MEDIUM)
+  status           RequirementStatus @default(DRAFT)
+  assignedTo       String?
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  
+  // Relations
+  buyer            User              @relation(fields: [buyerId], references: [id])
+  quotations       Quotation[]
+  transactions     Transaction[]
+  attachments      Attachment[]
+  
+  @@map("requirements")
+}
+
+enum RequirementStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  SOURCING
+  QUOTATIONS_READY
+  NEGOTIATING
+  ACCEPTED
+  COMPLETED
+  CANCELLED
+}
+
+enum RequirementPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Attachment {
+  id            String      @id @default(cuid())
+  requirementId String
+  name          String
+  url           String
+  type          String
+  size          Int
+  uploadedAt    DateTime    @default(now())
+  
+  requirement   Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  
+  @@map("attachments")
+}
+
+// =============================================================================
+// SUPPLIERS
+// =============================================================================
+
+model Supplier {
+  id                String        @id @default(cuid())
+  name              String
+  email             String        @unique
+  phone             String?
+  companyName       String
+  location          String
+  categories        String[]
+  yearsInBusiness   Int?
+  minimumOrderValue Decimal?      @db.Decimal(15, 2)
+  leadTime          Int?
+  verified          Boolean       @default(false)
+  
+  overallRating     Decimal?      @db.Decimal(3, 2)
+  qualityRating     Decimal?      @db.Decimal(3, 2)
+  deliveryRating    Decimal?      @db.Decimal(3, 2)
+  communicationRating Decimal?    @db.Decimal(3, 2)
+  pricingRating     Decimal?      @db.Decimal(3, 2)
+  totalReviews      Int           @default(0)
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  // Relations
+  certifications    Certification[]
+  quotations        Quotation[]
+  transactions      Transaction[]
+  
+  @@map("suppliers")
+}
+
+model Certification {
+  id           String    @id @default(cuid())
+  supplierId   String
+  name         String
+  issuingBody  String
+  validUntil   DateTime
+  documentUrl  String?
+  verified     Boolean   @default(false)
+  
+  supplier     Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  
+  @@map("certifications")
+}
+
+// =============================================================================
+// QUOTATIONS
+// =============================================================================
+
+model Quotation {
+  id              String          @id @default(cuid())
+  requirementId   String
+  supplierId      String
+  userId          String?
+  
+  unitPrice       Decimal         @db.Decimal(15, 2)
+  quantity        Int
+  subtotal        Decimal         @db.Decimal(15, 2)
+  shipping        Decimal?        @db.Decimal(15, 2)
+  insurance       Decimal?        @db.Decimal(15, 2)
+  customs         Decimal?        @db.Decimal(15, 2)
+  taxes           Decimal?        @db.Decimal(15, 2)
+  platformFee     Decimal?        @db.Decimal(15, 2)
+  total           Decimal         @db.Decimal(15, 2)
+  currency        String          @default("USD")
+  
+  leadTime        Int
+  validUntil      DateTime
+  terms           String?         @db.Text
+  notes           String?         @db.Text
+  certifications  String[]
+  samples         Boolean         @default(false)
+  sampleCost      Decimal?        @db.Decimal(15, 2)
+  status          QuotationStatus @default(PENDING)
+  ranking         Int?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations
+  requirement     Requirement     @relation(fields: [requirementId], references: [id])
+  supplier        Supplier        @relation(fields: [supplierId], references: [id])
+  user            User?           @relation(fields: [userId], references: [id])
+  transactions    Transaction[]
+  
+  @@map("quotations")
+}
+
+enum QuotationStatus {
+  PENDING
+  SUBMITTED
+  UNDER_REVIEW
+  SHORTLISTED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+// =============================================================================
+// TRANSACTIONS
+// =============================================================================
+
+model Transaction {
+  id                    String            @id @default(cuid())
+  requirementId         String
+  quotationId           String
+  buyerId               String
+  supplierId            String
+  
+  status                TransactionStatus @default(INITIATED)
+  amount                Decimal           @db.Decimal(15, 2)
+  currency              String            @default("USD")
+  paymentMethod         String?
+  paymentStatus         PaymentStatus?
+  
+  smartContractAddress  String?
+  
+  // Shipping Details
+  carrier               String?
+  trackingNumber        String?
+  origin                String?
+  destination           String?
+  estimatedDelivery     DateTime?
+  actualDelivery        DateTime?
+  weight                Decimal?          @db.Decimal(10, 2)
+  
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  
+  // Relations
+  requirement           Requirement       @relation(fields: [requirementId], references: [id])
+  quotation             Quotation         @relation(fields: [quotationId], references: [id])
+  buyer                 User              @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  supplier              Supplier          @relation(fields: [supplierId], references: [id])
+  milestones            TransactionMilestone[]
+  documents             TransactionDocument[]
+  escrow                EscrowTransaction?
+  blockchainDeployments BlockchainDeployment[]
+  contractExecutions    SmartContractExecution[]
+  documentHashes        DocumentHash[]
+  blockchainAuditLogs   BlockchainAuditLog[]
+  
+  @@map("transactions")
+}
+
+enum TransactionStatus {
+  INITIATED
+  PAYMENT_PENDING
+  PAYMENT_RECEIVED
+  ESCROW_HELD
+  PRODUCTION
+  QUALITY_CHECK
+  SHIPPED
+  IN_TRANSIT
+  CUSTOMS
+  DELIVERED
+  CONFIRMED
+  ESCROW_RELEASED
+  COMPLETED
+  DISPUTED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+model TransactionMilestone {
+  id              String            @id @default(cuid())
+  transactionId   String
+  status          TransactionStatus
+  description     String?
+  actor           String?
+  blockchainTxHash String?
+  timestamp       DateTime          @default(now())
+  
+  transaction     Transaction       @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  @@map("transaction_milestones")
+}
+
+model TransactionDocument {
+  id            String              @id @default(cuid())
+  transactionId String
+  type          DocumentType
+  name          String
+  url           String
+  hash          String?
+  verified      Boolean             @default(false)
+  uploadedAt    DateTime            @default(now())
+  
+  transaction   Transaction         @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  @@map("transaction_documents")
+}
+
+enum DocumentType {
+  INVOICE
+  PACKING_LIST
+  CERTIFICATE
+  CUSTOMS
+  OTHER
+}
+
+// =============================================================================
+// ESCROW
+// =============================================================================
+
+model EscrowTransaction {
+  id                String        @id @default(cuid())
+  transactionId     String        @unique
+  amount            Decimal       @db.Decimal(15, 2)
+  currency          String        @default("USD")
+  status            EscrowStatus  @default(PENDING)
+  holdDate          DateTime?
+  releaseDate       DateTime?
+  contractAddress   String?
+  blockchainTxHash  String?
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  // Relations
+  transaction       Transaction   @relation(fields: [transactionId], references: [id])
+  releaseConditions ReleaseCondition[]
+  
+  @@map("escrow_transactions")
+}
+
+enum EscrowStatus {
+  PENDING
+  HELD
+  RELEASING
+  RELEASED
+  DISPUTED
+  REFUNDED
+}
+
+model ReleaseCondition {
+  id          String            @id @default(cuid())
+  escrowId    String
+  type        ReleaseConditionType
+  description String
+  satisfied   Boolean           @default(false)
+  satisfiedAt DateTime?
+  satisfiedBy String?
+  
+  escrow      EscrowTransaction @relation(fields: [escrowId], references: [id], onDelete: Cascade)
+  
+  @@map("release_conditions")
+}
+
+enum ReleaseConditionType {
+  DELIVERY_CONFIRMED
+  QUALITY_APPROVED
+  DOCUMENTS_VERIFIED
+  TIME_ELAPSED
+}
+
+// =============================================================================
+// BLOCKCHAIN
+// =============================================================================
+
+model BlockchainDeployment {
+  id              String          @id @default(cuid())
+  transactionId   String?
+  contractType    ContractType
+  contractAddress String
+  deploymentTxHash String
+  blockNumber     Int
+  gasUsed         Int?
+  gasCost         String?
+  network         BlockchainNetwork @default(SEPOLIA)
+  status          DeploymentStatus @default(PENDING)
+  deployedAt      DateTime        @default(now())
+  
+  // Relations
+  transaction     Transaction?    @relation(fields: [transactionId], references: [id])
+  executions      SmartContractExecution[]
+  
+  @@map("blockchain_deployments")
+}
+
+enum ContractType {
+  TRADE_AGREEMENT
+  DOCUMENT_VERIFICATION
+  ESCROW_MANAGEMENT
+  AUDIT_LOG
+}
+
+enum BlockchainNetwork {
+  SEPOLIA
+  POLYGON
+  MAINNET
+}
+
+enum DeploymentStatus {
+  PENDING
+  DEPLOYING
+  DEPLOYED
+  FAILED
+}
+
+model SmartContractExecution {
+  id               String                @id @default(cuid())
+  deploymentId     String?
+  transactionId    String?
+  contractAddress  String
+  functionName     String
+  parameters       Json                  @default("{}")
+  transactionHash  String
+  blockNumber      Int?
+  status           BlockchainTxStatus    @default(PENDING)
+  gasUsed          Int?
+  gasCost          String?
+  returnValues     Json?
+  executedAt       DateTime              @default(now())
+  
+  // Relations
+  deployment       BlockchainDeployment? @relation(fields: [deploymentId], references: [id])
+  transaction      Transaction?          @relation(fields: [transactionId], references: [id])
+  
+  @@map("smart_contract_executions")
+}
+
+enum BlockchainTxStatus {
+  PENDING
+  BROADCASTING
+  CONFIRMING
+  CONFIRMED
+  FAILED
+}
+
+model BlockchainAuditLog {
+  id              String      @id @default(cuid())
+  transactionId   String?
+  contractAddress String?
+  eventType       String
+  action          String
+  actor           String
+  details         Json        @default("{}")
+  blockNumber     Int?
+  txHash          String?
+  timestamp       DateTime    @default(now())
+  immutable       Boolean     @default(true)
+  
+  // Relations
+  transaction     Transaction? @relation(fields: [transactionId], references: [id])
+  
+  @@map("blockchain_audit_logs")
+}
+
+model DocumentHash {
+  id                  String    @id @default(cuid())
+  transactionId       String
+  documentType        String
+  originalName        String
+  hash                String
+  algorithm           String    @default("SHA256")
+  contractAddress     String?
+  blockchainTxHash    String?
+  verified            Boolean   @default(false)
+  uploadedAt          DateTime  @default(now())
+  verifiedAt          DateTime?
+  
+  // Relations
+  transaction         Transaction @relation(fields: [transactionId], references: [id])
+  
+  @@map("document_hashes")
+}
+
+model BlockchainTransaction {
+  id              String              @id @default(cuid())
+  transactionHash String              @unique
+  contractAddress String?
+  functionCalled  String?
+  parameters      Json?
+  status          BlockchainTxStatus  @default(PENDING)
+  confirmations   Int                 @default(0)
+  blockNumber     Int?
+  gasUsed         Int?
+  gasCost         String?
+  network         BlockchainNetwork   @default(SEPOLIA)
+  createdAt       DateTime            @default(now())
+  confirmedAt     DateTime?
+  
+  @@map("blockchain_transactions")
+}
+
+// =============================================================================
+// AUDIT LOG (Application Level)
+// =============================================================================
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String?
+  action      String
+  resource    String
+  resourceId  String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  
+  user        User?     @relation(fields: [userId], references: [id])
+  
+  @@map("audit_logs")
+}

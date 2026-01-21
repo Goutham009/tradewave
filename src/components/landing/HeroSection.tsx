@@ -46,9 +46,9 @@ export function HeroSection() {
 
           {/* CTA Buttons */}
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link href="/register">
+            <Link href="#get-quotes">
               <Button size="lg" variant="gradient" className="w-full sm:w-auto">
-                Start Free Trial
+                Get Free Quotes
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
@@ -58,6 +58,11 @@ export function HeroSection() {
               </Button>
             </Link>
           </div>
+          
+          {/* No Login Badge */}
+          <p className="mt-4 text-sm text-slate-400">
+            ✨ No login required to get started
+          </p>
 
           {/* Highlights */}
           <div className="mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-4">

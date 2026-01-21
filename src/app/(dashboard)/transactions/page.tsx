@@ -323,16 +323,18 @@ export default function TransactionsPage() {
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <Link href="/blockchain">
+                  <Link href={`/transactions/${transaction.id}`}>
                     <Button variant="outline" size="sm">
-                      <LinkIcon className="mr-2 h-4 w-4" />
-                      Blockchain
+                      <Eye className="mr-2 h-4 w-4" />
+                      View Details
                     </Button>
                   </Link>
-                  <Button variant="outline" size="sm">
-                    <FileText className="mr-2 h-4 w-4" />
-                    Documents
-                  </Button>
+                  {transaction.status === 'IN_TRANSIT' && (
+                    <Button variant="outline" size="sm">
+                      <Truck className="mr-2 h-4 w-4" />
+                      Track Shipment
+                    </Button>
+                  )}
                   {transaction.status === 'DELIVERED' && (
                     <Button size="sm" variant="gradient">
                       <CheckCircle2 className="mr-2 h-4 w-4" />

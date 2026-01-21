@@ -50,13 +50,11 @@ async function main() {
       name: 'Quality Supplies Co.',
       email: 'supplier@example.com',
       companyName: 'Quality Supplies Co. Ltd',
-      country: 'China',
-      city: 'Shanghai',
       location: 'Shanghai, China',
       categories: ['Electronics', 'Components'],
-      rating: 4.5,
+      overallRating: 4.5,
       verified: true,
-      description: 'Leading supplier of electronic components with 15+ years experience.',
+      yearsInBusiness: 15,
     },
   });
 

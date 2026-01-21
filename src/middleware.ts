@@ -19,10 +19,10 @@ export default withAuth(
       }
     }
 
-    // Protect admin routes
-    if (pathname.startsWith('/admin')) {
+    // Protect admin routes (except login page)
+    if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login')) {
       if (!token) {
-        return NextResponse.redirect(new URL('/login', req.url));
+        return NextResponse.redirect(new URL('/admin/login', req.url));
       }
       if (token.role !== 'ADMIN') {
         return NextResponse.redirect(new URL('/dashboard', req.url));
@@ -37,7 +37,7 @@ export default withAuth(
         const pathname = req.nextUrl.pathname;
         
         // Public routes
-        if (pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/register')) {
+        if (pathname === '/' || pathname.startsWith('/login') || pathname.startsWith('/register') || pathname === '/admin/login') {
           return true;
         }
         

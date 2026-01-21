@@ -5,6 +5,7 @@ import '@/styles/variables.css';
 import '@/styles/animations.css';
 import { AuthProvider } from '@/lib/context/AuthContext';
 import { Toaster } from '@/components/ui/toaster';
+import { SocketProvider } from '@/providers/SocketProvider';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -23,7 +24,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <AuthProvider>
-          {children}
+          <SocketProvider>
+            {children}
+          </SocketProvider>
           <Toaster />
         </AuthProvider>
       </body>

@@ -12,8 +12,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Bell, Search, Menu, User, Settings, LogOut, HelpCircle } from 'lucide-react';
+import { Search, Menu, User, Settings, LogOut, HelpCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { NotificationBell } from '@/components/notifications/NotificationCenter';
 
 interface DashboardHeaderProps {
   user: {
@@ -45,12 +46,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
 
       <div className="flex items-center gap-4">
         {/* Notifications */}
-        <Button variant="ghost" size="sm" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
-            3
-          </span>
-        </Button>
+        <NotificationBell />
 
         {/* User Menu */}
         <DropdownMenu>

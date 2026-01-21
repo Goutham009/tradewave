@@ -153,7 +153,7 @@ export async function deployTradeAgreement(
     
     const factory = new ethers.ContractFactory(
       TradeAgreementABI,
-      [], // Bytecode would come from compiled contract
+      '0x' as any, // Bytecode would come from compiled contract
       signer
     );
 

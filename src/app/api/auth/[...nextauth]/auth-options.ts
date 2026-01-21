@@ -18,32 +18,81 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Invalid credentials');
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        });
-
-        if (!user || !user.password) {
-          throw new Error('Invalid credentials');
-        }
-
-        const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
-
-        if (!isPasswordValid) {
-          throw new Error('Invalid credentials');
-        }
-
-        if (user.status !== 'ACTIVE') {
-          throw new Error('Account is not active');
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          companyName: user.companyName,
-          walletAddress: user.walletAddress,
+        // Demo mode - allow test accounts without database
+        const demoUsers: Record<string, any> = {
+          'admin@tradewave.io': {
+            id: 'demo-admin-001',
+            email: 'admin@tradewave.io',
+            name: 'Admin User',
+            password: 'password123',
+            role: 'ADMIN',
+            companyName: 'Tradewave',
+            walletAddress: null,
+          },
+          'admin@tradewave.com': {
+            id: 'demo-admin-002',
+            email: 'admin@tradewave.com',
+            name: 'Platform Admin',
+            password: 'admin123',
+            role: 'ADMIN',
+            companyName: 'Tradewave Platform',
+            walletAddress: null,
+          },
+          'demo@tradewave.io': {
+            id: 'demo-user-001',
+            email: 'demo@tradewave.io',
+            name: 'Demo User',
+            password: 'password123',
+            role: 'BUYER',
+            companyName: 'Demo Company Ltd',
+            walletAddress: null,
+          },
         };
+
+        const demoUser = demoUsers[credentials.email];
+        if (demoUser && credentials.password === demoUser.password) {
+          return {
+            id: demoUser.id,
+            email: demoUser.email,
+            name: demoUser.name,
+            role: demoUser.role,
+            companyName: demoUser.companyName,
+            walletAddress: demoUser.walletAddress,
+          };
+        }
+
+        // Try database if not a demo user
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email },
+          });
+
+          if (!user || !user.password) {
+            throw new Error('Invalid credentials');
+          }
+
+          const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
+
+          if (!isPasswordValid) {
+            throw new Error('Invalid credentials');
+          }
+
+          if (user.status !== 'ACTIVE') {
+            throw new Error('Account is not active');
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            companyName: user.companyName,
+            walletAddress: user.walletAddress,
+          };
+        } catch (error) {
+          // If database is unavailable, only demo users work
+          throw new Error('Invalid credentials');
+        }
       },
     }),
   ],

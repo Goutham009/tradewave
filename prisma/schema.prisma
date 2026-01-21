@@ -39,6 +39,8 @@ model User {
   auditLogs         AuditLog[]
   sessions          Session[]
   accounts          Account[]
+  notifications     Notification[]
+  activities        Activity[]
   
   @@map("users")
 }
@@ -303,10 +305,12 @@ model Transaction {
   milestones            TransactionMilestone[]
   documents             TransactionDocument[]
   escrow                EscrowTransaction?
+  payments              Payment[]
   blockchainDeployments BlockchainDeployment[]
   contractExecutions    SmartContractExecution[]
   documentHashes        DocumentHash[]
   blockchainAuditLogs   BlockchainAuditLog[]
+  shipment              Shipment?
   
   @@map("transactions")
 }
@@ -390,6 +394,15 @@ model EscrowTransaction {
   releaseDate       DateTime?
   contractAddress   String?
   blockchainTxHash  String?
+  
+  // Quick access flags for release conditions
+  deliveryConfirmed   Boolean     @default(false)
+  deliveryConfirmedAt DateTime?
+  qualityApproved     Boolean     @default(false)
+  qualityApprovedAt   DateTime?
+  documentsVerified   Boolean     @default(false)
+  documentsVerifiedAt DateTime?
+  autoReleaseDate     DateTime?
   
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
@@ -562,6 +575,171 @@ model BlockchainTransaction {
 }
 
 // =============================================================================
+// LEADS (Non-registered users who create requirements)
+// =============================================================================
+
+model Lead {
+  id              String      @id @default(cuid())
+  email           String      @unique
+  fullName        String
+  companyName     String
+  phoneNumber     String
+  
+  category        String      // "Metals", "Chemicals", etc.
+  productName     String
+  quantity        Int
+  unit            String
+  location        String
+  timeline        String
+  additionalReqs  String?     @db.Text
+  
+  status          LeadStatus  @default(NEW_LEAD)
+  notes           String?     @db.Text
+  assignedTo      String?
+  lastContactedAt DateTime?
+  convertedAt     DateTime?
+  convertedUserId String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@map("leads")
+}
+
+enum LeadStatus {
+  NEW_LEAD
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  REJECTED
+  UNRESPONSIVE
+}
+
+// =============================================================================
+// PAYMENTS
+// =============================================================================
+
+model Payment {
+  id                String        @id @default(cuid())
+  transactionId     String
+  amount            Decimal       @db.Decimal(15, 2)
+  currency          String        @default("USD")
+  method            PaymentMethod @default(STRIPE)
+  status            PaymentStatus @default(PENDING)
+  
+  // Stripe/Provider details
+  providerPaymentId String?       // stripe payment intent id
+  clientSecret      String?       // for frontend confirmation
+  providerFee       Decimal?      @db.Decimal(15, 2)
+  
+  // Bank transfer details
+  bankReference     String?
+  bankAccount       String?
+  
+  paidAt            DateTime?
+  failedAt          DateTime?
+  refundedAt        DateTime?
+  refundAmount      Decimal?      @db.Decimal(15, 2)
+  
+  metadata          Json?         @default("{}")
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  // Relations
+  transaction       Transaction   @relation(fields: [transactionId], references: [id])
+  
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  STRIPE
+  WIRE_TRANSFER
+  BANK_TRANSFER
+  CRYPTO
+  ESCROW
+}
+
+// =============================================================================
+// NOTIFICATIONS
+// =============================================================================
+
+model Notification {
+  id          String            @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String
+  resourceType String?          // "requirement", "transaction", "quotation"
+  resourceId  String?
+  read        Boolean           @default(false)
+  readAt      DateTime?
+  
+  createdAt   DateTime          @default(now())
+  
+  // Relations
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+enum NotificationType {
+  REQUIREMENT_CREATED
+  QUOTATION_RECEIVED
+  QUOTATION_ACCEPTED
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  ESCROW_HELD
+  ESCROW_RELEASED
+  SHIPMENT_UPDATE
+  DELIVERY_CONFIRMED
+  QUALITY_APPROVED
+  DOCUMENTS_VERIFIED
+  TRANSACTION_COMPLETED
+  DISPUTE_OPENED
+  SYSTEM
+}
+
+// =============================================================================
+// ACTIVITY LOG (Detailed user activity tracking)
+// =============================================================================
+
+model Activity {
+  id          String       @id @default(cuid())
+  userId      String?
+  type        ActivityType
+  action      String
+  description String?
+  resourceType String?     // "requirement", "transaction", "quotation", etc.
+  resourceId  String?
+  metadata    Json?        @default("{}")
+  ipAddress   String?
+  userAgent   String?
+  
+  createdAt   DateTime     @default(now())
+  
+  // Relations
+  user        User?        @relation(fields: [userId], references: [id])
+  
+  @@index([userId, createdAt])
+  @@index([resourceType, resourceId])
+  @@map("activities")
+}
+
+enum ActivityType {
+  REQUIREMENT
+  QUOTATION
+  TRANSACTION
+  PAYMENT
+  ESCROW
+  SHIPMENT
+  DOCUMENT
+  USER
+  SYSTEM
+}
+
+// =============================================================================
 // AUDIT LOG (Application Level)
 // =============================================================================
 
@@ -579,4 +757,90 @@ model AuditLog {
   user        User?     @relation(fields: [userId], references: [id])
   
   @@map("audit_logs")
+}
+
+// =============================================================================
+// SHIPMENT TRACKING
+// =============================================================================
+
+model Shipment {
+  id                  String         @id @default(cuid())
+  transactionId       String         @unique
+  trackingNumber      String         @unique
+  carrier             String         // DHL, FedEx, UPS, Local Courier
+  status              ShipmentStatus @default(PENDING)
+  originLocation      String
+  currentLocation     String
+  destinationLocation String
+  estimatedDelivery   DateTime
+  actualDelivery      DateTime?
+  updates             Json?          // Array of tracking updates
+  
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  
+  // Relations
+  transaction         Transaction    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  @@index([transactionId])
+  @@index([trackingNumber])
+  @@index([status])
+  @@map("shipments")
+}
+
+enum ShipmentStatus {
+  PENDING
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELAYED
+  LOST
+  CANCELLED
+}
+
+// =============================================================================
+// ADMIN SETTINGS
+// =============================================================================
+
+model AdminSetting {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  value       String    // Can be JSON string
+  description String?
+  category    String?   // FEES, SECURITY, COMPLIANCE
+  updatedBy   String
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([key])
+  @@map("admin_settings")
+}
+
+// =============================================================================
+// SECURITY LOG
+// =============================================================================
+
+model SecurityLog {
+  id          String          @id @default(cuid())
+  userId      String?
+  eventType   SecurityEventType
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  timestamp   DateTime        @default(now())
+  
+  @@index([userId])
+  @@index([timestamp])
+  @@map("security_logs")
+}
+
+enum SecurityEventType {
+  LOGIN
+  LOGOUT
+  FAILED_LOGIN
+  PERMISSION_DENIED
+  SETTINGS_CHANGED
+  DATA_EXPORTED
+  PASSWORD_CHANGED
+  ACCOUNT_LOCKED
 }

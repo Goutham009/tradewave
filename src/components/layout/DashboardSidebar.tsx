@@ -10,6 +10,8 @@ import {
   MessageSquare,
   CreditCard,
   Package,
+  Truck,
+  ClipboardList,
   Settings,
   HelpCircle,
   Link as LinkIcon,
@@ -21,7 +23,9 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Requirements', href: '/requirements', icon: FileText },
   { name: 'Quotations', href: '/quotations', icon: MessageSquare },
+  { name: 'Orders', href: '/orders', icon: ClipboardList },
   { name: 'Transactions', href: '/transactions', icon: Package },
+  { name: 'Shipments', href: '/shipments', icon: Truck },
   { name: 'Payments', href: '/payments', icon: CreditCard },
   { name: 'Blockchain', href: '/blockchain', icon: LinkIcon },
 ];

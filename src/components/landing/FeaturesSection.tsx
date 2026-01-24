@@ -94,42 +94,45 @@ const featureCategories = [
 
 export function FeaturesSection() {
   return (
-    <section id="features" className="py-20 sm:py-28">
+    <section id="features" className="py-24 sm:py-32 bg-gradient-to-b from-background to-muted/30">
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          <span className="inline-block rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-4">
+            Features
+          </span>
+          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
             Powerful Features for Modern Trade
           </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
+          <p className="mt-6 text-lg text-muted-foreground leading-relaxed">
             Everything you need to manage your B2B trade operations with confidence.
           </p>
         </div>
 
         <div className="mx-auto mt-16 max-w-5xl">
           <Tabs defaultValue="blockchain" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-4 h-14 p-1.5 bg-muted/50 rounded-xl">
               {featureCategories.map((category) => (
-                <TabsTrigger key={category.id} value={category.id}>
+                <TabsTrigger key={category.id} value={category.id} className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm font-medium">
                   {category.label}
                 </TabsTrigger>
               ))}
             </TabsList>
 
             {featureCategories.map((category) => (
-              <TabsContent key={category.id} value={category.id} className="mt-8">
-                <div className="grid gap-6 sm:grid-cols-3">
+              <TabsContent key={category.id} value={category.id} className="mt-10">
+                <div className="grid gap-8 sm:grid-cols-3">
                   {category.features.map((feature) => {
                     const Icon = feature.icon;
                     return (
                       <div
                         key={feature.title}
-                        className="rounded-xl border bg-card p-6 transition-all hover:shadow-md"
+                        className="group rounded-2xl border bg-card p-8 transition-all duration-300 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1"
                       >
-                        <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                          <Icon className="h-6 w-6 text-primary" />
+                        <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 group-hover:from-primary/30 group-hover:to-primary/10 transition-colors">
+                          <Icon className="h-7 w-7 text-primary" />
                         </div>
-                        <h3 className="text-lg font-semibold text-foreground">{feature.title}</h3>
-                        <p className="mt-2 text-sm text-muted-foreground">{feature.description}</p>
+                        <h3 className="text-xl font-semibold text-foreground">{feature.title}</h3>
+                        <p className="mt-3 text-muted-foreground leading-relaxed">{feature.description}</p>
                       </div>
                     );
                   })}

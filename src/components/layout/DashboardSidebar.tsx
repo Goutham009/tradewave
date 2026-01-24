@@ -17,21 +17,30 @@ import {
   Link as LinkIcon,
   Shield,
   Users,
+  Zap,
+  DollarSign,
+  User,
+  Bell,
+  Star,
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Requirements', href: '/requirements', icon: FileText },
   { name: 'Quotations', href: '/quotations', icon: MessageSquare },
+  { name: 'Opportunities', href: '/opportunities', icon: Zap },
   { name: 'Orders', href: '/orders', icon: ClipboardList },
   { name: 'Transactions', href: '/transactions', icon: Package },
   { name: 'Shipments', href: '/shipments', icon: Truck },
+  { name: 'Reviews', href: '/reviews', icon: Star },
+  { name: 'Earnings', href: '/earnings', icon: DollarSign },
   { name: 'Payments', href: '/payments', icon: CreditCard },
   { name: 'Blockchain', href: '/blockchain', icon: LinkIcon },
 ];
 
 const secondaryNavigation = [
-  { name: 'Account', href: '/account', icon: Users },
+  { name: 'Profile', href: '/profile', icon: User },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Security', href: '/account/security', icon: Shield },
   { name: 'Settings', href: '/settings', icon: Settings },
   { name: 'Help', href: '/help', icon: HelpCircle },

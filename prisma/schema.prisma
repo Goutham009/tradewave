@@ -36,11 +36,29 @@ model User {
   requirements      Requirement[]
   quotations        Quotation[]
   buyerTransactions Transaction[] @relation("BuyerTransactions")
+  deliveryConfirmed Transaction[] @relation("DeliveryConfirmedBy")
+  qualityAssessed   Transaction[] @relation("QualityAssessedBy")
+  fundsReleased     Transaction[] @relation("FundsReleasedBy")
+  statusChanges     TransactionStatusHistory[] @relation("StatusChangedBy")
   auditLogs         AuditLog[]
   sessions          Session[]
   accounts          Account[]
   notifications     Notification[]
   activities        Activity[]
+  emailPreferences  EmailPreference? @relation("emailPreferences")
+  
+  // Dispute relations
+  filedDisputes     Dispute[]        @relation("DisputeFiler")
+  resolvedDisputes  Dispute[]        @relation("DisputeResolver")
+  disputeMessages   DisputeMessage[]
+  
+  // Review relations
+  reviewsGiven      Review[]         @relation("ReviewsGiven")
+  reviewsReceived   Review[]         @relation("ReviewsReceived")
+  reviewsModerator  Review[]         @relation("ReviewModerator")
+  reviewAppeals     Review[]         @relation("ReviewAppeals")
+  reviewVotes       ReviewVote[]
+  ratingStats       UserRatingStats?
   
   @@map("users")
 }
@@ -288,11 +306,46 @@ model Transaction {
   // Shipping Details
   carrier               String?
   trackingNumber        String?
+  trackingUrl           String?
   origin                String?
   destination           String?
   estimatedDelivery     DateTime?
   actualDelivery        DateTime?
   weight                Decimal?          @db.Decimal(10, 2)
+  shipmentDate          DateTime?
+  shippingProvider      String?
+  shipmentNotes         String?           @db.Text
+  shipmentPhotos        String[]          // URLs to shipment photos
+  
+  // Delivery Confirmation
+  deliveryConfirmedAt   DateTime?
+  deliveryConfirmedById String?
+  deliveryLocation      String?
+  deliveryNotes         String?           @db.Text
+  deliveryPhotos        String[]          // URLs to delivery photos
+  
+  // Quality Assessment
+  qualityAssessmentAt   DateTime?
+  qualityAssessedById   String?
+  qualityRating         Int?              // 1-5 scale
+  qualityNotes          String?           @db.Text
+  qualityIssues         String[]          // Array of issues found
+  qualityPhotos         String[]          // Evidence photos
+  acceptanceReason      String?           @db.Text
+  rejectionReason       String?           @db.Text
+  
+  // Fund Release
+  fundsReleasedAt       DateTime?
+  fundsReleasedById     String?
+  releaseReason         String?           @db.Text
+  supplierBankAccount   String?           // Masked
+  releaseTransactionId  String?           // Stripe/payment ref
+  platformFee           Decimal?          @db.Decimal(15, 2)
+  payoutAmount          Decimal?          @db.Decimal(15, 2)
+  
+  // Blockchain Audit
+  blockchainHash        String?
+  auditLogId            String?
   
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
@@ -302,6 +355,9 @@ model Transaction {
   quotation             Quotation         @relation(fields: [quotationId], references: [id])
   buyer                 User              @relation("BuyerTransactions", fields: [buyerId], references: [id])
   supplier              Supplier          @relation(fields: [supplierId], references: [id])
+  deliveryConfirmedBy   User?             @relation("DeliveryConfirmedBy", fields: [deliveryConfirmedById], references: [id])
+  qualityAssessedBy     User?             @relation("QualityAssessedBy", fields: [qualityAssessedById], references: [id])
+  fundsReleasedBy       User?             @relation("FundsReleasedBy", fields: [fundsReleasedById], references: [id])
   milestones            TransactionMilestone[]
   documents             TransactionDocument[]
   escrow                EscrowTransaction?
@@ -311,7 +367,14 @@ model Transaction {
   documentHashes        DocumentHash[]
   blockchainAuditLogs   BlockchainAuditLog[]
   shipment              Shipment?
+  statusHistory         TransactionStatusHistory[]
+  dispute               Dispute?
+  review                Review?
   
+  @@index([status])
+  @@index([supplierId, status])
+  @@index([buyerId, status])
+  @@index([createdAt])
   @@map("transactions")
 }
 
@@ -319,17 +382,26 @@ enum TransactionStatus {
   INITIATED
   PAYMENT_PENDING
   PAYMENT_RECEIVED
+  PAID
   ESCROW_HELD
   PRODUCTION
-  QUALITY_CHECK
   SHIPPED
   IN_TRANSIT
   CUSTOMS
   DELIVERED
-  CONFIRMED
+  DELIVERY_CONFIRMED
+  QUALITY_PENDING
+  QUALITY_CHECK
+  QUALITY_APPROVED
+  QUALITY_REJECTED
+  FUNDS_RELEASING
+  FUNDS_RELEASED
   ESCROW_RELEASED
   COMPLETED
   DISPUTED
+  DISPUTE_OPEN
+  DISPUTE_RESOLVED
+  CONFIRMED
   CANCELLED
   REFUNDED
 }
@@ -341,6 +413,24 @@ enum PaymentStatus {
   FAILED
   REFUNDED
   CANCELLED
+}
+
+model TransactionStatusHistory {
+  id            String            @id @default(cuid())
+  transactionId String
+  transaction   Transaction       @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  oldStatus     TransactionStatus
+  newStatus     TransactionStatus
+  changedById   String?
+  changedBy     User?             @relation("StatusChangedBy", fields: [changedById], references: [id])
+  reason        String?           @db.Text
+  metadata      Json?
+  
+  createdAt     DateTime          @default(now())
+  
+  @@index([transactionId, createdAt])
+  @@map("transaction_status_history")
 }
 
 model TransactionMilestone {
@@ -698,6 +788,9 @@ enum NotificationType {
   DOCUMENTS_VERIFIED
   TRANSACTION_COMPLETED
   DISPUTE_OPENED
+  REVIEW_SUBMITTED
+  REVIEW_APPROVED
+  REVIEW_REJECTED
   SYSTEM
 }
 
@@ -843,4 +936,266 @@ enum SecurityEventType {
   DATA_EXPORTED
   PASSWORD_CHANGED
   ACCOUNT_LOCKED
+}
+
+// =============================================================================
+// EMAIL SYSTEM
+// =============================================================================
+
+model EmailLog {
+  id            String      @id @default(cuid())
+  recipient     String
+  subject       String
+  templateName  String
+  status        EmailStatus @default(PENDING)
+  sentAt        DateTime?
+  failureReason String?     @db.Text
+  retryCount    Int         @default(0)
+  maxRetries    Int         @default(3)
+  resendId      String?     @unique
+  metadata      Json?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([recipient, status])
+  @@index([createdAt])
+  @@index([status])
+  @@map("email_logs")
+}
+
+model EmailPreference {
+  id                       String    @id @default(cuid())
+  userId                   String    @unique
+  user                     User      @relation("emailPreferences", fields: [userId], references: [id], onDelete: Cascade)
+
+  quoteNotifications       Boolean   @default(true)
+  transactionNotifications Boolean   @default(true)
+  paymentNotifications     Boolean   @default(true)
+  deliveryNotifications    Boolean   @default(true)
+  disputeNotifications     Boolean   @default(true)
+  systemNotifications      Boolean   @default(true)
+  weeklyDigest             Boolean   @default(false)
+
+  unsubscribedAt           DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  @@map("email_preferences")
+}
+
+model EmailBounce {
+  id         String      @id @default(cuid())
+  email      String      @unique
+  bounceType BounceType
+  reason     String?
+  bouncedAt  DateTime
+  createdAt  DateTime    @default(now())
+
+  @@index([email])
+  @@map("email_bounces")
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+  BOUNCED
+}
+
+enum BounceType {
+  PERMANENT
+  TEMPORARY
+}
+
+// =============================================================================
+// DISPUTE RESOLUTION SYSTEM
+// =============================================================================
+
+model Dispute {
+  id                String      @id @default(cuid())
+  transactionId     String      @unique
+  transaction       Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  // Who filed
+  filedByUserId     String
+  filedByUser       User        @relation("DisputeFiler", fields: [filedByUserId], references: [id])
+  
+  // Details
+  reason            String      // QUALITY_ISSUE, NOT_RECEIVED, DIFFERENT_ITEM, PAYMENT_NOT_RECEIVED, OTHER
+  description       String      @db.Text
+  status            DisputeStatus @default(PENDING)
+  
+  // Evidence
+  evidenceUrls      String[]    @default([])
+  
+  // Resolution
+  requestedResolution String    // FULL_REFUND, PARTIAL_REFUND, ITEM_EXCHANGE, FULL_PAYMENT, SPLIT_50_50
+  adminDecision     String?     // The decision made: FULL_REFUND, PARTIAL_REFUND, FULL_PAYMENT, SPLIT_50_50
+  resolutionAmount  Float?      // Amount to refund or split
+  resolutionReason  String?     @db.Text
+  
+  // Fund distribution
+  buyerAmount       Float?
+  supplierAmount    Float?
+  
+  // Admin
+  reviewedByAdminId String?
+  reviewedByAdmin   User?       @relation("DisputeResolver", fields: [reviewedByAdminId], references: [id])
+  
+  // Timeline
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  resolvedAt        DateTime?
+  closedAt          DateTime?
+  
+  // Messages
+  messages          DisputeMessage[]
+  
+  // Blockchain
+  blockchainHash    String?
+  blockchainTxId    String?
+  
+  @@index([status])
+  @@index([filedByUserId])
+  @@index([createdAt])
+  @@map("disputes")
+}
+
+enum DisputeStatus {
+  PENDING
+  UNDER_REVIEW
+  AWAITING_RESPONSE
+  RESOLVED
+  CLOSED
+  ESCALATED
+}
+
+model DisputeMessage {
+  id                String      @id @default(cuid())
+  disputeId         String
+  dispute           Dispute     @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User        @relation(fields: [userId], references: [id])
+  message           String      @db.Text
+  attachments       String[]    @default([])
+  isAdmin           Boolean     @default(false)
+  createdAt         DateTime    @default(now())
+  
+  @@index([disputeId, createdAt])
+  @@map("dispute_messages")
+}
+
+// =============================================================================
+// REVIEW SYSTEM
+// =============================================================================
+
+model Review {
+  id                    String      @id @default(cuid())
+  transactionId         String      @unique
+  transaction           Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  // Who is reviewing whom
+  reviewerUserId        String
+  reviewerUser          User        @relation("ReviewsGiven", fields: [reviewerUserId], references: [id])
+  reviewedUserId        String
+  reviewedUser          User        @relation("ReviewsReceived", fields: [reviewedUserId], references: [id])
+  
+  // Review type
+  reviewType            String      // BUYER_REVIEW_SELLER or SELLER_REVIEW_BUYER
+  
+  // Ratings (1-5 stars)
+  overallRating         Int         // 1-5
+  communicationRating   Int         // 1-5 (how responsive/clear)
+  reliabilityRating     Int         // 1-5 (on-time delivery, quality, payment)
+  
+  // For sellers: product quality, delivery speed
+  // For buyers: payment reliability, professionalism
+  categoryRating        Int?        // 1-5 (context-specific)
+  
+  // Review content
+  title                 String?
+  description           String      @db.Text
+  tags                  String[]    @default([])  // GREAT_COMMUNICATION, FAST_DELIVERY, HIGH_QUALITY, PROFESSIONAL, etc
+  
+  // Evidence
+  attachmentUrls        String[]    @default([])
+  
+  // Moderation
+  status                String      @default("PENDING")  // PENDING, APPROVED, REJECTED, APPEAL
+  moderationReason      String?
+  reviewedByAdminId     String?
+  reviewedByAdmin       User?       @relation("ReviewModerator", fields: [reviewedByAdminId], references: [id])
+  
+  // Dispute/Appeal
+  appealReason          String?     @db.Text
+  appealedAt            DateTime?
+  appealedByUserId      String?
+  appealedByUser        User?       @relation("ReviewAppeals", fields: [appealedByUserId], references: [id])
+  
+  // Engagement
+  helpfulCount          Int         @default(0)
+  notHelpfulCount       Int         @default(0)
+  votes                 ReviewVote[]
+  
+  // Timeline
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  approvedAt            DateTime?
+  
+  @@index([reviewedUserId])
+  @@index([reviewerUserId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("reviews")
+}
+
+model ReviewVote {
+  id                    String      @id @default(cuid())
+  reviewId              String
+  review                Review      @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId                String
+  user                  User        @relation(fields: [userId], references: [id])
+  
+  voteType              String      // HELPFUL or NOT_HELPFUL
+  createdAt             DateTime    @default(now())
+  
+  @@unique([reviewId, userId])
+  @@map("review_votes")
+}
+
+model UserRatingStats {
+  id                    String      @id @default(cuid())
+  userId                String      @unique
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Overall stats
+  averageRating         Float       @default(0)
+  totalReviews          Int         @default(0)
+  approvedReviews       Int         @default(0)
+  
+  // Breakdown
+  fiveStarCount         Int         @default(0)
+  fourStarCount         Int         @default(0)
+  threeStarCount        Int         @default(0)
+  twoStarCount          Int         @default(0)
+  oneStarCount          Int         @default(0)
+  
+  // Category averages
+  avgCommunicationRating Float      @default(0)
+  avgReliabilityRating  Float       @default(0)
+  avgCategoryRating     Float       @default(0)
+  
+  // Trust indicators
+  trustScore            Float       @default(0)  // 0-100
+  trustBadge            String?     // GOLD (4.8+), SILVER (4.5+), BRONZE (4.0+)
+  
+  // For buyers
+  paymentReliability    Float       @default(0)  // 0-100
+  disputeCount          Int         @default(0)
+  
+  // Timeline
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  
+  @@map("user_rating_stats")
 }

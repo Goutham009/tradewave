@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSocket, SOCKET_EVENTS } from '@/hooks/useSocket';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -65,12 +66,9 @@ export default function AdminTransactionsPage() {
     disputed: 0,
     totalValue: 0,
   });
+  const { subscribe } = useSocket();
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [page, statusFilter]);
-
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -107,7 +105,38 @@ export default function AdminTransactionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, statusFilter]);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
+
+  // Socket.io real-time listeners for transaction updates
+  useEffect(() => {
+    const unsubscribeUpdate = subscribe(SOCKET_EVENTS.TRANSACTION_UPDATE, () => {
+      fetchTransactions();
+    });
+
+    const unsubscribeNew = subscribe('transaction:created', (newTransaction: Transaction) => {
+      setTransactions(prev => [newTransaction, ...prev]);
+      setStats(prev => ({
+        ...prev,
+        total: prev.total + 1,
+        pending: prev.pending + 1,
+        totalValue: prev.totalValue + newTransaction.amount,
+      }));
+    });
+
+    const unsubscribeStatus = subscribe('transaction:status_changed', () => {
+      fetchTransactions();
+    });
+
+    return () => {
+      unsubscribeUpdate();
+      unsubscribeNew();
+      unsubscribeStatus();
+    };
+  }, [subscribe, fetchTransactions]);
 
   const formatCurrency = (amount: number, currency: string = 'USD') => {
     return new Intl.NumberFormat('en-US', {

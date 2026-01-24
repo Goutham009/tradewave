@@ -27,13 +27,16 @@ const testimonials = [
 
 export function TestimonialsSection() {
   return (
-    <section className="bg-slate-50 py-20 dark:bg-slate-900 sm:py-28">
+    <section className="bg-gradient-to-b from-slate-50 to-slate-100 py-24 dark:from-slate-900 dark:to-slate-800/50 sm:py-32">
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          <span className="inline-block rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-4">
+            Testimonials
+          </span>
+          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
             Trusted by Industry Leaders
           </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
+          <p className="mt-6 text-lg text-muted-foreground leading-relaxed">
             See what our customers have to say about their experience with Tradewave.
           </p>
         </div>
@@ -42,22 +45,22 @@ export function TestimonialsSection() {
           {testimonials.map((testimonial, index) => (
             <div
               key={index}
-              className="relative rounded-2xl bg-background p-8 shadow-sm transition-all hover:shadow-md"
+              className="group relative rounded-2xl bg-background p-8 shadow-lg shadow-slate-200/50 dark:shadow-slate-900/50 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border border-slate-100 dark:border-slate-800"
             >
-              <Quote className="absolute right-6 top-6 h-8 w-8 text-primary/10" />
+              <Quote className="absolute right-6 top-6 h-10 w-10 text-primary/10 group-hover:text-primary/20 transition-colors" />
               
-              <div className="mb-4 flex gap-1">
+              <div className="mb-5 flex gap-1">
                 {Array.from({ length: testimonial.rating }).map((_, i) => (
-                  <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                  <Star key={i} className="h-5 w-5 fill-amber-400 text-amber-400" />
                 ))}
               </div>
 
-              <blockquote className="text-foreground">
+              <blockquote className="text-foreground leading-relaxed text-base">
                 &ldquo;{testimonial.quote}&rdquo;
               </blockquote>
 
-              <div className="mt-6 flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
+              <div className="mt-8 flex items-center gap-4 pt-6 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-lg font-semibold text-white shadow-md">
                   {testimonial.author.charAt(0)}
                 </div>
                 <div>

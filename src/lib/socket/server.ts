@@ -29,6 +29,23 @@ export const SOCKET_EVENTS = {
   REQUIREMENT_UPDATE: 'requirement_update',
   ESCROW_UPDATE: 'escrow_update',
   
+  // Transaction Lifecycle Events
+  SHIPMENT_CONFIRMED: 'shipmentConfirmed',
+  DELIVERY_CONFIRMED: 'deliveryConfirmed',
+  QUALITY_ASSESSMENT_STARTED: 'qualityAssessmentStarted',
+  QUALITY_APPROVED: 'qualityApproved',
+  QUALITY_REJECTED: 'qualityRejected',
+  FUNDS_RELEASING: 'fundsReleasing',
+  FUNDS_RELEASED: 'fundsReleased',
+  TRANSACTION_COMPLETED: 'transactionCompleted',
+  
+  // Dispute Events
+  DISPUTE_FILED: 'disputeFiled',
+  DISPUTE_MESSAGE_ADDED: 'disputeMessageAdded',
+  DISPUTE_STATUS_CHANGED: 'disputeStatusChanged',
+  DISPUTE_RESOLVED: 'disputeResolved',
+  DISPUTE_ESCALATED: 'disputeEscalated',
+  
   // Dashboard
   DASHBOARD_REFRESH: 'dashboard_refresh',
   STATS_UPDATE: 'stats_update',

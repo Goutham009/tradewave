@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useSocket } from '@/hooks/useSocket';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -69,12 +70,9 @@ export default function AdminDisputesPage() {
   const [selectedDispute, setSelectedDispute] = useState<Dispute | null>(null);
   const [resolution, setResolution] = useState('');
   const [resolving, setResolving] = useState(false);
+  const { subscribe } = useSocket();
 
-  useEffect(() => {
-    fetchDisputes();
-  }, [statusFilter]);
-
-  const fetchDisputes = async () => {
+  const fetchDisputes = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -100,7 +98,27 @@ export default function AdminDisputesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
+
+  useEffect(() => {
+    fetchDisputes();
+  }, [fetchDisputes]);
+
+  // Socket.io real-time listeners for dispute updates
+  useEffect(() => {
+    const unsubscribeNew = subscribe('dispute:opened', (newDispute: Dispute) => {
+      setDisputes(prev => [newDispute, ...prev]);
+    });
+
+    const unsubscribeResolved = subscribe('dispute:resolved', () => {
+      fetchDisputes();
+    });
+
+    return () => {
+      unsubscribeNew();
+      unsubscribeResolved();
+    };
+  }, [subscribe, fetchDisputes]);
 
   const handleResolveDispute = async () => {
     if (!selectedDispute || !resolution.trim()) return;

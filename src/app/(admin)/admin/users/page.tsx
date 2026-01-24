@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useSocket } from '@/hooks/useSocket';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -50,12 +51,9 @@ export default function AdminUsersPage() {
   const [kycFilter, setKycFilter] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const { subscribe } = useSocket();
 
-  useEffect(() => {
-    fetchUsers();
-  }, [page, roleFilter, kycFilter]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -85,7 +83,22 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, roleFilter, kycFilter]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  // Socket.io real-time listener for new user registrations
+  useEffect(() => {
+    const unsubscribe = subscribe('user:registered', (newUser: User) => {
+      setUsers(prev => [newUser, ...prev]);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [subscribe]);
 
   const handleVerifyUser = async (userId: string, verify: boolean) => {
     try {

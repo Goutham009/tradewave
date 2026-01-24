@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSocket, SOCKET_EVENTS } from '@/hooks/useSocket';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -92,6 +93,7 @@ export function RequirementsSection() {
     total: 0,
     totalPages: 0,
   });
+  const { subscribe } = useSocket();
   
   // Filters
   const [search, setSearch] = useState('');
@@ -152,6 +154,23 @@ export function RequirementsSection() {
   useEffect(() => {
     fetchRequirements();
   }, [fetchRequirements]);
+
+  // Socket.io real-time listener for new requirements
+  useEffect(() => {
+    const unsubscribeNew = subscribe('requirement:created', (newRequirement: Requirement) => {
+      setRequirements(prev => [newRequirement, ...prev]);
+      setPagination(prev => ({ ...prev, total: prev.total + 1 }));
+    });
+
+    const unsubscribeUpdate = subscribe(SOCKET_EVENTS.REQUIREMENT_UPDATE, () => {
+      fetchRequirements();
+    });
+
+    return () => {
+      unsubscribeNew();
+      unsubscribeUpdate();
+    };
+  }, [subscribe, fetchRequirements]);
 
   const handlePageChange = (newPage: number) => {
     setPagination(prev => ({ ...prev, page: newPage }));

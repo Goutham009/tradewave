@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useSocket, SOCKET_EVENTS } from '@/hooks/useSocket';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -51,12 +52,9 @@ export default function AdminDashboardPage() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const { subscribe, isConnected } = useSocket();
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/admin/dashboard');
@@ -93,7 +91,37 @@ export default function AdminDashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // Socket.io real-time listeners
+  useEffect(() => {
+    const unsubscribeDashboard = subscribe(SOCKET_EVENTS.DASHBOARD_REFRESH, () => {
+      fetchDashboardData();
+    });
+
+    const unsubscribeStats = subscribe(SOCKET_EVENTS.STATS_UPDATE, (newStats: Partial<DashboardStats>) => {
+      setStats(prev => prev ? { ...prev, ...newStats } : null);
+    });
+
+    const unsubscribeTransaction = subscribe(SOCKET_EVENTS.TRANSACTION_UPDATE, () => {
+      fetchDashboardData();
+    });
+
+    const unsubscribeRequirement = subscribe(SOCKET_EVENTS.REQUIREMENT_UPDATE, () => {
+      fetchDashboardData();
+    });
+
+    return () => {
+      unsubscribeDashboard();
+      unsubscribeStats();
+      unsubscribeTransaction();
+      unsubscribeRequirement();
+    };
+  }, [subscribe, fetchDashboardData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

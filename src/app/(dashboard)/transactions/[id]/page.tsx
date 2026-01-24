@@ -48,16 +48,26 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; progress: nu
   INITIATED: { label: 'Initiated', color: 'secondary', progress: 5 },
   PAYMENT_PENDING: { label: 'Payment Pending', color: 'warning', progress: 10 },
   PAYMENT_RECEIVED: { label: 'Payment Received', color: 'info', progress: 20 },
+  PAID: { label: 'Paid', color: 'info', progress: 25 },
   ESCROW_HELD: { label: 'Escrow Held', color: 'info', progress: 30 },
   PRODUCTION: { label: 'In Production', color: 'warning', progress: 40 },
-  QUALITY_CHECK: { label: 'Quality Check', color: 'info', progress: 50 },
-  SHIPPED: { label: 'Shipped', color: 'info', progress: 60 },
-  IN_TRANSIT: { label: 'In Transit', color: 'info', progress: 70 },
-  CUSTOMS: { label: 'Customs Clearance', color: 'warning', progress: 75 },
-  DELIVERED: { label: 'Delivered', color: 'success', progress: 85 },
-  CONFIRMED: { label: 'Delivery Confirmed', color: 'success', progress: 90 },
+  SHIPPED: { label: 'Shipped', color: 'info', progress: 50 },
+  IN_TRANSIT: { label: 'In Transit', color: 'info', progress: 55 },
+  CUSTOMS: { label: 'Customs Clearance', color: 'warning', progress: 60 },
+  DELIVERED: { label: 'Delivered', color: 'success', progress: 65 },
+  DELIVERY_CONFIRMED: { label: 'Delivery Confirmed', color: 'success', progress: 70 },
+  QUALITY_PENDING: { label: 'Quality Assessment', color: 'warning', progress: 75 },
+  QUALITY_CHECK: { label: 'Quality Check', color: 'info', progress: 75 },
+  QUALITY_APPROVED: { label: 'Quality Approved', color: 'success', progress: 85 },
+  QUALITY_REJECTED: { label: 'Quality Rejected', color: 'destructive', progress: 75 },
+  FUNDS_RELEASING: { label: 'Releasing Funds', color: 'info', progress: 90 },
+  FUNDS_RELEASED: { label: 'Funds Released', color: 'success', progress: 95 },
+  ESCROW_RELEASED: { label: 'Escrow Released', color: 'success', progress: 95 },
+  CONFIRMED: { label: 'Confirmed', color: 'success', progress: 90 },
   COMPLETED: { label: 'Completed', color: 'success', progress: 100 },
   DISPUTED: { label: 'Disputed', color: 'destructive', progress: 0 },
+  DISPUTE_OPEN: { label: 'Dispute Open', color: 'destructive', progress: 0 },
+  DISPUTE_RESOLVED: { label: 'Dispute Resolved', color: 'secondary', progress: 0 },
   CANCELLED: { label: 'Cancelled', color: 'destructive', progress: 0 },
   REFUNDED: { label: 'Refunded', color: 'secondary', progress: 0 },
 };
@@ -94,6 +104,17 @@ export default function TransactionDetailPage() {
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Delivery confirmation form
+  const [showDeliveryForm, setShowDeliveryForm] = useState(false);
+  const [deliveryLocation, setDeliveryLocation] = useState('');
+  const [deliveryNotes, setDeliveryNotes] = useState('');
+  
+  // Quality assessment form
+  const [showQualityForm, setShowQualityForm] = useState(false);
+  const [qualityRating, setQualityRating] = useState(0);
+  const [qualityNotes, setQualityNotes] = useState('');
+  const [qualityIssues, setQualityIssues] = useState<string[]>([]);
 
   useEffect(() => {
     fetchTransaction();
@@ -185,6 +206,102 @@ export default function TransactionDetailPage() {
     }
   };
 
+  const handleDeliveryConfirmation = async () => {
+    if (!deliveryLocation.trim()) {
+      setError('Please provide delivery location');
+      return;
+    }
+
+    setActionLoading('DELIVERY');
+    try {
+      const response = await fetch(`/api/transactions/${transactionId}/delivery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deliveryLocation,
+          deliveryDate: new Date().toISOString(),
+          notes: deliveryNotes,
+        }),
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        setActionSuccess('Delivery confirmed! Please assess the quality of goods.');
+        setShowDeliveryForm(false);
+        setDeliveryLocation('');
+        setDeliveryNotes('');
+        await fetchTransaction();
+      } else {
+        setError(data.error || 'Failed to confirm delivery');
+      }
+    } catch (err) {
+      setError('Network error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleQualityAssessment = async (approvalStatus: 'APPROVED' | 'REJECTED') => {
+    if (qualityRating === 0) {
+      setError('Please select a rating');
+      return;
+    }
+    if (!qualityNotes.trim() || qualityNotes.length < 10) {
+      setError('Please provide detailed notes (minimum 10 characters)');
+      return;
+    }
+    if (approvalStatus === 'APPROVED' && qualityRating < 3) {
+      setError('Cannot approve with rating less than 3');
+      return;
+    }
+    if (approvalStatus === 'REJECTED' && qualityRating > 2) {
+      setError('Cannot reject with rating greater than 2');
+      return;
+    }
+
+    setActionLoading(approvalStatus === 'APPROVED' ? 'APPROVE' : 'REJECT');
+    try {
+      const response = await fetch(`/api/transactions/${transactionId}/quality`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rating: qualityRating,
+          notes: qualityNotes,
+          issues: qualityIssues,
+          approvalStatus,
+        }),
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        if (approvalStatus === 'APPROVED') {
+          setActionSuccess('Quality approved! Funds are being released to the supplier.');
+        } else {
+          setActionSuccess('Quality rejected. A dispute has been opened for review.');
+        }
+        setShowQualityForm(false);
+        setQualityRating(0);
+        setQualityNotes('');
+        setQualityIssues([]);
+        await fetchTransaction();
+      } else {
+        setError(data.error || 'Failed to submit quality assessment');
+      }
+    } catch (err) {
+      setError('Network error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const toggleIssue = (issue: string) => {
+    setQualityIssues(prev => 
+      prev.includes(issue) 
+        ? prev.filter(i => i !== issue)
+        : [...prev, issue]
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -213,11 +330,13 @@ export default function TransactionDetailPage() {
   const t = transaction;
   const progress = STATUS_CONFIG[t.status]?.progress || 0;
   const canConfirmDelivery = ['DELIVERED', 'IN_TRANSIT', 'SHIPPED'].includes(t.status) && 
-    t.escrow && !t.escrow.deliveryConfirmed;
+    !t.deliveryConfirmedAt && (t.escrow ? !t.escrow.deliveryConfirmed : true);
+  const canAssessQuality = ['QUALITY_PENDING', 'DELIVERY_CONFIRMED'].includes(t.status) || 
+    (t.deliveryConfirmedAt && !t.qualityAssessmentAt);
   const canApproveQuality = t.escrow?.deliveryConfirmed && !t.escrow?.qualityApproved;
   const allConditionsMet = t.escrow?.deliveryConfirmed && t.escrow?.qualityApproved && t.escrow?.documentsVerified;
-  const fundsReleased = t.escrow?.status === 'RELEASED';
-  const isDisputed = t.status === 'DISPUTED';
+  const fundsReleased = t.escrow?.status === 'RELEASED' || t.status === 'FUNDS_RELEASED';
+  const isDisputed = t.status === 'DISPUTED' || t.status === 'DISPUTE_OPEN' || t.status === 'QUALITY_REJECTED';
 
   return (
     <div className="space-y-6">
@@ -320,7 +439,7 @@ export default function TransactionDetailPage() {
       </Card>
 
       {/* Action Buttons for Buyer */}
-      {(canConfirmDelivery || canApproveQuality) && !isDisputed && (
+      {(canConfirmDelivery || canAssessQuality) && !isDisputed && (
         <Card className="border-primary/50 bg-primary/5">
           <CardContent className="p-6">
             <h3 className="font-semibold mb-4">Actions Required</h3>
@@ -328,29 +447,19 @@ export default function TransactionDetailPage() {
               {canConfirmDelivery && (
                 <Button
                   variant="gradient"
-                  onClick={() => handleAction('CONFIRMDELIVERY')}
-                  disabled={actionLoading === 'CONFIRMDELIVERY'}
+                  onClick={() => setShowDeliveryForm(true)}
                 >
-                  {actionLoading === 'CONFIRMDELIVERY' ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Truck className="mr-2 h-4 w-4" />
-                  )}
+                  <Truck className="mr-2 h-4 w-4" />
                   Confirm Delivery Received
                 </Button>
               )}
-              {canApproveQuality && (
+              {canAssessQuality && (
                 <Button
                   variant="gradient"
-                  onClick={() => handleAction('APPROVEQUALITY')}
-                  disabled={actionLoading === 'APPROVEQUALITY'}
+                  onClick={() => setShowQualityForm(true)}
                 >
-                  {actionLoading === 'APPROVEQUALITY' ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <ThumbsUp className="mr-2 h-4 w-4" />
-                  )}
-                  Approve Quality
+                  <ThumbsUp className="mr-2 h-4 w-4" />
+                  Assess Quality
                 </Button>
               )}
               {!isDisputed && t.escrow?.status === 'HELD' && (
@@ -368,9 +477,9 @@ export default function TransactionDetailPage() {
                 Please confirm once you have received the goods in good condition.
               </p>
             )}
-            {canApproveQuality && (
+            {canAssessQuality && (
               <p className="text-sm text-muted-foreground mt-3">
-                Inspect the goods and approve quality. Funds will be released when all conditions are met.
+                Inspect the goods and rate the quality. Funds will be released upon approval.
               </p>
             )}
           </CardContent>
@@ -926,6 +1035,240 @@ export default function TransactionDetailPage() {
                     'Submit Dispute'
                   )}
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Delivery Confirmation Modal */}
+      {showDeliveryForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Truck className="h-5 w-5 text-green-500" />
+                Confirm Delivery
+              </CardTitle>
+              <CardDescription>
+                Please confirm that you have received the goods.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Delivery Location *</label>
+                <input
+                  type="text"
+                  value={deliveryLocation}
+                  onChange={(e) => setDeliveryLocation(e.target.value)}
+                  placeholder="Enter delivery address or location"
+                  className="mt-1 w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Notes (Optional)</label>
+                <Textarea
+                  value={deliveryNotes}
+                  onChange={(e) => setDeliveryNotes(e.target.value)}
+                  placeholder="Any additional notes about the delivery..."
+                  rows={3}
+                  className="mt-1"
+                />
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="h-4 w-4 text-blue-600 mt-0.5" />
+                  <p className="text-sm text-blue-800">
+                    After confirming delivery, you'll need to assess the quality of goods.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeliveryForm(false);
+                    setDeliveryLocation('');
+                    setDeliveryNotes('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="gradient"
+                  onClick={handleDeliveryConfirmation}
+                  disabled={actionLoading === 'DELIVERY' || !deliveryLocation.trim()}
+                >
+                  {actionLoading === 'DELIVERY' ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Confirming...
+                    </>
+                  ) : (
+                    'Confirm Delivery'
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Quality Assessment Modal */}
+      {showQualityForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <Card className="w-full max-w-lg my-8">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ThumbsUp className="h-5 w-5 text-blue-500" />
+                Quality Assessment
+              </CardTitle>
+              <CardDescription>
+                Rate the quality of goods received. This determines fund release.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Star Rating */}
+              <div>
+                <label className="text-sm font-medium">Quality Rating *</label>
+                <div className="flex gap-2 mt-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setQualityRating(star)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        qualityRating >= star
+                          ? 'text-yellow-400'
+                          : 'text-gray-300 hover:text-yellow-200'
+                      }`}
+                    >
+                      <svg
+                        className="w-8 h-8 fill-current"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                      </svg>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {qualityRating === 0 && 'Select a rating'}
+                  {qualityRating === 1 && 'Very Poor - Major issues'}
+                  {qualityRating === 2 && 'Poor - Significant problems'}
+                  {qualityRating === 3 && 'Acceptable - Minor issues'}
+                  {qualityRating === 4 && 'Good - Meets expectations'}
+                  {qualityRating === 5 && 'Excellent - Exceeds expectations'}
+                </p>
+              </div>
+
+              {/* Quality Issues */}
+              <div>
+                <label className="text-sm font-medium">Issues Found (if any)</label>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {['Damaged', 'Wrong Item', 'Missing Parts', 'Quality Issue', 'Wrong Quantity', 'Late Delivery'].map((issue) => (
+                    <button
+                      key={issue}
+                      type="button"
+                      onClick={() => toggleIssue(issue)}
+                      className={`px-3 py-2 text-sm rounded-md border transition-colors ${
+                        qualityIssues.includes(issue)
+                          ? 'bg-red-50 border-red-300 text-red-700'
+                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      {issue}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-sm font-medium">Detailed Notes *</label>
+                <Textarea
+                  value={qualityNotes}
+                  onChange={(e) => setQualityNotes(e.target.value)}
+                  placeholder="Describe the quality of goods received (minimum 10 characters)..."
+                  rows={4}
+                  className="mt-1"
+                />
+              </div>
+
+              {/* Rating Guidelines */}
+              <div className={`rounded-lg p-3 ${
+                qualityRating >= 3 ? 'bg-green-50 border border-green-200' : 
+                qualityRating > 0 ? 'bg-red-50 border border-red-200' : 
+                'bg-gray-50 border border-gray-200'
+              }`}>
+                <div className="flex items-start gap-2">
+                  {qualityRating >= 3 ? (
+                    <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
+                  ) : qualityRating > 0 ? (
+                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-gray-500 mt-0.5" />
+                  )}
+                  <p className={`text-sm ${
+                    qualityRating >= 3 ? 'text-green-800' : 
+                    qualityRating > 0 ? 'text-red-800' : 
+                    'text-gray-600'
+                  }`}>
+                    {qualityRating >= 3 
+                      ? 'You can approve the quality. Funds will be released to the supplier.'
+                      : qualityRating > 0
+                        ? 'Rating ≤2 requires rejection. A dispute will be opened for resolution.'
+                        : 'Rate ≥3 to approve, or ≤2 to reject and open a dispute.'
+                    }
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowQualityForm(false);
+                    setQualityRating(0);
+                    setQualityNotes('');
+                    setQualityIssues([]);
+                  }}
+                >
+                  Cancel
+                </Button>
+                {qualityRating <= 2 && qualityRating > 0 && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => handleQualityAssessment('REJECTED')}
+                    disabled={actionLoading === 'REJECT' || !qualityNotes.trim() || qualityNotes.length < 10}
+                  >
+                    {actionLoading === 'REJECT' ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Rejecting...
+                      </>
+                    ) : (
+                      'Reject Quality'
+                    )}
+                  </Button>
+                )}
+                {qualityRating >= 3 && (
+                  <Button
+                    variant="gradient"
+                    onClick={() => handleQualityAssessment('APPROVED')}
+                    disabled={actionLoading === 'APPROVE' || !qualityNotes.trim() || qualityNotes.length < 10}
+                  >
+                    {actionLoading === 'APPROVE' ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Approving...
+                      </>
+                    ) : (
+                      'Approve Quality'
+                    )}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

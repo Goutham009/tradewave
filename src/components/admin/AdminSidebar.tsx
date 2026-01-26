@@ -30,6 +30,7 @@ const navigation = [
   { name: 'Suppliers', href: '/admin/suppliers', icon: Building2 },
   { name: 'KYB Verification', href: '/admin/kyb', icon: Shield },
   { name: 'Trust & Blacklist', href: '/admin/trust', icon: Shield },
+  { name: 'Tier Changes', href: '/admin/tier-changes', icon: Crown },
   { name: 'Loyalty Program', href: '/admin/loyalty', icon: Crown },
   { name: 'Repeat Buyers', href: '/admin/repeat-buyers', icon: RefreshCw },
   { name: 'RFQs & Quotes', href: '/admin/rfq', icon: FileCheck },

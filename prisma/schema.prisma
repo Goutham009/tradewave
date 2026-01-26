@@ -86,6 +86,8 @@ model User {
   apiKeys                 APIKey[]                @relation("APIKeys")
   encryptedData           EncryptedSensitiveData? @relation("EncryptedData")
   dataDeletionRequests    DataDeletionRequest[]   @relation("DataDeletionRequests")
+  // Buyer Compliance (Phase 9)
+  buyerComplianceRecord   BuyerComplianceRecord?        @relation("BuyerComplianceRecords")
   
   // RFQ/Quote relations
   rfqsAsBuyer             RequestForQuote[]       @relation("RFQBuyer")
@@ -277,6 +279,20 @@ model Supplier {
   quotations        Quotation[]
   transactions      Transaction[]
   
+  // Phase 9: Supplier Compliance & Tier Relations
+  complianceRecords       SupplierComplianceRecord[]      @relation("SupplierComplianceRecords")
+  complianceViolations    SupplierComplianceViolation[]   @relation("SupplierComplianceViolations")
+  loyaltyTier             SupplierLoyaltyTier?            @relation("SupplierLoyaltyTier")
+  tierChangeRequests      SupplierTierChangeRequest[]     @relation("SupplierTierChangeRequests")
+  tierNotifications       AdminSupplierTierNotification[] @relation("SupplierTierNotifications")
+  engagementMetrics       SupplierEngagementMetric?       @relation("SupplierEngagementMetrics")
+  complianceCertificates  SupplierComplianceCertificate[] @relation("SupplierComplianceCertificates")
+  tierAuditLogs           SupplierTierAuditLog[]          @relation("SupplierTierAuditLogs")
+  tierAppeals             SupplierTierAppeal[]            @relation("SupplierTierAppeals")
+  complianceNotifications SupplierComplianceNotification[] @relation("SupplierComplianceNotifications")
+  dashboardWidgets        SupplierComplianceDashboardWidget[] @relation("SupplierDashboardWidgets")
+  automationAudits        SupplierComplianceAutomationAudit[] @relation("SupplierAutomationAudits")
+  
   @@map("suppliers")
 }
 
@@ -442,12 +458,523 @@ model Transaction {
   // Phase 6 relations
   returns               Return[]                    @relation("Returns")
   riskAnalysis          TransactionRiskAnalysis?    @relation("RiskAnalysis")
+  violationRecord       SupplierComplianceViolation?  @relation("ViolationRecord")
   
   @@index([status])
   @@index([supplierId, status])
   @@index([buyerId, status])
   @@index([createdAt])
   @@map("transactions")
+}
+
+// =============================================================================
+// PHASE 9: BUYER COMPLIANCE RECORD (uniform with supplier)
+// =============================================================================
+
+model BuyerComplianceRecord {
+  id                      String      @id @default(cuid())
+  buyerId                 String      @unique
+  buyer                   User        @relation("BuyerComplianceRecords", fields: [buyerId], references: [id], onDelete: Cascade)
+
+  // Buyer-specific compliance metrics
+  paymentReliabilityScore Int         @default(50)   // 0-100
+  disputesInitiated       Int         @default(0)
+  disputesWon             Int         @default(0)
+  disputesLost            Int         @default(0)
+  
+  averagePaymentDays      Decimal     @db.Decimal(5, 2) @default(0)
+  latePaymentCount        Int         @default(0)
+  onTimePaymentRate       Decimal     @db.Decimal(5, 4) @default(1.0)
+  
+  totalOrderCount         Int         @default(0)
+  cancelledOrderCount     Int         @default(0)
+  cancellationRate        Decimal     @db.Decimal(5, 4) @default(0)
+
+  complianceScore         Int         @default(50)
+  lastScoreCalculation    DateTime    @default(now())
+  scoreHistory            String      @db.Text @default("[]")
+
+  activeViolations        Int         @default(0)
+  totalViolations         Int         @default(0)
+
+  isComplianceRisk        Boolean     @default(false)
+  riskLevel               String      @default("LOW")
+
+  warningCount            Int         @default(0)
+  isSuspended             Boolean     @default(false)
+  suspensionReason        String?
+  suspensionEndsAt        DateTime?
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([buyerId])
+  @@map("buyer_compliance_records")
+}
+
+// =============================================================================
+// PHASE 9: SUPPLIER COMPLIANCE & TIER SYSTEM
+// =============================================================================
+
+model SupplierComplianceRecord {
+  id                      String      @id @default(cuid())
+  supplierId              String      @unique
+  supplier                Supplier    @relation("SupplierComplianceRecords", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  kycStatus               String      @default("PENDING")
+  kycVerifiedAt           DateTime?
+  kycExpiresAt            DateTime?
+  kycDocumentType         String?
+  kycDocumentUrl          String?
+
+  kybStatus               String      @default("PENDING")
+  kybVerifiedAt           DateTime?
+  kybExpiresAt            DateTime?
+  companyRegistration     String?
+  taxId                   String?
+
+  complianceScore         Int         @default(50)
+  lastScoreCalculation    DateTime    @default(now())
+  scoreHistory            String      @db.Text @default("[]")
+
+  activeViolations        Int         @default(0)
+  totalViolations         Int         @default(0)
+  violationHistory        String      @db.Text @default("[]")
+
+  isComplianceRisk        Boolean     @default(false)
+  riskLevel               String      @default("LOW")
+  lastAuditDate           DateTime?
+  nextAuditDate           DateTime?
+
+  warningCount            Int         @default(0)
+  suspensionCount         Int         @default(0)
+  isSuspended             Boolean     @default(false)
+  suspensionReason        String?
+  suspensionEndsAt        DateTime?
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([supplierId])
+  @@map("supplier_compliance_records")
+}
+
+model SupplierLoyaltyTier {
+  id                      String      @id @default(cuid())
+  supplierId              String      @unique
+  supplier                Supplier    @relation("SupplierLoyaltyTier", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  currentTier             String      @default("STANDARD")  // TRUSTED, STANDARD, REVIEW
+  tierAppliedAt           DateTime    @default(now())
+  tierApprovedByAdminId   String?
+  tierApprovalNotes       String?     @db.Text
+
+  transactionCount        Int         @default(0)
+  averageRating           Decimal     @db.Decimal(3, 2) @default(0)
+  completionRate          Decimal     @db.Decimal(5, 4) @default(0)
+  complianceScore         Int         @default(50)
+  disputeRate             Decimal     @db.Decimal(5, 4) @default(0)
+  returnRate              Decimal     @db.Decimal(5, 4) @default(0)
+
+  visibilityMultiplier    Decimal     @db.Decimal(3, 2) @default(1.0)
+  dailyOrderEstimate      Decimal     @db.Decimal(8, 2) @default(0)
+  monthlyRevenuePotential Decimal     @db.Decimal(16, 4) @default(0)
+
+  trustCriteriaStatus     String?
+  standardCriteriaStatus  String?
+
+  previousTiers           String      @db.Text @default("[]")
+  tierDowngradeCount      Int         @default(0)
+  lastDowngradeDate       DateTime?
+
+  nextTierEligibleDate    DateTime?
+  tierLockUntil           DateTime?
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([supplierId])
+  @@map("supplier_loyalty_tiers")
+}
+
+model SupplierTierChangeRequest {
+  id                      String      @id @default(cuid())
+  supplierId              String
+  supplier                Supplier    @relation("SupplierTierChangeRequests", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  proposedTier            String
+  previousTier            String
+  changeReason            String
+
+  metricsSnapshot         String      @db.Text
+  violationsAtTime        String?     @db.Text
+
+  status                  String      @default("PENDING")  // PENDING, APPROVED, REJECTED, ON_HOLD, INVESTIGATING
+  reviewedByAdminId       String?
+  reviewedAt              DateTime?
+  adminDecision           String?
+  adminNotes              String?     @db.Text
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  approvalDeadline        DateTime
+
+  rejectionReason         String?
+  canResubmitAfter        DateTime?
+
+  executedAt              DateTime?
+  executedByAdminId       String?
+  executionNotes          String?
+
+  tierNotification        AdminSupplierTierNotification?
+
+  @@index([supplierId])
+  @@index([status])
+  @@map("supplier_tier_change_requests")
+}
+
+model AdminSupplierTierNotification {
+  id                      String      @id @default(cuid())
+  tierChangeRequestId     String      @unique
+  tierChangeRequest       SupplierTierChangeRequest @relation(fields: [tierChangeRequestId], references: [id], onDelete: Cascade)
+
+  supplierId              String
+  supplier                Supplier    @relation("SupplierTierNotifications", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  notificationType        String      // TIER_UPGRADE_PENDING, TIER_DOWNGRADE_PENDING, URGENT_REVIEW
+  severity                String      // LOW, MEDIUM, HIGH, CRITICAL
+
+  isSent                  Boolean     @default(false)
+  sentAt                  DateTime?
+  isAcknowledged          Boolean     @default(false)
+  acknowledgedAt          DateTime?
+  acknowledgedByAdminId   String?
+
+  requiresAction          Boolean     @default(true)
+  actionDeadline          DateTime
+  isEscalated             Boolean     @default(false)
+  escalatedAt             DateTime?
+  escalatedToAdminId      String?
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([supplierId])
+  @@index([severity, requiresAction, actionDeadline])
+  @@map("admin_supplier_tier_notifications")
+}
+
+model SupplierComplianceViolation {
+  id                      String      @id @default(cuid())
+  supplierId              String
+  supplier                Supplier    @relation("SupplierComplianceViolations", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  violationType           String      // LATE_DELIVERY, QUALITY_ISSUE, KYB_EXPIRED, DISPUTE_LOST, etc.
+  severity                String      @default("MEDIUM")  // LOW, MEDIUM, HIGH, CRITICAL
+  description             String      @db.Text
+
+  transactionId           String?     @unique
+  transaction             Transaction? @relation("ViolationRecord", fields: [transactionId], references: [id], onDelete: SetNull)
+
+  evidence                String?     @db.Text
+  detectedAt              DateTime    @default(now())
+
+  status                  String      @default("OPEN")  // OPEN, ACKNOWLEDGED, REMEDIATED, CLOSED, APPEALED
+  acknowledgedAt          DateTime?
+  remediatedAt            DateTime?
+
+  remediationRequired     Boolean     @default(true)
+  remediationDeadline     DateTime?
+  remediationAction       String?
+  remediationStatus       String?
+
+  pointsDeducted          Int         @default(0)
+  tierImpact              String?
+
+  appealRequested         Boolean     @default(false)
+  appealDate              DateTime?
+  appealReason            String?     @db.Text
+  appealStatus            String?
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([supplierId, status])
+  @@index([violationType, severity])
+  @@map("supplier_compliance_violations")
+}
+
+model SupplierEngagementMetric {
+  id                      String      @id @default(cuid())
+  supplierId              String      @unique
+  supplier                Supplier    @relation("SupplierEngagementMetrics", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  lastLoginAt             DateTime?
+  loginFrequencyDays      Int         @default(30)
+  dashboardViewsPerWeek   Int         @default(0)
+  ordersViewedPerWeek     Int         @default(0)
+
+  activeListingCount      Int         @default(0)
+  inactiveListingCount    Int         @default(0)
+  lastProductAddDate      DateTime?
+  lastProductUpdateDate   DateTime?
+
+  responseTimeHours       Decimal     @db.Decimal(6, 2) @default(0)
+  messageResponseRate     Decimal     @db.Decimal(5, 4) @default(0)
+
+  churnRiskScore          Int         @default(0)
+  churnIndicators         String      @db.Text @default("[]")
+  lastChurnAssessmentDate DateTime?
+  isAtRisk                Boolean     @default(false)
+
+  lastRetentionOutreach   DateTime?
+  retentionOutreachCount  Int         @default(0)
+  acceptedIncentive       Boolean     @default(false)
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([supplierId])
+  @@index([isAtRisk, churnRiskScore])
+  @@map("supplier_engagement_metrics")
+}
+
+model SupplierComplianceCertificate {
+  id                      String      @id @default(cuid())
+  supplierId              String
+  supplier                Supplier    @relation("SupplierComplianceCertificates", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  certificationType       String
+
+  issuedAt                DateTime    @default(now())
+  expiresAt               DateTime
+  isActive                Boolean     @default(true)
+  revokedAt               DateTime?
+  revocationReason        String?
+
+  certificationBody       String
+  requirementsMet         String      @db.Text
+  verificationMethod      String
+
+  badgeUrl                String?
+  badgeEmbedCode          String?
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([supplierId])
+  @@map("supplier_compliance_certificates")
+}
+
+model TierCriteriaDefinition {
+  id                      String      @id @default(cuid())
+
+  tierName                String      @unique
+  displayName             String
+
+  visibilityMultiplier    Decimal     @db.Decimal(3, 2)
+  estimatedDailyOrders    Decimal     @db.Decimal(8, 2)
+  estimatedMonthlyRevenue Decimal     @db.Decimal(16, 4)
+
+  minTransactionCount     Int
+  minAverageRating        Decimal     @db.Decimal(3, 2)
+  minCompletionRate       Decimal     @db.Decimal(5, 4)
+  minComplianceScore      Int
+  maxDisputeRate          Decimal     @db.Decimal(5, 4)
+  maxReturnRate           Decimal     @db.Decimal(5, 4)
+
+  kycRequired             Boolean     @default(true)
+  kybRequired             Boolean     @default(true)
+  backgroundCheckRequired Boolean     @default(false)
+  certificationsRequired  String[]    @default([])
+
+  autoReviewTriggers      String      @db.Text
+
+  description             String      @db.Text
+  benefitsDescription     String      @db.Text
+  requirementsDescription String      @db.Text
+
+  badgeColor              String      @default("#1E7874")
+  badgeIcon               String?
+
+  isActive                Boolean     @default(true)
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+}
+
+model SupplierTierAuditLog {
+  id                      String      @id @default(cuid())
+  supplierId              String
+  supplier                Supplier    @relation("SupplierTierAuditLogs", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  previousTier            String
+  newTier                 String
+  changeReason            String
+  triggeredBy             String?
+
+  metricsSnapshot         String      @db.Text
+
+  changedAt               DateTime    @default(now())
+  effectiveDate           DateTime
+  requestedAt             DateTime?
+
+  approvedByAdminId       String?
+  approvedAt              DateTime?
+  approvalNotes           String?     @db.Text
+
+  notificationSent        Boolean     @default(false)
+  notificationSentAt      DateTime?
+
+  canBeAppealed           Boolean     @default(true)
+  appealDeadline          DateTime?
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([supplierId])
+  @@map("supplier_tier_audit_logs")
+}
+
+model SupplierTierAppeal {
+  id                      String      @id @default(cuid())
+  supplierId              String
+  supplier                Supplier    @relation("SupplierTierAppeals", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  currentTier             String
+  appealedFromTier        String
+  appealReason            String      @db.Text
+  supportingEvidence      String?     @db.Text
+
+  status                  String      @default("PENDING")  // PENDING, UNDER_REVIEW, APPROVED, REJECTED
+  submittedAt             DateTime    @default(now())
+  reviewedAt              DateTime?
+  reviewedByAdminId       String?
+
+  decision                String?
+  decisionReason          String?     @db.Text
+  resultingTier           String?
+
+  responseDeadline        DateTime
+  finalDeadline           DateTime
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([supplierId])
+  @@map("supplier_tier_appeals")
+}
+
+model ComplianceAutomationRule {
+  id                      String      @id @default(cuid())
+
+  ruleName                String      @unique
+  description             String      @db.Text
+
+  triggerType             String
+  triggerCondition        String      @db.Text
+
+  actionType              String
+  actionDetails           String      @db.Text
+
+  notifyUser              Boolean     @default(true)
+  notifyAdmin             Boolean     @default(true)
+  notificationTemplate    String?
+
+  escalationEnabled       Boolean     @default(true)
+  escalationDays          Int         @default(1)
+
+  isActive                Boolean     @default(true)
+  priority                Int         @default(50)
+
+  createdByAdminId        String?
+  lastModifiedByAdminId   String?
+  lastExecutedAt          DateTime?
+  lastExecutionCount      Int         @default(0)
+
+  audits                  SupplierComplianceAutomationAudit[]
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+}
+
+model SupplierComplianceAutomationAudit {
+  id                      String      @id @default(cuid())
+
+  ruleId                  String
+  rule                    ComplianceAutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  supplierId              String
+  supplier                Supplier    @relation("SupplierAutomationAudits", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  triggerConditionMet     Boolean     @default(false)
+  conditionDetails        String?     @db.Text
+
+  actionExecuted          Boolean     @default(false)
+  actionType              String?
+  actionDetails           String?     @db.Text
+
+  tierChangeRequestCreated Boolean    @default(false)
+  tierChangeRequestId     String?
+
+  resultMetrics           String?     @db.Text
+
+  executedAt              DateTime    @default(now())
+
+  createdAt               DateTime    @default(now())
+
+  @@index([supplierId])
+  @@map("supplier_compliance_automation_audits")
+}
+
+model SupplierComplianceNotification {
+  id                      String      @id @default(cuid())
+  supplierId              String
+  supplier                Supplier    @relation("SupplierComplianceNotifications", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  notificationType        String
+  subject                 String
+  message                 String      @db.Text
+
+  requiresAction          Boolean     @default(false)
+  actionDeadline          DateTime?
+  actionType              String?
+
+  isSent                  Boolean     @default(false)
+  sentAt                  DateTime?
+  isRead                  Boolean     @default(false)
+  readAt                  DateTime?
+
+  openCount               Int         @default(0)
+  clickCount              Int         @default(0)
+  responseAt              DateTime?
+
+  channel                 String
+  retryCount              Int         @default(0)
+
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  @@index([supplierId])
+  @@map("supplier_compliance_notifications")
+}
+
+model SupplierComplianceDashboardWidget {
+  id                      String      @id @default(cuid())
+  supplierId              String
+  supplier                Supplier    @relation("SupplierDashboardWidgets", fields: [supplierId], references: [id], onDelete: Cascade)
+
+  widgetType              String
+  displayOrder            Int         @default(0)
+  isVisible               Boolean     @default(true)
+
+  settings                String?     @db.Text
+  lastUpdatedAt           DateTime    @updatedAt
+
+  createdAt               DateTime    @default(now())
+
+  @@index([supplierId])
+  @@map("supplier_compliance_dashboard_widgets")
 }
 
 enum TransactionStatus {

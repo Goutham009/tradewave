@@ -2,8 +2,7 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
-import { DashboardSidebar } from '@/components/layout/DashboardSidebar';
-import { DashboardHeader } from '@/components/layout/DashboardHeader';
+import { BuyerSidebarWrapper } from '@/components/sidebar/BuyerSidebarWrapper';
 
 export default async function DashboardLayout({
   children,
@@ -17,14 +16,10 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900">
-      <DashboardSidebar />
-      <div className="flex flex-1 flex-col">
-        <DashboardHeader user={session.user} />
-        <main className="flex-1 p-6">
-          {children}
-        </main>
+    <BuyerSidebarWrapper>
+      <div className="p-6">
+        {children}
       </div>
-    </div>
+    </BuyerSidebarWrapper>
   );
 }

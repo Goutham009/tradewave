@@ -71,7 +71,7 @@ export async function sendQuoteReceivedEmail(quotationId: string): Promise<Email
   const buyer = q.requirement.buyer;
   if (!(await canSendEmail(buyer.email, buyer.id, 'quoteNotifications'))) return { success: false, error: 'Blocked' };
   const html = await render(QuoteReceivedEmail({
-    buyerName: buyer.name, supplierName: q.supplier?.companyName || 'Supplier', quoteAmount: q.totalPrice.toString(),
+    buyerName: buyer.name, supplierName: q.supplier?.companyName || 'Supplier', quoteAmount: q.total.toString(),
     currency: q.currency || 'USD', expiryDate: q.validUntil?.toLocaleDateString() || 'N/A',
     quotationLink: `${BASE_URL}/quotations/${quotationId}`, requirementTitle: q.requirement.title, unsubscribeUrl: unsubUrl(buyer.id),
   }));
@@ -85,7 +85,7 @@ export async function sendQuoteExpiringEmail(quotationId: string): Promise<Email
   if (!(await canSendEmail(buyer.email, buyer.id, 'quoteNotifications'))) return { success: false, error: 'Blocked' };
   const hoursLeft = Math.max(0, Math.round((q.validUntil.getTime() - Date.now()) / (1000 * 60 * 60)));
   const html = await render(QuoteExpiringEmail({
-    buyerName: buyer.name, supplierName: q.supplier?.companyName || 'Supplier', quoteAmount: q.totalPrice.toString(),
+    buyerName: buyer.name, supplierName: q.supplier?.companyName || 'Supplier', quoteAmount: q.total.toString(),
     currency: q.currency || 'USD', expiresIn: `${hoursLeft} hours`,
     quotationLink: `${BASE_URL}/quotations/${quotationId}`, requirementTitle: q.requirement.title, unsubscribeUrl: unsubUrl(buyer.id),
   }));
@@ -100,7 +100,7 @@ export async function sendQuoteAcceptedEmail(quotationId: string, transactionId:
   // Email to supplier
   if (q.supplier && await canSendEmail(q.supplier.email || '', q.supplierId || '', 'quoteNotifications')) {
     const html = await render(QuoteAcceptedEmail({
-      partyName: q.supplier.companyName || 'Supplier', isSupplier: true, amount: q.totalPrice.toString(),
+      partyName: q.supplier.companyName || 'Supplier', isSupplier: true, amount: q.total.toString(),
       currency: q.currency || 'USD', transactionLink: link, requirementTitle: q.requirement.title,
       otherPartyName: q.requirement.buyer.name, unsubscribeUrl: unsubUrl(q.supplierId || ''),
     }));
@@ -109,7 +109,7 @@ export async function sendQuoteAcceptedEmail(quotationId: string, transactionId:
   // Email to buyer
   if (await canSendEmail(q.requirement.buyer.email, q.requirement.buyer.id, 'quoteNotifications')) {
     const html = await render(QuoteAcceptedEmail({
-      partyName: q.requirement.buyer.name, isSupplier: false, amount: q.totalPrice.toString(),
+      partyName: q.requirement.buyer.name, isSupplier: false, amount: q.total.toString(),
       currency: q.currency || 'USD', transactionLink: link, requirementTitle: q.requirement.title,
       otherPartyName: q.supplier?.companyName || 'Supplier', unsubscribeUrl: unsubUrl(q.requirement.buyer.id),
     }));
@@ -123,11 +123,11 @@ export async function sendTransactionCreatedEmail(transactionId: string): Promis
   if (!t) return [{ success: false, error: 'Transaction not found' }];
   const results: EmailResult[] = [];
   const link = `${BASE_URL}/transactions/${transactionId}`;
-  const deliveryDate = t.expectedDeliveryDate?.toLocaleDateString() || 'TBD';
+  const deliveryDate = t.estimatedDelivery?.toLocaleDateString() || 'TBD';
   // Buyer email
   if (await canSendEmail(t.buyer.email, t.buyer.id, 'transactionNotifications')) {
     const html = await render(TransactionCreatedEmail({
-      partyName: t.buyer.name, isBuyer: true, amount: t.totalAmount.toString(), currency: t.currency || 'USD',
+      partyName: t.buyer.name, isBuyer: true, amount: t.amount.toString(), currency: t.currency || 'USD',
       deliveryDate, transactionId, transactionLink: link, requirementTitle: t.requirement?.title || 'Order',
       otherPartyName: t.supplier?.companyName || 'Supplier', unsubscribeUrl: unsubUrl(t.buyer.id),
     }));
@@ -136,7 +136,7 @@ export async function sendTransactionCreatedEmail(transactionId: string): Promis
   // Supplier email
   if (t.supplier && await canSendEmail(t.supplier.email || '', t.supplierId || '', 'transactionNotifications')) {
     const html = await render(TransactionCreatedEmail({
-      partyName: t.supplier.companyName || 'Supplier', isBuyer: false, amount: t.totalAmount.toString(), currency: t.currency || 'USD',
+      partyName: t.supplier.companyName || 'Supplier', isBuyer: false, amount: t.amount.toString(), currency: t.currency || 'USD',
       deliveryDate, transactionId, transactionLink: link, requirementTitle: t.requirement?.title || 'Order',
       otherPartyName: t.buyer.name, unsubscribeUrl: unsubUrl(t.supplierId || ''),
     }));
@@ -153,7 +153,7 @@ export async function sendPaymentConfirmedEmail(transactionId: string): Promise<
   // Buyer
   if (await canSendEmail(t.buyer.email, t.buyer.id, 'paymentNotifications')) {
     const html = await render(PaymentConfirmedEmail({
-      partyName: t.buyer.name, isBuyer: true, amount: t.totalAmount.toString(), currency: t.currency || 'USD',
+      partyName: t.buyer.name, isBuyer: true, amount: t.amount.toString(), currency: t.currency || 'USD',
       orderId: transactionId, transactionLink: link, unsubscribeUrl: unsubUrl(t.buyer.id),
     }));
     results.push(await logAndSend(t.buyer.email, 'Payment Confirmed', 'payment_confirmed', html, { transactionId }));
@@ -161,7 +161,7 @@ export async function sendPaymentConfirmedEmail(transactionId: string): Promise<
   // Supplier
   if (t.supplier && await canSendEmail(t.supplier.email || '', t.supplierId || '', 'paymentNotifications')) {
     const html = await render(PaymentConfirmedEmail({
-      partyName: t.supplier.companyName || 'Supplier', isBuyer: false, amount: t.totalAmount.toString(), currency: t.currency || 'USD',
+      partyName: t.supplier.companyName || 'Supplier', isBuyer: false, amount: t.amount.toString(), currency: t.currency || 'USD',
       orderId: transactionId, transactionLink: link, unsubscribeUrl: unsubUrl(t.supplierId || ''),
     }));
     results.push(await logAndSend(t.supplier.email || '', 'Payment Received - Prepare Order', 'payment_confirmed', html, { transactionId }));
@@ -174,7 +174,7 @@ export async function sendDeliveryReadyEmail(transactionId: string, trackingNumb
   if (!t) return { success: false, error: 'Transaction not found' };
   if (!(await canSendEmail(t.buyer.email, t.buyer.id, 'deliveryNotifications'))) return { success: false, error: 'Blocked' };
   const html = await render(DeliveryReadyEmail({
-    buyerName: t.buyer.name, trackingNumber, estimatedDelivery: t.expectedDeliveryDate?.toLocaleDateString() || 'TBD',
+    buyerName: t.buyer.name, trackingNumber, estimatedDelivery: t.estimatedDelivery?.toLocaleDateString() || 'TBD',
     transactionLink: `${BASE_URL}/transactions/${transactionId}`, orderId: transactionId, unsubscribeUrl: unsubUrl(t.buyer.id),
   }));
   return logAndSend(t.buyer.email, 'Your Order Has Shipped!', 'delivery_ready', html, { transactionId, trackingNumber });
@@ -196,7 +196,7 @@ export async function sendQualityApprovedEmail(transactionId: string): Promise<E
   if (!t || !t.supplier) return { success: false, error: 'Transaction not found' };
   if (!(await canSendEmail(t.supplier.email || '', t.supplierId || '', 'transactionNotifications'))) return { success: false, error: 'Blocked' };
   const html = await render(QualityApprovedEmail({
-    supplierName: t.supplier.companyName || 'Supplier', amount: t.totalAmount.toString(), currency: t.currency || 'USD',
+    supplierName: t.supplier.companyName || 'Supplier', amount: t.amount.toString(), currency: t.currency || 'USD',
     orderId: transactionId, transactionLink: `${BASE_URL}/transactions/${transactionId}`, unsubscribeUrl: unsubUrl(t.supplierId || ''),
   }));
   return logAndSend(t.supplier.email || '', 'Quality Approved - Funds Being Released', 'quality_approved', html, { transactionId });
@@ -207,7 +207,7 @@ export async function sendPaymentReleasedEmail(transactionId: string): Promise<E
   if (!t || !t.supplier) return { success: false, error: 'Transaction not found' };
   if (!(await canSendEmail(t.supplier.email || '', t.supplierId || '', 'paymentNotifications'))) return { success: false, error: 'Blocked' };
   const html = await render(PaymentReleasedEmail({
-    supplierName: t.supplier.companyName || 'Supplier', amount: t.totalAmount.toString(), currency: t.currency || 'USD',
+    supplierName: t.supplier.companyName || 'Supplier', amount: t.amount.toString(), currency: t.currency || 'USD',
     orderId: transactionId, transactionLink: `${BASE_URL}/transactions/${transactionId}`, unsubscribeUrl: unsubUrl(t.supplierId || ''),
   }));
   return logAndSend(t.supplier.email || '', 'Payment Released!', 'payment_released', html, { transactionId });

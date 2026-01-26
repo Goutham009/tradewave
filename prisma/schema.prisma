@@ -60,6 +60,69 @@ model User {
   reviewVotes       ReviewVote[]
   ratingStats       UserRatingStats?
   
+  // KYB relations
+  kybProfile              SupplierKYB?
+  kybReviewsAdmin         SupplierKYB[]           @relation("KYBReviewer")
+  kybDocReviewsAdmin      VerificationDocument[]
+  kybVerificationLogs     VerificationLog[]
+  kybAppealReviewsAdmin   KYBAppeal[]             @relation("KYBAppealReviewer")
+  
+  // Risk Management relations
+  riskProfile             RiskManagementProfile?  @relation("RiskProfile")
+  restrictionsCreatedAdmin RiskRestriction[]      @relation("RestrictionCreator")
+  riskAssessmentsAdmin    RiskHistoryEntry[]      @relation("RiskAssessmentAdmin")
+  riskAlertsAcknowledged  RiskAlert[]             @relation("RiskAlertAcknowledger")
+  complianceReports       ComplianceReport[]      @relation("ComplianceReports")
+  complianceReportsAdmin  ComplianceReport[]      @relation("ComplianceReportAdmin")
+  
+  // Phase 5-7 relations
+  searchLogs              SearchLog[]             @relation("SearchLogs")
+  savedSearches           SavedSearch[]           @relation("SavedSearches")
+  fraudScore              FraudScore?             @relation("FraudScore")
+  deviceFingerprints      DeviceFingerprint[]     @relation("DeviceFingerprints")
+  returnPolicy            ReturnPolicy?           @relation("ReturnPolicy")
+  returnReviewsAdmin      Return[]                @relation("ReturnReviewer")
+  mfa                     MultiFactorAuth?        @relation("MFA")
+  apiKeys                 APIKey[]                @relation("APIKeys")
+  encryptedData           EncryptedSensitiveData? @relation("EncryptedData")
+  dataDeletionRequests    DataDeletionRequest[]   @relation("DataDeletionRequests")
+  
+  // RFQ/Quote relations
+  rfqsAsBuyer             RequestForQuote[]       @relation("RFQBuyer")
+  quotesAsSeller          Quote[]                 @relation("QuoteSeller")
+  negotiationMessages     QuoteNegotiationMessage[]
+  quoteTemplates          QuoteTemplate[]
+  quoteComparisons        QuoteComparison[]
+  rfqLogs                 RFQLog[]
+  quoteLogs               QuoteLog[]
+  
+  // Buyer Trust Score & Blacklist relations
+  trustScore              BuyerTrustScore?        @relation("TrustScoreBuyer")
+  blacklist               BuyerBlacklist?         @relation("BlacklistedBuyer")
+  flagAppeals             FlagAppeal[]            @relation("FlagAppealBuyer")
+  blacklistAppeals        BlacklistAppeal[]       @relation("BlacklistAppealBuyer")
+  riskFlagReviewsAdmin    BuyerRiskFlag[]         @relation("RiskFlagReviewer")
+  flagAppealReviewsAdmin  FlagAppeal[]            @relation("FlagAppealReviewer")
+  blacklistActionsAdmin   BuyerBlacklist[]        @relation("BlacklistAdmin")
+  blacklistAppealReviewsAdmin BlacklistAppeal[]   @relation("BlacklistAppealReviewer")
+  sellerBuyerNotes        SellerBuyerNote[]       @relation("SellerNotes")
+  blacklistLogs           BlacklistLog[]
+  
+  // Order History & Repeat Buyer relations
+  purchaseHistory         PurchaseHistory[]       @relation("PurchaseHistoryBuyer")
+  purchaseHistorySupplier PurchaseHistory[]       @relation("PurchaseHistorySupplier")
+  savedQuotes             SavedQuote[]            @relation("SavedQuotes")
+  supplierSavedQuotes     SavedQuote[]            @relation("SupplierSavedQuotes")
+  favorites               BuyerFavorite[]         @relation("BuyerFavorites")
+  favoriteSuppliers       BuyerFavorite[]         @relation("FavoriteSuppliers")
+  autoReorders            AutoReorder[]           @relation("AutoReorders")
+  supplierAutoReorders    AutoReorder[]           @relation("SupplierAutoReorders")
+  loyaltyStatus           BuyerLoyaltyStatus?     @relation("BuyerLoyaltyStatus")
+  supplierBulkDiscounts   BulkDiscount[]          @relation("SupplierBulkDiscounts")
+  recurringOrders         RecurringOrder[]        @relation("RecurringOrders")
+  supplierRecurringOrders RecurringOrder[]        @relation("SupplierRecurringOrders")
+  purchaseAnalytics       PurchaseAnalytics?      @relation("PurchaseAnalytics")
+  
   @@map("users")
 }
 
@@ -370,6 +433,15 @@ model Transaction {
   statusHistory         TransactionStatusHistory[]
   dispute               Dispute?
   review                Review?
+  
+  // Order History & Repeat Buyer relations
+  purchaseHistory       PurchaseHistory[]
+  autoReorderInstances  AutoReorderInstance[]
+  recurringBillings     RecurringOrderBilling[]
+  
+  // Phase 6 relations
+  returns               Return[]                    @relation("Returns")
+  riskAnalysis          TransactionRiskAnalysis?    @relation("RiskAnalysis")
   
   @@index([status])
   @@index([supplierId, status])
@@ -791,6 +863,14 @@ enum NotificationType {
   REVIEW_SUBMITTED
   REVIEW_APPROVED
   REVIEW_REJECTED
+  KYB_SUBMITTED
+  KYB_UNDER_REVIEW
+  KYB_DOCUMENTS_REQUIRED
+  KYB_VERIFIED
+  KYB_REJECTED
+  KYB_BADGE_EARNED
+  KYB_EXPIRATION_REMINDER
+  KYB_SUSPENDED
   SYSTEM
 }
 
@@ -1198,4 +1278,2690 @@ model UserRatingStats {
   updatedAt             DateTime    @updatedAt
   
   @@map("user_rating_stats")
+}
+
+// =============================================================================
+// GLOBAL KYB (KNOW YOUR BUSINESS) VERIFICATION SYSTEM
+// =============================================================================
+
+model SupplierKYB {
+  id                      String      @id @default(cuid())
+  userId                  String      @unique
+  user                    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Business Details
+  businessName            String
+  businessType            String      // SOLE_PROPRIETOR, PARTNERSHIP, PRIVATE_LTD, PUBLIC_LTD, LLC, LLP, CORPORATION, COOPERATIVE, NGO, TRUST, STARTUP, SME
+  businessDescription     String      @db.Text
+  businessEstablishedYear Int
+  businessWebsite         String?
+  businessPhone           String?
+  
+  // Global Business Registration
+  registrationCountry     String      // ISO 3166-1 country code (e.g., US, GB, DE, IN, CN, AU)
+  registrationRegion      String?     // State, province, region within country
+  registrationNumber      String?     // Unique business registration number
+  registrationType        String?     // Company registration authority type
+  
+  // Tax Identification
+  taxIdType               String?     // TAX_ID, VAT, GST, ABN, EIN, BRN, etc.
+  taxIdNumber             String?     @unique
+  taxIdCountry            String?     // Country that issued tax ID
+  
+  // Additional Business Numbers
+  businessLicenseNumber   String?
+  businessLicenseExpiry   DateTime?
+  industryRegistration    String?     // Industry-specific registration
+  
+  // Addresses
+  registeredAddress       String      @db.Text
+  registeredCity          String
+  registeredRegion        String
+  registeredCountry       String      // ISO 3166-1 country code
+  registeredPostalCode    String
+  
+  operatingAddress        String?     @db.Text
+  operatingCity           String?
+  operatingRegion         String?
+  operatingCountry        String?     // ISO 3166-1 country code
+  operatingPostalCode     String?
+  
+  // Bank Details (Encrypted)
+  bankAccountNumber       String?     @db.Text    // Encrypted
+  bankRoutingCode         String?     // SWIFT, Routing number, ABA, etc.
+  bankAccountHolderName   String?
+  bankName                String?
+  bankCountry             String?     // Country of bank
+  
+  // Contact
+  primaryContactName      String
+  primaryContactPhone     String
+  primaryContactEmail     String
+  secondaryContactName    String?
+  secondaryContactPhone   String?
+  secondaryContactEmail   String?
+  
+  // Compliance
+  documents               VerificationDocument[]
+  complianceItems         ComplianceItem[]
+  
+  // Verification Status
+  status                  KYBStatus   @default(PENDING)
+  riskScore               Int         @default(50)          // 0-100 scale (0=low risk, 100=high risk)
+  riskAssessment          RiskAssessment?
+  
+  // Admin Review
+  reviewedByAdminId       String?
+  reviewedByAdmin         User?       @relation("KYBReviewer", fields: [reviewedByAdminId], references: [id])
+  rejectionReason         String?     @db.Text
+  adminNotes              String?     @db.Text
+  
+  // Verification Badge
+  badge                   VerificationBadge?
+  
+  // Timeline
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  verifiedAt              DateTime?
+  rejectedAt              DateTime?
+  expiresAt               DateTime?   // Annual re-verification
+  
+  // Audit
+  verificationLogs        VerificationLog[]
+  
+  // Appeals
+  appeals                 KYBAppeal[]
+  
+  // Blockchain
+  blockchainHash          String?
+  blockchainTxId          String?
+  
+  // Multi-language support
+  languagePreference      String      @default("en")
+  
+  // Additional metadata
+  metadata                String?     @db.Text  // JSON for country-specific fields
+  
+  @@map("supplier_kyb")
+}
+
+model VerificationDocument {
+  id                String      @id @default(cuid())
+  kybId             String
+  kyb               SupplierKYB @relation(fields: [kybId], references: [id], onDelete: Cascade)
+  
+  documentType      String      // BUSINESS_LICENSE, TAX_CERTIFICATE, REGISTRATION_CERTIFICATE, etc.
+  documentName      String
+  storageUrl        String      // S3 URL
+  fileSize          Int         // in bytes
+  
+  // Verification
+  verificationStatus DocumentVerificationStatus @default(PENDING)
+  verifiedByAdminId String?
+  verifiedByAdmin   User?       @relation(fields: [verifiedByAdminId], references: [id])
+  verificationNotes String?     @db.Text
+  
+  // For Tax/Registration APIs: API verification data
+  apiVerified       Boolean     @default(false)
+  apiVerificationData String?   @db.Text  // JSON response from API
+  apiVerificationError String?
+  
+  expiryDate        DateTime?   // Some documents expire
+  issueDate         DateTime?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  verifiedAt        DateTime?
+  
+  // Linked compliance items
+  complianceItems   ComplianceItem[]
+  
+  @@map("verification_documents")
+}
+
+model ComplianceItem {
+  id                String      @id @default(cuid())
+  kybId             String
+  kyb               SupplierKYB @relation(fields: [kybId], references: [id], onDelete: Cascade)
+  
+  itemType          String      // TAX_REGISTRATION, BUSINESS_LICENSE, BANK_ACCOUNT, etc.
+  
+  displayName       String
+  description       String      @db.Text
+  
+  status            ComplianceStatus @default(PENDING)
+  isMandatory       Boolean     @default(false)
+  isRecommended     Boolean     @default(false)
+  
+  documentId        String?
+  document          VerificationDocument?  @relation(fields: [documentId], references: [id])
+  
+  // Country/region specific requirements
+  applicableRegions String[]    @default([])  // ISO country codes or region codes
+  
+  expiryDate        DateTime?
+  completedDate     DateTime?
+  notes             String?     @db.Text
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@map("compliance_items")
+}
+
+model RiskAssessment {
+  id                String      @id @default(cuid())
+  kybId             String      @unique
+  kyb               SupplierKYB @relation(fields: [kybId], references: [id], onDelete: Cascade)
+  
+  // Risk Factors (each 0-20)
+  businessAgeRisk   Int         @default(0)
+  documentRisk      Int         @default(0)
+  verificationRisk  Int         @default(0)
+  locationRisk      Int         @default(0)
+  regulatoryRisk    Int         @default(0)
+  transactionRisk   Int         @default(0)
+  financialRisk     Int         @default(0)
+  reputationRisk    Int         @default(0)
+  
+  totalRiskScore    Int         @default(0)          // Normalized to 0-100
+  riskLevel         RiskLevel   @default(MEDIUM)
+  
+  // Red Flags
+  redFlags          String[]    @default([])
+  
+  // Recommendation
+  recommendation    RiskRecommendation @default(MONITOR)
+  
+  // Country-specific risk data
+  countryRiskRating String?
+  policyRelated     Boolean     @default(false)
+  
+  assessedAt        DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@map("risk_assessments")
+}
+
+model VerificationBadge {
+  id                String      @id @default(cuid())
+  kybId             String      @unique
+  kyb               SupplierKYB @relation(fields: [kybId], references: [id], onDelete: Cascade)
+  
+  badgeType         BadgeType   @default(VERIFIED)
+  trustScore        Int         @default(0)          // 0-100
+  displayOnProfile  Boolean     @default(true)
+  
+  earnedAt          DateTime    @default(now())
+  expiresAt         DateTime?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@map("verification_badges")
+}
+
+model VerificationLog {
+  id                String      @id @default(cuid())
+  kybId             String
+  kyb               SupplierKYB @relation(fields: [kybId], references: [id], onDelete: Cascade)
+  
+  action            String      // SUBMITTED, DOCUMENT_UPLOADED, VERIFIED, REJECTED, etc.
+  actionDetails     String      @db.Text
+  
+  performedByAdminId String?
+  performedByAdmin  User?       @relation(fields: [performedByAdminId], references: [id])
+  
+  oldValue          String?
+  newValue          String?
+  
+  ipAddress         String?
+  userAgent         String?
+  
+  createdAt         DateTime    @default(now())
+  
+  @@map("verification_logs")
+}
+
+model CountryComplianceConfig {
+  id                String      @id @default(cuid())
+  countryCode       String      @unique  // ISO 3166-1 country code
+  countryName       String
+  
+  // Required documents by country
+  mandatoryDocuments String[]    @default([])
+  
+  // Business registration details
+  businessTypes     String[]    @default([])
+  registrationAuthority String?
+  
+  // Tax identification
+  taxIdType         String?
+  taxIdExample      String?
+  
+  // Risk configuration
+  riskLevel         String      // LOW, MEDIUM, HIGH, VERY_HIGH
+  requiresManualReview Boolean  @default(false)
+  
+  // Compliance requirements
+  complianceItems   String[]    @default([])
+  
+  // Regional grouping
+  region            String?     // NORTH_AMERICA, SOUTH_AMERICA, EUROPE, ASIA, AFRICA, OCEANIA
+  
+  // Contact details for regional verification
+  verificationContactEmail String?
+  verificationApiEndpoint  String?
+  
+  // Language
+  defaultLanguage   String      @default("en")
+  
+  // Sanctions/Embargo information
+  underSanctions    Boolean     @default(false)
+  sanctionDetails   String?     @db.Text
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@map("country_compliance_configs")
+}
+
+// KYB Enums
+enum KYBStatus {
+  PENDING
+  UNDER_REVIEW
+  DOCUMENTS_REQUIRED
+  VERIFIED
+  REJECTED
+  SUSPENDED
+  EXPIRED
+}
+
+enum DocumentVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum ComplianceStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  NOT_APPLICABLE
+  FAILED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RiskRecommendation {
+  AUTO_APPROVE
+  MANUAL_REVIEW
+  MONITOR
+  REJECT
+  SUSPEND
+}
+
+enum BadgeType {
+  GOLD
+  SILVER
+  BRONZE
+  VERIFIED
+}
+
+// =============================================================================
+// REQUEST FOR QUOTE (RFQ) & QUOTE MANAGEMENT SYSTEM
+// =============================================================================
+
+model RequestForQuote {
+  id                      String      @id @default(cuid())
+  rfqNumber               String      @unique
+  
+  // Parties
+  buyerId                 String
+  buyer                   User        @relation("RFQBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  buyerCompanyName        String
+  buyerContactName        String
+  buyerContactEmail       String
+  buyerContactPhone       String
+  
+  // RFQ Details
+  title                   String
+  description             String      @db.Text
+  specifications          String      @db.Text
+  
+  // Quantity & Unit
+  requestedQuantity       Int
+  quantityUnit            String
+  
+  // Delivery & Location
+  deliveryLocation        String      @db.Text
+  deliveryCity            String
+  deliveryRegion          String
+  deliveryCountry         String
+  deliveryDate            DateTime
+  
+  // Industry & Classification
+  industryCategory        String
+  productCategory         String
+  incoterms               String?
+  
+  // Quality & Compliance
+  qualityStandards        String[]    @default([])
+  certificationRequired   String[]    @default([])
+  productionCapacityNeeded Int?
+  
+  // RFQ Visibility
+  visibility              RFQVisibility @default(PRIVATE)
+  selectedSuppliers       String[]    @default([])
+  
+  // Timeline
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  expiresAt               DateTime
+  publishedAt             DateTime?
+  closedAt                DateTime?
+  
+  // Status
+  status                  RFQStatus   @default(DRAFT)
+  
+  // Attachments
+  attachments             RFQAttachment[]
+  
+  // Quotes
+  quotes                  Quote[]
+  
+  // Activity
+  logs                    RFQLog[]
+  
+  // Analytics
+  viewCount               Int         @default(0)
+  quotesReceived          Int         @default(0)
+  selectedQuoteId         String?
+  
+  // Budget reference
+  estimatedBudget         String?
+  budgetRange             String?
+  
+  // Comparisons
+  comparisons             QuoteComparison[]
+  
+  @@map("request_for_quotes")
+}
+
+model RFQAttachment {
+  id                String      @id @default(cuid())
+  rfqId             String
+  rfq               RequestForQuote @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  
+  fileName          String
+  fileUrl           String
+  fileType          String
+  fileSize          Int
+  
+  uploadedAt        DateTime    @default(now())
+  
+  @@map("rfq_attachments")
+}
+
+model Quote {
+  id                      String      @id @default(cuid())
+  quoteNumber             String      @unique
+  
+  rfqId                   String
+  rfq                     RequestForQuote @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  
+  // Seller/Supplier
+  sellerId                String
+  seller                  User        @relation("QuoteSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  sellerCompanyName       String
+  sellerContactName       String
+  sellerContactEmail      String
+  sellerContactPhone      String
+  
+  // Quote Details
+  title                   String
+  description             String?     @db.Text
+  
+  // Pricing
+  unitPrice               Decimal     @db.Decimal(12, 4)
+  totalPrice              Decimal     @db.Decimal(14, 4)
+  currency                String
+  
+  // Quantity Discounts
+  quantityBreaks          QuantityBreak[]
+  
+  // Delivery
+  deliveryDate            DateTime
+  deliveryLocation        String?
+  shippingCost            Decimal?    @db.Decimal(12, 4)
+  shippingMethod          String?
+  
+  // Incoterms
+  incoterms               String?
+  
+  // Payment Terms
+  paymentTerms            String
+  downPaymentRequired     Decimal?    @db.Decimal(12, 4)
+  downPaymentPercentage   Int?
+  paymentSchedule         String?     @db.Text
+  
+  // Lead Time
+  productionLeadTime      Int
+  totalLeadTime           Int
+  
+  // Quality & Compliance
+  qualityAssurance        String?     @db.Text
+  certifications          String[]    @default([])
+  guaranteeInMonths       Int?
+  
+  // Validity
+  validFrom               DateTime    @default(now())
+  validUntil              DateTime
+  
+  // Status
+  status                  QuoteStatus @default(SUBMITTED)
+  
+  // Negotiation
+  negotiationRound        Int         @default(1)
+  parentQuoteId           String?
+  parentQuote             Quote?      @relation("QuoteNegotiation", fields: [parentQuoteId], references: [id], onDelete: SetNull)
+  childQuotes             Quote[]     @relation("QuoteNegotiation")
+  
+  // Version Control
+  version                 Int         @default(1)
+  
+  // Notes & Comments
+  notes                   String?     @db.Text
+  
+  // Timeline
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  submittedAt             DateTime?
+  acceptedAt              DateTime?
+  rejectedAt              DateTime?
+  expiredAt               DateTime?
+  convertedAt             DateTime?
+  
+  // Activity
+  logs                    QuoteLog[]
+  
+  // Attachment
+  attachments             QuoteAttachment[]
+  
+  // Negotiation messages
+  messages                QuoteNegotiationMessage[]
+  
+  // Conversion
+  transactionId           String?
+  
+  // Saved Quotes
+  savedQuotes             SavedQuote[]
+  
+  @@map("quotes")
+}
+
+model QuantityBreak {
+  id                String      @id @default(cuid())
+  quoteId           String
+  quote             Quote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  
+  minQuantity       Int
+  maxQuantity       Int?
+  unitPrice         Decimal     @db.Decimal(12, 4)
+  discount          Decimal?    @db.Decimal(5, 2)
+  
+  createdAt         DateTime    @default(now())
+  
+  @@map("quantity_breaks")
+}
+
+model QuoteAttachment {
+  id                String      @id @default(cuid())
+  quoteId           String
+  quote             Quote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  
+  fileName          String
+  fileUrl           String
+  fileType          String
+  fileSize          Int
+  
+  uploadedAt        DateTime    @default(now())
+  
+  @@map("quote_attachments")
+}
+
+model QuoteNegotiationMessage {
+  id                String      @id @default(cuid())
+  quoteId           String
+  quote             Quote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  
+  fromUserId        String
+  fromUser          User        @relation(fields: [fromUserId], references: [id])
+  
+  messageType       NegotiationMessageType
+  message           String      @db.Text
+  
+  proposedChanges   String?     @db.Text
+  
+  readAt            DateTime?
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@map("quote_negotiation_messages")
+}
+
+model QuoteTemplate {
+  id                String      @id @default(cuid())
+  sellerId          String
+  seller            User        @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  
+  templateName      String
+  description       String?
+  
+  paymentTerms      String      @default("NET30")
+  shippingMethod    String?
+  incoterms         String?
+  downPaymentPercentage Int?
+  warrantyMonths    Int?
+  
+  defaultQuantityBreaks String?  @db.Text
+  
+  isActive          Boolean     @default(true)
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@map("quote_templates")
+}
+
+model QuoteComparison {
+  id                String      @id @default(cuid())
+  comparisonName    String
+  
+  buyerId           String
+  buyer             User        @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  rfqId             String
+  rfq               RequestForQuote @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  
+  selectedQuotes    String[]
+  
+  comparisonCriteria String?    @db.Text
+  
+  notes             String?     @db.Text
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  @@map("quote_comparisons")
+}
+
+model RFQLog {
+  id                String      @id @default(cuid())
+  rfqId             String
+  rfq               RequestForQuote @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  
+  action            String
+  
+  details           String?     @db.Text
+  performedByUserId String?
+  performedByUser   User?       @relation(fields: [performedByUserId], references: [id])
+  
+  createdAt         DateTime    @default(now())
+  
+  @@map("rfq_logs")
+}
+
+model QuoteLog {
+  id                String      @id @default(cuid())
+  quoteId           String
+  quote             Quote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  
+  action            String
+  
+  details           String?     @db.Text
+  performedByUserId String?
+  performedByUser   User?       @relation(fields: [performedByUserId], references: [id])
+  
+  oldValues         String?     @db.Text
+  newValues         String?     @db.Text
+  
+  createdAt         DateTime    @default(now())
+  
+  @@map("quote_logs")
+}
+
+// RFQ/Quote Enums
+enum RFQStatus {
+  DRAFT
+  PUBLISHED
+  IN_REVIEW
+  CLOSED
+  ARCHIVED
+}
+
+enum RFQVisibility {
+  PRIVATE
+  OPEN
+  PUBLIC
+}
+
+enum QuoteStatus {
+  SUBMITTED
+  UNDER_NEGOTIATION
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+enum NegotiationMessageType {
+  COMMENT
+  COUNTER_OFFER
+  ACCEPTANCE
+  REJECTION
+  REQUEST_FOR_REVISION
+}
+
+// =============================================================================
+// BUYER TRUST SCORE & BLACKLIST SYSTEM
+// =============================================================================
+
+model BuyerTrustScore {
+  id                      String      @id @default(cuid())
+  buyerId                 String      @unique
+  buyer                   User        @relation("TrustScoreBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  // Overall Score (0-100)
+  overallScore            Int         @default(50)
+  scoreVersion            Int         @default(1)
+  
+  // Component Scores (each 0-100)
+  paymentReliabilityScore Int         @default(50)
+  disputeHistoryScore     Int         @default(50)
+  behavioralScore         Int         @default(50)
+  complianceScore         Int         @default(50)
+  communicationScore      Int         @default(50)
+  
+  // Risk Level
+  riskLevel               RiskLevel   @default(MEDIUM)
+  riskCategory            String?
+  
+  // Payment History Metrics
+  totalTransactions       Int         @default(0)
+  successfulTransactions  Int         @default(0)
+  paymentOnTimeCount      Int         @default(0)
+  paymentLateCount        Int         @default(0)
+  paymentOnTimePercentage Decimal     @default(100) @db.Decimal(5, 2)
+  averagePaymentDays      Int?
+  totalAmountPurchased    Decimal     @default(0) @db.Decimal(16, 4)
+  
+  // Dispute Metrics
+  totalDisputes           Int         @default(0)
+  openDisputes            Int         @default(0)
+  resolvedDisputes        Int         @default(0)
+  disputesInitiated       Int         @default(0)
+  chargebacksInitiated    Int         @default(0)
+  disputeWinRateBuyer     Decimal     @default(0) @db.Decimal(5, 2)
+  disputeWinRateSeller    Decimal     @default(0) @db.Decimal(5, 2)
+  
+  // Return & Chargeback Metrics
+  totalReturnsInitiated   Int         @default(0)
+  unreasonableReturnCount Int         @default(0)
+  returnRate              Decimal     @default(0) @db.Decimal(5, 2)
+  chargebackCount         Int         @default(0)
+  chargebackRate          Decimal     @default(0) @db.Decimal(5, 2)
+  
+  // Communication Metrics
+  avgResponseTimeHours    Int?
+  
+  // Timeline
+  lastTransactionAt       DateTime?
+  lastDisputeAt           DateTime?
+  lastFlagAt              DateTime?
+  scoreLastUpdatedAt      DateTime    @default(now())
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  // Related Data
+  flags                   BuyerRiskFlag[]
+  scoreHistory            BuyerScoreHistory[]
+  alerts                  BuyerAlert[]
+  sellerNotes             SellerBuyerNote[]
+  
+  @@map("buyer_trust_scores")
+}
+
+model BuyerRiskFlag {
+  id                      String      @id @default(cuid())
+  trustScoreId            String
+  trustScore              BuyerTrustScore @relation(fields: [trustScoreId], references: [id], onDelete: Cascade)
+  
+  flagType                FlagType
+  severity                FlagSeverity
+  description             String      @db.Text
+  
+  // Triggering Event
+  transactionId           String?
+  disputeId               String?
+  relatedData             String?     @db.Text
+  
+  // Flag Status
+  status                  FlagStatus  @default(ACTIVE)
+  
+  // Admin Review
+  reviewedByAdminId       String?
+  reviewedByAdmin         User?       @relation("RiskFlagReviewer", fields: [reviewedByAdminId], references: [id])
+  reviewNotes             String?     @db.Text
+  
+  // Timeline
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  resolvedAt              DateTime?
+  
+  // Appeal
+  appeal                  FlagAppeal?
+  
+  @@map("buyer_risk_flags")
+}
+
+model BuyerScoreHistory {
+  id                      String      @id @default(cuid())
+  trustScoreId            String
+  trustScore              BuyerTrustScore @relation(fields: [trustScoreId], references: [id], onDelete: Cascade)
+  
+  // Score Snapshot
+  overallScore            Int
+  paymentReliabilityScore Int
+  disputeHistoryScore     Int
+  behavioralScore         Int
+  complianceScore         Int
+  riskLevel               RiskLevel
+  
+  // Change Details
+  changeReason            String
+  scoreDelta              Int
+  previousScore           Int
+  newScore                Int
+  
+  // Context
+  transactionId           String?
+  disputeId               String?
+  triggerEvent            String?     @db.Text
+  
+  createdAt               DateTime    @default(now())
+  
+  @@map("buyer_score_history")
+}
+
+model BuyerBlacklist {
+  id                      String      @id @default(cuid())
+  buyerId                 String      @unique
+  buyer                   User        @relation("BlacklistedBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  // Blacklist Details
+  reason                  BlacklistReason
+  description             String      @db.Text
+  severity                BlacklistSeverity
+  
+  // Admin Action
+  blacklistedByAdminId    String
+  blacklistedByAdmin      User        @relation("BlacklistAdmin", fields: [blacklistedByAdminId], references: [id])
+  adminNotes              String?     @db.Text
+  
+  // Blacklist Scope
+  globalBlacklist         Boolean     @default(true)
+  affectedSellerIds       String[]    @default([])
+  
+  // Timeline
+  blacklistedAt           DateTime    @default(now())
+  expiresAt               DateTime?
+  reviewedAt              DateTime?
+  unblacklistedAt         DateTime?
+  
+  // Status
+  status                  BlacklistStatus @default(ACTIVE)
+  
+  // Appeal
+  appeal                  BlacklistAppeal?
+  
+  // Related Logs
+  logs                    BlacklistLog[]
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("buyer_blacklist")
+}
+
+model FlagAppeal {
+  id                      String      @id @default(cuid())
+  flagId                  String      @unique
+  flag                    BuyerRiskFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  
+  buyerId                 String
+  buyer                   User        @relation("FlagAppealBuyer", fields: [buyerId], references: [id])
+  
+  // Appeal Details
+  appealReason            String      @db.Text
+  evidence                String?     @db.Text
+  attachments             FlagAppealAttachment[]
+  
+  // Review
+  status                  AppealStatus @default(PENDING)
+  
+  reviewedByAdminId       String?
+  reviewedByAdmin         User?       @relation("FlagAppealReviewer", fields: [reviewedByAdminId], references: [id])
+  adminDecision           String?     @db.Text
+  
+  // Timeline
+  submittedAt             DateTime    @default(now())
+  reviewedAt              DateTime?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("flag_appeals")
+}
+
+model FlagAppealAttachment {
+  id                      String      @id @default(cuid())
+  appealId                String
+  appeal                  FlagAppeal  @relation(fields: [appealId], references: [id], onDelete: Cascade)
+  
+  fileName                String
+  fileUrl                 String
+  fileType                String
+  fileSize                Int
+  
+  uploadedAt              DateTime    @default(now())
+  
+  @@map("flag_appeal_attachments")
+}
+
+model BlacklistAppeal {
+  id                      String      @id @default(cuid())
+  blacklistId             String      @unique
+  blacklist               BuyerBlacklist @relation(fields: [blacklistId], references: [id], onDelete: Cascade)
+  
+  buyerId                 String
+  buyer                   User        @relation("BlacklistAppealBuyer", fields: [buyerId], references: [id])
+  
+  // Appeal Details
+  appealReason            String      @db.Text
+  evidence                String?     @db.Text
+  attachments             BlacklistAppealAttachment[]
+  
+  // Review
+  status                  AppealStatus @default(PENDING)
+  
+  reviewedByAdminId       String?
+  reviewedByAdmin         User?       @relation("BlacklistAppealReviewer", fields: [reviewedByAdminId], references: [id])
+  adminDecision           String?     @db.Text
+  
+  // Timeline
+  submittedAt             DateTime    @default(now())
+  reviewedAt              DateTime?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("blacklist_appeals")
+}
+
+model BlacklistAppealAttachment {
+  id                      String      @id @default(cuid())
+  appealId                String
+  appeal                  BlacklistAppeal @relation(fields: [appealId], references: [id], onDelete: Cascade)
+  
+  fileName                String
+  fileUrl                 String
+  fileType                String
+  fileSize                Int
+  
+  uploadedAt              DateTime    @default(now())
+  
+  @@map("blacklist_appeal_attachments")
+}
+
+model BuyerAlert {
+  id                      String      @id @default(cuid())
+  trustScoreId            String
+  trustScore              BuyerTrustScore @relation(fields: [trustScoreId], references: [id], onDelete: Cascade)
+  
+  alertType               AlertType
+  severity                FlagSeverity
+  message                 String
+  
+  // Recipients
+  sellerIds               String[]    @default([])
+  adminNotified           Boolean     @default(false)
+  
+  // Status
+  acknowledged            Boolean     @default(false)
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("buyer_alerts")
+}
+
+model SellerBuyerNote {
+  id                      String      @id @default(cuid())
+  sellerId                String
+  seller                  User        @relation("SellerNotes", fields: [sellerId], references: [id], onDelete: Cascade)
+  
+  trustScoreId            String
+  trustScore              BuyerTrustScore @relation(fields: [trustScoreId], references: [id], onDelete: Cascade)
+  
+  note                    String      @db.Text
+  isWarning               Boolean     @default(false)
+  isPositive              Boolean     @default(false)
+  
+  // Related Event
+  transactionId           String?
+  disputeId               String?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("seller_buyer_notes")
+}
+
+model BlacklistLog {
+  id                      String      @id @default(cuid())
+  blacklistId             String
+  blacklist               BuyerBlacklist @relation(fields: [blacklistId], references: [id], onDelete: Cascade)
+  
+  action                  String
+  
+  details                 String?     @db.Text
+  performedByAdminId      String?
+  performedByAdmin        User?       @relation(fields: [performedByAdminId], references: [id])
+  
+  createdAt               DateTime    @default(now())
+  
+  @@map("blacklist_logs")
+}
+
+// =============================================================================
+// ORDER HISTORY & REPEAT BUYER BENEFITS
+// =============================================================================
+
+model PurchaseHistory {
+  id                      String      @id @default(cuid())
+  buyerId                 String
+  buyer                   User        @relation("PurchaseHistoryBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  // Transaction Reference
+  transactionId           String
+  transaction             Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  // Product/Supplier Info
+  supplierId              String
+  supplier                User        @relation("PurchaseHistorySupplier", fields: [supplierId], references: [id])
+  
+  productName             String
+  productSKU              String?
+  productCategory         String
+  
+  // Order Details
+  quantityOrdered         Int
+  quantityUnit            String
+  unitPrice               Decimal     @db.Decimal(12, 4)
+  totalAmount             Decimal     @db.Decimal(14, 4)
+  currency                String
+  
+  // Discounts Applied
+  discountType            String?
+  discountAmount          Decimal?    @db.Decimal(12, 4)
+  discountPercentage      Decimal?    @db.Decimal(5, 2)
+  
+  // Delivery
+  deliveryDate            DateTime
+  deliveryLocation        String      @db.Text
+  
+  // Rating & Feedback
+  rating                  Int?
+  review                  String?     @db.Text
+  ratedAt                 DateTime?
+  
+  // Repeat Indicator
+  isRepeatProduct         Boolean     @default(false)
+  repeatCount             Int         @default(0)
+  
+  // Timeline
+  orderedAt               DateTime    @default(now())
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@index([buyerId])
+  @@index([supplierId])
+  @@index([productCategory])
+  @@map("purchase_history")
+}
+
+model SavedQuote {
+  id                      String      @id @default(cuid())
+  buyerId                 String
+  buyer                   User        @relation("SavedQuotes", fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  // Quote Reference
+  originalQuoteId         String?
+  originalQuote           Quote?      @relation(fields: [originalQuoteId], references: [id], onDelete: SetNull)
+  
+  // Quote Details
+  supplierId              String
+  supplier                User        @relation("SupplierSavedQuotes", fields: [supplierId], references: [id])
+  supplierName            String
+  
+  quoteName               String
+  description             String?     @db.Text
+  
+  // Product/Service Details
+  productName             String
+  productCategory         String
+  specifications          String?     @db.Text
+  
+  // Pricing Details
+  quantity                Int
+  quantityUnit            String
+  unitPrice               Decimal     @db.Decimal(12, 4)
+  totalPrice              Decimal     @db.Decimal(14, 4)
+  currency                String
+  
+  // Terms
+  paymentTerms            String?
+  deliveryTime            String?
+  incoterms               String?
+  
+  // Status
+  isFavorite              Boolean     @default(false)
+  isTemplate              Boolean     @default(false)
+  
+  // Conversion Tracking
+  timesUsed               Int         @default(0)
+  lastUsedAt              DateTime?
+  convertedToOrders       Int         @default(0)
+  
+  // Timeline
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  expiresAt               DateTime?
+  
+  // Relations
+  favorites               BuyerFavorite[]
+  
+  @@index([buyerId])
+  @@index([supplierId])
+  @@map("saved_quotes")
+}
+
+model BuyerFavorite {
+  id                      String      @id @default(cuid())
+  buyerId                 String
+  buyer                   User        @relation("BuyerFavorites", fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  // Favorite Type
+  favoriteType            FavoriteType
+  
+  // Reference
+  supplierId              String?
+  supplier                User?       @relation("FavoriteSuppliers", fields: [supplierId], references: [id], onDelete: Cascade)
+  
+  // Product Info
+  productSKU              String?
+  productName             String?
+  productCategory         String?
+  supplierProductId       String?
+  
+  // Saved Quote Reference
+  savedQuoteId            String?
+  savedQuote              SavedQuote? @relation(fields: [savedQuoteId], references: [id], onDelete: Cascade)
+  
+  // Display Info
+  displayName             String
+  notes                   String?     @db.Text
+  
+  // Metrics
+  viewCount               Int         @default(0)
+  lastViewedAt            DateTime?
+  
+  // Timeline
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@index([buyerId])
+  @@index([favoriteType])
+  @@map("buyer_favorites")
+}
+
+model AutoReorder {
+  id                      String      @id @default(cuid())
+  buyerId                 String
+  buyer                   User        @relation("AutoReorders", fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  // Base Info
+  name                    String
+  description             String?     @db.Text
+  
+  // Supplier & Product
+  supplierId              String
+  supplier                User        @relation("SupplierAutoReorders", fields: [supplierId], references: [id])
+  
+  productName             String
+  productSKU              String?
+  productCategory         String
+  
+  // Quantity & Pricing
+  quantityPerOrder        Int
+  quantityUnit            String
+  unitPrice               Decimal     @db.Decimal(12, 4)
+  estimatedTotal          Decimal     @db.Decimal(14, 4)
+  currency                String
+  
+  // Frequency
+  frequency               ReorderFrequency
+  customIntervalDays      Int?
+  nextOrderDate           DateTime
+  
+  // Delivery
+  deliveryAddress         String      @db.Text
+  deliveryCity            String
+  deliveryRegion          String
+  deliveryCountry         String
+  
+  // Payment Terms
+  paymentTerms            String?
+  autoChargeEnabled       Boolean     @default(false)
+  autoChargePaymentMethod String?
+  
+  // Status & Control
+  status                  AutoReorderStatus @default(ACTIVE)
+  isPaused                Boolean     @default(false)
+  pausedAt                DateTime?
+  pauseReason             String?
+  
+  // Limits
+  maxOrders               Int?
+  ordersPlaced            Int         @default(0)
+  
+  // Timeline
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  startDate               DateTime    @default(now())
+  endDate                 DateTime?
+  
+  // Activity
+  orders                  AutoReorderInstance[]
+  
+  @@index([buyerId])
+  @@index([supplierId])
+  @@index([status])
+  @@map("auto_reorders")
+}
+
+model AutoReorderInstance {
+  id                      String      @id @default(cuid())
+  autoReorderId           String
+  autoReorder             AutoReorder @relation(fields: [autoReorderId], references: [id], onDelete: Cascade)
+  
+  // Order Reference
+  transactionId           String?
+  transaction             Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  
+  // Order Details
+  orderDate               DateTime    @default(now())
+  quantity                Int
+  unitPrice               Decimal     @db.Decimal(12, 4)
+  totalAmount             Decimal     @db.Decimal(14, 4)
+  
+  // Status
+  status                  AutoReorderInstanceStatus @default(PENDING)
+  failureReason           String?     @db.Text
+  
+  // Payment
+  paymentStatus           String?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@index([autoReorderId])
+  @@map("auto_reorder_instances")
+}
+
+model LoyaltyTier {
+  id                      String      @id @default(cuid())
+  
+  // Tier Definition
+  tierName                String      @unique
+  tierLevel               Int         @unique
+  
+  // Benefits
+  discountPercentage      Decimal     @db.Decimal(5, 2)
+  bulkOrderDiscountBonus  Decimal?    @db.Decimal(5, 2)
+  freeShippingThreshold   Decimal?    @db.Decimal(14, 4)
+  prioritySupport         Boolean     @default(false)
+  dedicatedAccountManager Boolean     @default(false)
+  earlyAccessToDeals      Boolean     @default(false)
+  
+  // Rewards
+  pointsPerDollar         Decimal     @db.Decimal(5, 2)
+  bonusPointsMultiplier   Decimal?    @db.Decimal(3, 2)
+  
+  // Display
+  description             String?     @db.Text
+  badgeColor              String?
+  iconUrl                 String?
+  
+  // Timeline
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  // Related
+  membershipHistory       BuyerLoyaltyStatus[]
+  
+  @@map("loyalty_tiers")
+}
+
+model BuyerLoyaltyStatus {
+  id                      String      @id @default(cuid())
+  buyerId                 String      @unique
+  buyer                   User        @relation("BuyerLoyaltyStatus", fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  // Current Tier
+  currentTierId           String?
+  currentTier             LoyaltyTier? @relation(fields: [currentTierId], references: [id], onDelete: SetNull)
+  
+  // Metrics
+  totalOrderCount         Int         @default(0)
+  totalAmountSpent        Decimal     @db.Decimal(16, 4) @default(0)
+  totalRepeats            Int         @default(0)
+  repeatPurchaseRate      Decimal     @db.Decimal(5, 2) @default(0)
+  
+  // Loyalty Points
+  totalPointsEarned       Decimal     @db.Decimal(12, 4) @default(0)
+  totalPointsUsed         Decimal     @db.Decimal(12, 4) @default(0)
+  availablePoints         Decimal     @db.Decimal(12, 4) @default(0)
+  
+  // Timeline
+  joinedAt                DateTime    @default(now())
+  lastOrderAt             DateTime?
+  tierUpgradedAt          DateTime?
+  tierDowngradedAt        DateTime?
+  
+  // Status
+  isActive                Boolean     @default(true)
+  
+  // History
+  history                 LoyaltyHistory[]
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("buyer_loyalty_status")
+}
+
+model LoyaltyHistory {
+  id                      String      @id @default(cuid())
+  buyerLoyaltyId          String
+  buyerLoyalty            BuyerLoyaltyStatus @relation(fields: [buyerLoyaltyId], references: [id], onDelete: Cascade)
+  
+  // Event Type
+  eventType               LoyaltyEventType
+  
+  // Details
+  details                 String?     @db.Text
+  previousTierId          String?
+  newTierId               String?
+  pointsChange            Decimal?    @db.Decimal(12, 4)
+  transactionId           String?
+  
+  createdAt               DateTime    @default(now())
+  
+  @@index([buyerLoyaltyId])
+  @@map("loyalty_history")
+}
+
+model BulkDiscount {
+  id                      String      @id @default(cuid())
+  
+  // Supplier Setup
+  supplierId              String
+  supplier                User        @relation("SupplierBulkDiscounts", fields: [supplierId], references: [id], onDelete: Cascade)
+  
+  // Product/Category
+  productSKU              String?
+  productCategory         String?
+  appliesToAllProducts    Boolean     @default(false)
+  
+  // Discount Tiers
+  minQuantity             Int
+  maxQuantity             Int?
+  quantityUnit            String
+  
+  // Discount Type
+  discountType            DiscountType
+  discountValue           Decimal     @db.Decimal(8, 4)
+  
+  // Validity
+  isActive                Boolean     @default(true)
+  startDate               DateTime    @default(now())
+  endDate                 DateTime?
+  
+  // Regional/Buyer Restrictions
+  applicableCountries     String[]    @default([])
+  applicableBuyerTypes    String[]    @default([])
+  
+  // Timeline
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@index([supplierId])
+  @@map("bulk_discounts")
+}
+
+model RecurringOrder {
+  id                      String      @id @default(cuid())
+  buyerId                 String
+  buyer                   User        @relation("RecurringOrders", fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  // Subscription Details
+  subscriptionName        String
+  description             String?     @db.Text
+  
+  // Supplier & Products
+  supplierId              String
+  supplier                User        @relation("SupplierRecurringOrders", fields: [supplierId], references: [id])
+  
+  // Line Items
+  lineItems               RecurringOrderItem[]
+  
+  // Frequency
+  frequency               ReorderFrequency
+  customIntervalDays      Int?
+  dayOfWeek               Int?
+  dayOfMonth              Int?
+  nextBillingDate         DateTime
+  
+  // Billing & Discount
+  totalAmount             Decimal     @db.Decimal(14, 4)
+  currency                String
+  subscriptionDiscount    Decimal?    @db.Decimal(5, 2)
+  
+  // Payment Terms
+  autoChargeEnabled       Boolean     @default(false)
+  paymentMethod           String?
+  
+  // Delivery
+  deliveryAddress         String      @db.Text
+  deliveryCity            String
+  deliveryRegion          String
+  deliveryCountry         String
+  
+  // Status
+  status                  RecurringOrderStatus @default(ACTIVE)
+  cancellationReason      String?
+  
+  // Timeline
+  startDate               DateTime    @default(now())
+  endDate                 DateTime?
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  // Billing History
+  billingHistory          RecurringOrderBilling[]
+  
+  @@index([buyerId])
+  @@index([supplierId])
+  @@index([status])
+  @@map("recurring_orders")
+}
+
+model RecurringOrderItem {
+  id                      String      @id @default(cuid())
+  recurringOrderId        String
+  recurringOrder          RecurringOrder @relation(fields: [recurringOrderId], references: [id], onDelete: Cascade)
+  
+  // Product Info
+  productSKU              String?
+  productName             String
+  productCategory         String
+  
+  // Quantity
+  quantity                Int
+  quantityUnit            String
+  
+  // Pricing
+  unitPrice               Decimal     @db.Decimal(12, 4)
+  totalPrice              Decimal     @db.Decimal(14, 4)
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("recurring_order_items")
+}
+
+model RecurringOrderBilling {
+  id                      String      @id @default(cuid())
+  recurringOrderId        String
+  recurringOrder          RecurringOrder @relation(fields: [recurringOrderId], references: [id], onDelete: Cascade)
+  
+  // Billing Cycle
+  billingDate             DateTime
+  dueDate                 DateTime
+  
+  // Amount
+  amount                  Decimal     @db.Decimal(14, 4)
+  currency                String
+  
+  // Payment Status
+  status                  BillingStatus
+  
+  // Transaction Reference
+  transactionId           String?
+  transaction             Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  
+  // Retry Attempt
+  retryCount              Int         @default(0)
+  lastRetryAt             DateTime?
+  failureReason           String?
+  
+  createdAt               DateTime    @default(now())
+  paidAt                  DateTime?
+  
+  @@index([recurringOrderId])
+  @@map("recurring_order_billings")
+}
+
+model PurchaseAnalytics {
+  id                      String      @id @default(cuid())
+  buyerId                 String      @unique
+  buyer                   User        @relation("PurchaseAnalytics", fields: [buyerId], references: [id], onDelete: Cascade)
+  
+  // Overall Metrics
+  totalOrders             Int         @default(0)
+  totalSpent              Decimal     @db.Decimal(16, 4) @default(0)
+  averageOrderValue       Decimal     @db.Decimal(14, 4) @default(0)
+  
+  // Repeat Metrics
+  repeatBuyerRate         Decimal     @db.Decimal(5, 2) @default(0)
+  topRepeatSuppliers      String[]    @default([])
+  
+  // Category Preference
+  topCategories           String[]    @default([])
+  categoryDistribution    String?     @db.Text
+  
+  // Time Analytics
+  firstOrderDate          DateTime?
+  lastOrderDate           DateTime?
+  averageOrderFrequency   Int?
+  
+  // Supplier Metrics
+  totalSuppliers          Int         @default(0)
+  preferredSuppliers      String[]    @default([])
+  
+  // Churn Risk
+  churnRisk               ChurnRisk   @default(LOW)
+  daysSinceLastOrder      Int?
+  
+  // Spending Trend
+  lastMonthSpending       Decimal     @db.Decimal(14, 4) @default(0)
+  lastQuarterSpending     Decimal     @db.Decimal(14, 4) @default(0)
+  yearOverYearGrowth      Decimal     @db.Decimal(5, 2) @default(0)
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("purchase_analytics")
+}
+
+// Order History & Repeat Buyer Enums
+
+enum FavoriteType {
+  SUPPLIER
+  PRODUCT
+  QUOTE
+  CATEGORY
+}
+
+enum ReorderFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  CUSTOM
+}
+
+enum AutoReorderStatus {
+  ACTIVE
+  PAUSED
+  STOPPED
+  COMPLETED
+}
+
+enum AutoReorderInstanceStatus {
+  PENDING
+  PLACED
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+enum LoyaltyEventType {
+  ORDER_PLACED
+  TIER_UPGRADED
+  TIER_DOWNGRADED
+  POINTS_EARNED
+  POINTS_REDEEMED
+  DISCOUNT_APPLIED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum RecurringOrderStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+enum BillingStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum ChurnRisk {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// Trust Score Enums (RiskLevel enum already defined in KYB section)
+
+enum FlagType {
+  PAYMENT_DELAY
+  HIGH_DISPUTE_RATE
+  CHARGEBACK
+  RETURN_ABUSE
+  SUSPICIOUS_PATTERN
+  FRAUD_SUSPICION
+  FRAUD_RING
+  KYB_ISSUE
+  COMMUNICATION_ISSUE
+  SCORE_DROP
+  BLACKLIST_ALERT
+}
+
+enum FlagSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FlagStatus {
+  ACTIVE
+  UNDER_REVIEW
+  RESOLVED
+  FALSE_POSITIVE
+  APPEALED
+}
+
+enum BlacklistReason {
+  REPEATED_CHARGEBACKS
+  FRAUD_SUSPICION
+  PAYMENT_FRAUD
+  IDENTITY_FRAUD
+  ABUSIVE_BEHAVIOR
+  COURT_ORDER
+  OTHER
+}
+
+enum BlacklistSeverity {
+  TEMPORARY
+  PERMANENT
+}
+
+enum BlacklistStatus {
+  ACTIVE
+  UNDER_REVIEW
+  APPEALED
+  REMOVED
+  EXPIRED
+}
+
+enum AppealStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PARTIAL
+}
+
+enum AlertType {
+  SCORE_DROP
+  NEW_FLAG
+  CHARGEBACK_INITIATED
+  DISPUTE_CREATED
+  PAYMENT_OVERDUE
+  BLACKLIST_WARNING
+}
+
+// =============================================================================
+// KYB APPEAL SYSTEM
+// =============================================================================
+
+model KYBAppeal {
+  id                      String      @id @default(cuid())
+  kybId                   String
+  kyb                     SupplierKYB @relation(fields: [kybId], references: [id], onDelete: Cascade)
+  
+  // Appeal Details
+  appealReason            String      @db.Text
+  explanation             String?     @db.Text
+  
+  // Additional Documents
+  documents               KYBAppealDocument[]
+  
+  // Status
+  status                  AppealStatus @default(PENDING)
+  
+  // Review
+  reviewedByAdminId       String?
+  reviewedByAdmin         User?       @relation("KYBAppealReviewer", fields: [reviewedByAdminId], references: [id])
+  adminDecision           String?     @db.Text
+  
+  // Timeline
+  submittedAt             DateTime    @default(now())
+  reviewedAt              DateTime?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("kyb_appeals")
+}
+
+model KYBAppealDocument {
+  id                      String      @id @default(cuid())
+  appealId                String
+  appeal                  KYBAppeal   @relation(fields: [appealId], references: [id], onDelete: Cascade)
+  
+  documentName            String
+  fileName                String
+  fileUrl                 String
+  fileSize                Int
+  mimeType                String
+  
+  uploadedAt              DateTime    @default(now())
+  
+  @@map("kyb_appeal_documents")
+}
+
+// =============================================================================
+// UNIFIED RISK MANAGEMENT FRAMEWORK
+// =============================================================================
+
+model RiskManagementProfile {
+  id                      String      @id @default(cuid())
+  userId                  String      @unique
+  user                    User        @relation("RiskProfile", fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Overall Risk Assessment
+  overallRiskLevel        RiskLevel   @default(MEDIUM)
+  overallRiskScore        Int         @default(50)
+  
+  // Component Risk Scores (0-100)
+  kybRiskScore            Int         @default(50)
+  complianceRiskScore     Int         @default(50)
+  transactionRiskScore    Int         @default(50)
+  paymentRiskScore        Int         @default(50)
+  behavioralRiskScore     Int         @default(50)
+  
+  // Risk Factors
+  riskFactors             String[]    @default([])
+  mitigationActions       String[]    @default([])
+  
+  // Monitoring
+  isMonitored             Boolean     @default(false)
+  monitoringReason        String?
+  monitoringStartDate     DateTime?
+  monitoringEndDate       DateTime?
+  
+  // Restrictions
+  hasRestrictions         Boolean     @default(false)
+  restrictions            RiskRestriction[]
+  
+  // Last Update
+  lastRiskAssessment      DateTime?
+  lastRiskAssessmentBy    String?
+  nextRiskAssessment      DateTime?
+  
+  // History
+  riskHistory             RiskHistoryEntry[]
+  
+  // Alerts
+  alerts                  RiskAlert[]
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("risk_management_profiles")
+}
+
+model RiskRestriction {
+  id                      String      @id @default(cuid())
+  riskProfileId           String
+  riskProfile             RiskManagementProfile @relation(fields: [riskProfileId], references: [id], onDelete: Cascade)
+  
+  // Restriction Details
+  restrictionType         RestrictionType
+  description             String
+  
+  // Limits
+  dailyLimit              Decimal?    @db.Decimal(16, 4)
+  monthlyLimit            Decimal?    @db.Decimal(16, 4)
+  transactionLimit        Decimal?    @db.Decimal(16, 4)
+  affectedCategories      String[]    @default([])
+  
+  // Status
+  isActive                Boolean     @default(true)
+  reason                  String      @db.Text
+  
+  // Timeline
+  startDate               DateTime    @default(now())
+  endDate                 DateTime?
+  
+  // Management
+  createdByAdminId        String
+  createdByAdmin          User        @relation("RestrictionCreator", fields: [createdByAdminId], references: [id])
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("risk_restrictions")
+}
+
+model RiskHistoryEntry {
+  id                      String      @id @default(cuid())
+  riskProfileId           String
+  riskProfile             RiskManagementProfile @relation(fields: [riskProfileId], references: [id], onDelete: Cascade)
+  
+  // Score Changes
+  previousOverallRiskLevel RiskLevel
+  newOverallRiskLevel     RiskLevel
+  previousOverallScore    Int
+  newOverallScore         Int
+  scoreDelta              Int
+  
+  // Trigger
+  triggerEvent            RiskTriggerEvent
+  triggerDetails          String?     @db.Text
+  
+  // Assessment
+  assessmentNotes         String?     @db.Text
+  assessedByAdminId       String?
+  assessedByAdmin         User?       @relation("RiskAssessmentAdmin", fields: [assessedByAdminId], references: [id])
+  
+  createdAt               DateTime    @default(now())
+  
+  @@map("risk_history_entries")
+}
+
+model RiskAlert {
+  id                      String      @id @default(cuid())
+  riskProfileId           String
+  riskProfile             RiskManagementProfile @relation(fields: [riskProfileId], references: [id], onDelete: Cascade)
+  
+  // Alert Details
+  alertType               RiskAlertType
+  severity                FlagSeverity
+  message                 String
+  
+  // Alert Status
+  isActive                Boolean     @default(true)
+  acknowledgedAt          DateTime?
+  acknowledgedByAdminId   String?
+  acknowledgedByAdmin     User?       @relation("RiskAlertAcknowledger", fields: [acknowledgedByAdminId], references: [id])
+  
+  // Action
+  requiredAction          String?
+  actionTakenAt           DateTime?
+  actionNotes             String?     @db.Text
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("risk_alerts")
+}
+
+model ComplianceReport {
+  id                      String      @id @default(cuid())
+  userId                  String
+  user                    User        @relation("ComplianceReports", fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Report Details
+  reportType              ComplianceReportType
+  reportDate              DateTime    @default(now())
+  
+  // Findings
+  riskAssessment          String      @db.Text
+  complianceStatus        ComplianceReportStatus
+  findings                String?     @db.Text
+  recommendations         String?     @db.Text
+  
+  // Sign-off
+  generatedByAdminId      String
+  generatedByAdmin        User        @relation("ComplianceReportAdmin", fields: [generatedByAdminId], references: [id])
+  
+  // File
+  reportFileUrl           String?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("compliance_reports")
+}
+
+// Risk Management Enums
+
+enum RestrictionType {
+  TRANSACTION_LIMIT
+  DAILY_LIMIT
+  MONTHLY_LIMIT
+  PRODUCT_CATEGORY_LIMIT
+  SUSPENSION
+  MANUAL_REVIEW_REQUIRED
+}
+
+enum RiskTriggerEvent {
+  KYB_STATUS_CHANGE
+  TRANSACTION_FLAG
+  DISPUTE_CREATED
+  PAYMENT_FAILURE
+  BEHAVIOR_CHANGE
+  MANUAL_ASSESSMENT
+  COMPLIANCE_CHECK
+  PERIODIC_REVIEW
+}
+
+enum RiskAlertType {
+  RISK_LEVEL_CHANGE
+  RESTRICTION_BREACH
+  SUSPICIOUS_ACTIVITY
+  COMPLIANCE_ISSUE
+  KYB_EXPIRING
+  BLACKLIST_MATCH
+  HIGH_VALUE_TRANSACTION
+  UNUSUAL_PATTERN
+}
+
+enum ComplianceReportType {
+  ANNUAL
+  QUARTERLY
+  ON_DEMAND
+  REGULATORY
+  AUDIT
+}
+
+enum ComplianceReportStatus {
+  COMPLIANT
+  NON_COMPLIANT
+  CONDITIONAL
+  UNDER_REVIEW
+}
+
+// ============================================================================
+// PHASE 5: ANALYTICS SYSTEM
+// ============================================================================
+
+model AnalyticsSnapshot {
+  id                      String      @id @default(cuid())
+  snapshotDate            DateTime    @unique
+  
+  // Transaction Metrics
+  totalTransactions       Int         @default(0)
+  transactionVolume       Decimal     @db.Decimal(16, 4) @default(0)
+  averageOrderValue       Decimal     @db.Decimal(16, 4) @default(0)
+  successRate             Decimal     @db.Decimal(5, 2)  @default(0)
+  failureRate             Decimal     @db.Decimal(5, 2)  @default(0)
+  
+  // Dispute Metrics
+  totalDisputes           Int         @default(0)
+  disputeRate             Decimal     @db.Decimal(5, 2)  @default(0)
+  avgResolutionDays       Int?
+  chargebackRate          Decimal     @db.Decimal(5, 2)  @default(0)
+  
+  // User Metrics
+  activeSellerCount       Int         @default(0)
+  activeBuyerCount        Int         @default(0)
+  newSellerSignups        Int         @default(0)
+  newBuyerSignups         Int         @default(0)
+  
+  // Churn & Retention
+  sellerChurnRate         Decimal     @db.Decimal(5, 2)  @default(0)
+  buyerRetentionRate      Decimal     @db.Decimal(5, 2)  @default(0)
+  
+  // Revenue
+  totalRevenue            Decimal     @db.Decimal(16, 4) @default(0)
+  platformFees            Decimal     @db.Decimal(16, 4) @default(0)
+  
+  // Geographic Distribution
+  byCountry               String      @db.Text  @default("{}")
+  byRegion                String      @db.Text  @default("{}")
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("analytics_snapshots")
+}
+
+model DailyMetrics {
+  id                      String      @id @default(cuid())
+  date                    DateTime    @unique
+  
+  // Daily transaction metrics
+  transactionCount        Int         @default(0)
+  transactionVolume       Decimal     @db.Decimal(16, 4) @default(0)
+  successCount            Int         @default(0)
+  failureCount            Int         @default(0)
+  
+  // Daily dispute metrics
+  newDisputes             Int         @default(0)
+  resolvedDisputes        Int         @default(0)
+  chargebacks             Int         @default(0)
+  
+  // Daily user metrics
+  newUsers                Int         @default(0)
+  activeUsers             Int         @default(0)
+  returningUsers          Int         @default(0)
+  
+  // Daily revenue
+  revenue                 Decimal     @db.Decimal(16, 4) @default(0)
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("daily_metrics")
+}
+
+model HourlyMetrics {
+  id                      String      @id @default(cuid())
+  hour                    DateTime    @unique
+  
+  // Hourly transaction metrics
+  transactionCount        Int         @default(0)
+  transactionVolume       Decimal     @db.Decimal(16, 4) @default(0)
+  successCount            Int         @default(0)
+  failureCount            Int         @default(0)
+  
+  // Hourly user activity
+  activeUsers             Int         @default(0)
+  apiRequests             Int         @default(0)
+  
+  // Hourly revenue
+  revenue                 Decimal     @db.Decimal(16, 4) @default(0)
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("hourly_metrics")
+}
+
+model UserCohortMetrics {
+  id                      String      @id @default(cuid())
+  cohortMonthYear         String
+  userType                String
+  
+  // Cohort composition
+  cohortSize              Int         @default(0)
+  activeCount             Int         @default(0)
+  
+  // Cohort metrics
+  retentionRate           Decimal     @db.Decimal(5, 2)  @default(0)
+  transactionCount        Int         @default(0)
+  totalRevenue            Decimal     @db.Decimal(16, 4) @default(0)
+  averageOrderValue       Decimal     @db.Decimal(16, 4) @default(0)
+  
+  // Monthly breakdown
+  month01                 Decimal     @db.Decimal(5, 2)  @default(0)
+  month02                 Decimal     @db.Decimal(5, 2)  @default(0)
+  month03                 Decimal     @db.Decimal(5, 2)  @default(0)
+  month06                 Decimal     @db.Decimal(5, 2)  @default(0)
+  month12                 Decimal     @db.Decimal(5, 2)  @default(0)
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@unique([cohortMonthYear, userType])
+  @@map("user_cohort_metrics")
+}
+
+model ProductCategoryMetrics {
+  id                      String      @id @default(cuid())
+  category                String      @unique
+  
+  // Category performance
+  totalListings           Int         @default(0)
+  activeListings          Int         @default(0)
+  totalSales              Int         @default(0)
+  totalRevenue            Decimal     @db.Decimal(16, 4) @default(0)
+  averagePrice            Decimal     @db.Decimal(16, 4) @default(0)
+  
+  // Trend
+  demandTrend             String      @default("STABLE")
+  growthRate              Decimal     @db.Decimal(5, 2)  @default(0)
+  
+  // Top products in category
+  topProducts             String[]    @default([])
+  
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("product_category_metrics")
+}
+
+model GeographicMetrics {
+  id                      String      @id @default(cuid())
+  country                 String
+  region                  String?
+  
+  // Market metrics
+  sellerCount             Int         @default(0)
+  buyerCount              Int         @default(0)
+  transactionCount        Int         @default(0)
+  transactionVolume       Decimal     @db.Decimal(16, 4) @default(0)
+  
+  // Performance
+  averageOrderValue       Decimal     @db.Decimal(16, 4) @default(0)
+  successRate             Decimal     @db.Decimal(5, 2)  @default(0)
+  
+  // Growth
+  monthOverMonthGrowth    Decimal     @db.Decimal(5, 2)  @default(0)
+  yearOverYearGrowth      Decimal     @db.Decimal(5, 2)  @default(0)
+  
+  @@unique([country, region])
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("geographic_metrics")
+}
+
+// ============================================================================
+// PHASE 6: ADVANCED SEARCH & FRAUD DETECTION
+// ============================================================================
+
+model SearchLog {
+  id                      String      @id @default(cuid())
+  userId                  String?
+  user                    User?       @relation("SearchLogs", fields: [userId], references: [id], onDelete: SetNull)
+  
+  searchQuery             String
+  searchType              String
+  resultCount             Int
+  clickedResultId         String?
+  clickedResultType       String?
+  
+  ipAddress               String
+  userAgent               String
+  
+  createdAt               DateTime    @default(now())
+  
+  @@map("search_logs")
+}
+
+model SavedSearch {
+  id                      String      @id @default(cuid())
+  userId                  String
+  user                    User        @relation("SavedSearches", fields: [userId], references: [id], onDelete: Cascade)
+  
+  searchName              String
+  searchQuery             String
+  searchFilters           String      @db.Text
+  searchType              String
+  
+  notifyOnNewMatches      Boolean     @default(false)
+  notificationFrequency   String?
+  lastNotificationAt      DateTime?
+  
+  matchCount              Int         @default(0)
+  lastMatchAt             DateTime?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("saved_searches")
+}
+
+model FraudDetectionModel {
+  id                      String      @id @default(cuid())
+  modelVersion            Int         @default(1)
+  
+  // Model performance metrics
+  accuracy                Decimal     @db.Decimal(5, 4) @default(0)
+  precision               Decimal     @db.Decimal(5, 4) @default(0)
+  recall                  Decimal     @db.Decimal(5, 4) @default(0)
+  f1Score                 Decimal     @db.Decimal(5, 4) @default(0)
+  
+  // Thresholds
+  fraudThreshold          Decimal     @db.Decimal(3, 2) @default(0.7)
+  highRiskThreshold       Decimal     @db.Decimal(3, 2) @default(0.85)
+  
+  // Training
+  trainedOnTransactions   Int         @default(0)
+  trainedOnFraudCases     Int         @default(0)
+  lastTrainedAt           DateTime?
+  
+  // Status
+  isActive                Boolean     @default(false)
+  deployedAt              DateTime?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("fraud_detection_models")
+}
+
+model FraudScore {
+  id                      String      @id @default(cuid())
+  userId                  String      @unique
+  user                    User        @relation("FraudScore", fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Overall score (0-1)
+  overallFraudScore       Decimal     @db.Decimal(3, 2) @default(0.5)
+  
+  // Component scores (0-1)
+  paymentFraudScore       Decimal     @db.Decimal(3, 2) @default(0.5)
+  identityFraudScore      Decimal     @db.Decimal(3, 2) @default(0.5)
+  transactionFraudScore   Decimal     @db.Decimal(3, 2) @default(0.5)
+  behavioralFraudScore    Decimal     @db.Decimal(3, 2) @default(0.5)
+  
+  // Risk level
+  riskLevel               String      @default("MEDIUM")
+  
+  // Detected issues
+  fraudIndicators         String[]    @default([])
+  
+  // Status
+  isFlaggedForReview      Boolean     @default(false)
+  reviewNotes             String?     @db.Text
+  reviewedAt              DateTime?
+  
+  // Last update
+  lastCalculatedAt        DateTime    @default(now())
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("fraud_scores")
+}
+
+model TransactionRiskAnalysis {
+  id                      String      @id @default(cuid())
+  transactionId           String      @unique
+  transaction             Transaction @relation("RiskAnalysis", fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  // Risk factors
+  deviceFingerprintMatch  Boolean     @default(true)
+  velocityAnomalyDetected Boolean     @default(false)
+  paymentMethodMismatch   Boolean     @default(false)
+  addressMismatch         Boolean     @default(false)
+  amountAnomalyDetected   Boolean     @default(false)
+  timingAnomalyDetected   Boolean     @default(false)
+  
+  // Specific detections
+  isFirstTransaction      Boolean     @default(false)
+  newPaymentMethod        Boolean     @default(false)
+  unusualAmount           Boolean     @default(false)
+  highValueTransaction    Boolean     @default(false)
+  
+  // Risk assessment
+  riskScore               Decimal     @db.Decimal(3, 2) @default(0.5)
+  riskLevel               String      @default("MEDIUM")
+  
+  // Recommendation
+  recommendedAction       String      @default("ALLOW")
+  
+  // Details
+  analysisDetails         String?     @db.Text
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("transaction_risk_analyses")
+}
+
+model DeviceFingerprint {
+  id                      String      @id @default(cuid())
+  userId                  String
+  user                    User        @relation("DeviceFingerprints", fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Device info
+  fingerprint             String      @unique
+  deviceType              String
+  osType                  String
+  osVersion               String?
+  browserType             String
+  browserVersion          String?
+  
+  // Hardware
+  screenResolution        String?
+  timezone                String?
+  language                String?
+  
+  // Geo-location
+  country                 String
+  region                  String?
+  city                    String?
+  latitude                Decimal?    @db.Decimal(10, 8)
+  longitude               Decimal?    @db.Decimal(11, 8)
+  
+  // Trust assessment
+  isTrusted               Boolean     @default(false)
+  trustScore              Decimal     @db.Decimal(3, 2) @default(0.5)
+  verifiedAt              DateTime?
+  
+  // Activity
+  firstSeenAt             DateTime
+  lastSeenAt              DateTime    @updatedAt
+  transactionCount        Int         @default(0)
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("device_fingerprints")
+}
+
+// ============================================================================
+// PHASE 6: RETURN & REFUND MANAGEMENT
+// ============================================================================
+
+model ReturnPolicy {
+  id                      String      @id @default(cuid())
+  sellerId                String      @unique
+  seller                  User        @relation("ReturnPolicy", fields: [sellerId], references: [id], onDelete: Cascade)
+  
+  // Policy window
+  returnWindowDays        Int         @default(30)
+  fullRefundWindow        Int         @default(14)
+  
+  // Fees
+  restockingFeePct        Decimal     @db.Decimal(5, 2) @default(0)
+  shippingFeePct          Decimal     @db.Decimal(5, 2) @default(0)
+  
+  // Conditions
+  conditions              String      @db.Text
+  nonReturnableItems      String[]    @default([])
+  
+  // Status
+  isActive                Boolean     @default(true)
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("return_policies")
+}
+
+model Return {
+  id                      String      @id @default(cuid())
+  transactionId           String
+  transaction             Transaction @relation("Returns", fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  // Return request
+  reason                  ReturnReason
+  description             String      @db.Text
+  condition               ItemCondition
+  
+  // Photos
+  photoUrls               String[]    @default([])
+  
+  // Status lifecycle
+  status                  ReturnStatus @default(REQUESTED)
+  
+  // Refund details
+  refundAmount            Decimal     @db.Decimal(16, 4)
+  refundMethod            RefundMethod
+  restockingFeeApplied    Decimal     @db.Decimal(16, 4) @default(0)
+  shippingFeeDeducted     Decimal     @db.Decimal(16, 4) @default(0)
+  netRefundAmount         Decimal     @db.Decimal(16, 4)
+  
+  // Return shipping
+  returnTrackingNumber    String?
+  returnCarrier           String?
+  returnLabel             String?
+  
+  // Inspection (when returned)
+  inspectionNotes         String?     @db.Text
+  itemConditionVerified   Boolean     @default(false)
+  verifiedAt              DateTime?
+  
+  // Timeline
+  requestedAt             DateTime    @default(now())
+  approvedAt              DateTime?
+  shippedBackAt           DateTime?
+  receivedAt              DateTime?
+  inspectedAt             DateTime?
+  refundedAt              DateTime?
+  rejectedAt              DateTime?
+  
+  // Admin
+  reviewedByAdminId       String?
+  reviewedByAdmin         User?       @relation("ReturnReviewer", fields: [reviewedByAdminId], references: [id])
+  
+  // Refunds
+  refunds                 Refund[]
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("returns")
+}
+
+model Refund {
+  id                      String      @id @default(cuid())
+  returnId                String
+  return                  Return      @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  
+  // Calculation
+  originalAmount          Decimal     @db.Decimal(16, 4)
+  restockingFee           Decimal     @db.Decimal(16, 4) @default(0)
+  processingFee           Decimal     @db.Decimal(16, 4) @default(0)
+  shippingFee             Decimal     @db.Decimal(16, 4) @default(0)
+  netRefundAmount         Decimal     @db.Decimal(16, 4)
+  
+  // Status
+  status                  RefundStatus @default(PENDING)
+  failureReason           String?
+  retryCount              Int         @default(0)
+  
+  // Processing method
+  refundMethod            RefundMethod
+  externalRefundId        String?
+  
+  // Timeline
+  initiatedAt             DateTime    @default(now())
+  completedAt             DateTime?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("refunds")
+}
+
+enum ReturnReason {
+  DAMAGED
+  DEFECTIVE
+  NOT_AS_DESCRIBED
+  CHANGED_MIND
+  WRONG_ITEM
+  OTHER
+}
+
+enum ItemCondition {
+  NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  SHIPPED_BACK
+  RECEIVED
+  INSPECTED
+  REFUNDED
+  REJECTED
+  CANCELLED
+}
+
+enum RefundMethod {
+  ORIGINAL_PAYMENT
+  WALLET_CREDIT
+  STRIPE
+  BANK_TRANSFER
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ============================================================================
+// PHASE 7: SECURITY HARDENING
+// ============================================================================
+
+model MultiFactorAuth {
+  id                      String      @id @default(cuid())
+  userId                  String      @unique
+  user                    User        @relation("MFA", fields: [userId], references: [id], onDelete: Cascade)
+  
+  // MFA methods
+  isMFAEnabled            Boolean     @default(false)
+  
+  // TOTP (Time-based One-Time Password)
+  totpEnabled             Boolean     @default(false)
+  totpSecret              String?
+  totpBackupCodes         String?     @db.Text
+  
+  // SMS
+  smsEnabled              Boolean     @default(false)
+  phoneNumber             String?
+  
+  // Email
+  emailEnabled            Boolean     @default(true)
+  
+  // Recovery codes
+  recoveryCodesGenerated  DateTime?
+  recoveryCodesUsedCount  Int         @default(0)
+  
+  // Status
+  lastVerifiedAt          DateTime?
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("multi_factor_auths")
+}
+
+model APIKey {
+  id                      String      @id @default(cuid())
+  userId                  String
+  user                    User        @relation("APIKeys", fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Key info
+  name                    String
+  keyHash                 String      @unique
+  keyPreview              String
+  
+  // Permissions
+  scopes                  String[]    @default([])
+  
+  // Rate limits
+  requestsPerMinute       Int         @default(60)
+  requestsPerDay          Int         @default(10000)
+  
+  // IP whitelist
+  ipWhitelist             String[]    @default([])
+  
+  // Status
+  isActive                Boolean     @default(true)
+  lastUsedAt              DateTime?
+  
+  // Timeline
+  expiresAt               DateTime?
+  createdAt               DateTime    @default(now())
+  rotatedAt               DateTime?
+  
+  @@map("api_keys")
+}
+
+model ComplianceAuditLog {
+  id                      String      @id @default(cuid())
+  
+  // Event details
+  eventType               String
+  entityType              String
+  entityId                String
+  
+  // Who & Why
+  userId                  String?
+  userEmail               String?
+  adminId                 String?
+  reason                  String?
+  
+  // Data change
+  oldValues               String?     @db.Text
+  newValues               String?     @db.Text
+  
+  // Request details
+  ipAddress               String
+  userAgent               String?
+  requestPath             String?
+  
+  // Status
+  success                 Boolean     @default(true)
+  failureReason           String?
+  
+  createdAt               DateTime    @default(now())
+  
+  @@map("compliance_audit_logs")
+}
+
+model DataDeletionRequest {
+  id                      String      @id @default(cuid())
+  userId                  String
+  user                    User        @relation("DataDeletionRequests", fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Request details
+  requestReason           String
+  status                  DataDeletionStatus @default(PENDING)
+  
+  // Verification
+  verificationEmailSent   DateTime?
+  verificationConfirmed   DateTime?
+  
+  // Schedule
+  scheduledDeletionAt     DateTime
+  completedAt             DateTime?
+  
+  // Admin
+  processedByAdminId      String?
+  processingNotes         String?     @db.Text
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("data_deletion_requests")
+}
+
+model DataRetentionPolicy {
+  id                      String      @id @default(cuid())
+  
+  // Policy
+  dataType                String      @unique
+  retentionDays           Int
+  
+  // Delete method
+  deleteMethod            String
+  archiveLocation         String?
+  
+  // Auto-execution
+  isActive                Boolean     @default(true)
+  lastExecutedAt          DateTime?
+  nextExecutionAt         DateTime?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("data_retention_policies")
+}
+
+model EncryptedSensitiveData {
+  id                      String      @id @default(cuid())
+  userId                  String      @unique
+  user                    User        @relation("EncryptedData", fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Encrypted fields
+  taxId                   String?
+  bankAccountNumber       String?
+  bankRoutingNumber       String?
+  businessLicense         String?
+  
+  // Metadata
+  bankCountry             String?
+  encryptionVersion       Int         @default(1)
+  lastRotatedAt           DateTime?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("encrypted_sensitive_data")
+}
+
+model RateLimitConfig {
+  id                      String      @id @default(cuid())
+  
+  // What to rate limit
+  resourceType            String
+  resourceIdentifier      String
+  
+  // Limits
+  requestsPerMinute       Int
+  requestsPerHour         Int
+  requestsPerDay          Int
+  
+  // Exceptions
+  excludedIps             String[]    @default([])
+  excludedUsers           String[]    @default([])
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@unique([resourceType, resourceIdentifier])
+  @@map("rate_limit_configs")
+}
+
+model IPWhitelist {
+  id                      String      @id @default(cuid())
+  
+  // IP info
+  ipAddress               String      @unique
+  ipRange                 String?
+  
+  // Purpose
+  purpose                 String
+  description             String?
+  
+  // Expiration
+  expiresAt               DateTime?
+  
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  
+  @@map("ip_whitelists")
+}
+
+enum DataDeletionStatus {
+  PENDING
+  VERIFIED
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum SecuritySeverity {
+  INFO
+  WARNING
+  CRITICAL
 }

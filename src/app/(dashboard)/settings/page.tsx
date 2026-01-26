@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,9 @@ import {
   Link as LinkIcon,
   Save,
   Check,
+  Shield,
+  User,
+  ChevronRight,
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -51,6 +55,46 @@ export default function SettingsPage() {
           <Save className="mr-2 h-4 w-4" />
           Save All
         </Button>
+      </div>
+
+      {/* Quick Navigation */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Link href="/settings/profile" className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl hover:border-blue-500 transition-colors">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <User className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="font-medium text-gray-900 dark:text-white">Profile</p>
+              <p className="text-sm text-gray-500">Personal information</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-gray-400" />
+        </Link>
+        <Link href="/settings/security" className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl hover:border-blue-500 transition-colors">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+              <Shield className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <p className="font-medium text-gray-900 dark:text-white">Security</p>
+              <p className="text-sm text-gray-500">Password & 2FA</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-gray-400" />
+        </Link>
+        <Link href="/settings/notifications" className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl hover:border-blue-500 transition-colors">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+              <Bell className="w-5 h-5 text-purple-600" />
+            </div>
+            <div>
+              <p className="font-medium text-gray-900 dark:text-white">Notifications</p>
+              <p className="text-sm text-gray-500">Alerts & channels</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-gray-400" />
+        </Link>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

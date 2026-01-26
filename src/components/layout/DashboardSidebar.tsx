@@ -22,20 +22,31 @@ import {
   User,
   Bell,
   Star,
+  History,
+  Heart,
+  RefreshCw,
+  Crown,
+  BarChart3,
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Requirements', href: '/requirements', icon: FileText },
+  { name: 'My RFQs', href: '/rfq', icon: FileText },
+  { name: 'Discover RFQs', href: '/seller/rfq', icon: Zap },
+  { name: 'Buyer Risk', href: '/seller/trust', icon: Shield },
+  { name: 'Requirements', href: '/requirements', icon: ClipboardList },
   { name: 'Quotations', href: '/quotations', icon: MessageSquare },
-  { name: 'Opportunities', href: '/opportunities', icon: Zap },
-  { name: 'Orders', href: '/orders', icon: ClipboardList },
   { name: 'Transactions', href: '/transactions', icon: Package },
   { name: 'Shipments', href: '/shipments', icon: Truck },
   { name: 'Reviews', href: '/reviews', icon: Star },
+  { name: 'KYB Verification', href: '/kyb/status', icon: Users },
   { name: 'Earnings', href: '/earnings', icon: DollarSign },
   { name: 'Payments', href: '/payments', icon: CreditCard },
   { name: 'Blockchain', href: '/blockchain', icon: LinkIcon },
+  { name: 'Order History', href: '/buyer/history', icon: History },
+  { name: 'Analytics', href: '/buyer/analytics', icon: BarChart3 },
+  { name: 'Loyalty', href: '/buyer/loyalty', icon: Crown },
+  { name: 'Subscriptions', href: '/buyer/subscriptions', icon: RefreshCw },
 ];
 
 const secondaryNavigation = [

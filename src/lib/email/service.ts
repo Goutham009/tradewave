@@ -2,7 +2,10 @@ import { Resend } from 'resend';
 import { render } from '@react-email/components';
 import prisma from '@/lib/db';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend only when API key is available (avoids build-time errors)
+const resend = process.env.RESEND_API_KEY 
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 
 const FROM_EMAIL = process.env.EMAIL_FROM || 'Tradewave <noreply@tradewave.io>';
 const FROM_NAME = process.env.EMAIL_FROM_NAME || 'Tradewave';
@@ -123,6 +126,16 @@ export async function sendEmail(options: SendEmailOptions): Promise<EmailResult>
     // Generate email HTML from template
     const html = await generateEmailHtml(template, data);
 
+    // Check if Resend is configured
+    if (!resend) {
+      console.warn('Resend not configured - email not sent:', { to, subject });
+      await prisma.emailLog.update({
+        where: { id: emailLog.id },
+        data: { status: 'FAILED', failureReason: 'Email service not configured' },
+      });
+      return { success: false, error: 'Email service not configured' };
+    }
+
     // Send via Resend
     const result = await resend.emails.send({
       from: FROM_EMAIL,
@@ -182,6 +195,12 @@ export async function retryFailedEmails(): Promise<{ processed: number; succeede
   });
 
   let succeeded = 0;
+
+  // Check if Resend is configured
+  if (!resend) {
+    console.warn('Resend not configured - cannot retry emails');
+    return { processed: 0, succeeded: 0 };
+  }
 
   for (const emailLog of failedEmails) {
     try {

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       where: { id: transactionId },
       include: {
         buyer: true,
-        supplier: { include: { user: true } }
+        supplier: true
       }
     });
 
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     // Get seller's return policy
     const returnPolicy = await prisma.returnPolicy.findUnique({
-      where: { sellerId: transaction.supplier.userId }
+      where: { sellerId: transaction.supplier.id }
     });
 
     // Calculate refund amounts

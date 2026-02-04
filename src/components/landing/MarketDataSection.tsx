@@ -83,17 +83,21 @@ export function MarketDataSection() {
   };
 
   return (
-    <section className="py-16 bg-gray-50" id="get-quotes">
+    <section className="relative overflow-hidden bg-brand-bgLight py-16" id="get-quotes">
+      <div className="absolute inset-0">
+        <div className="absolute -top-10 right-10 h-40 w-40 rounded-full bg-brand-primary/10 blur-3xl" />
+        <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-brand-accent/10 blur-3xl" />
+      </div>
       <div className="container mx-auto px-4">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-12">
-          <Badge variant="outline" className="mb-4">
+        <div className="text-center max-w-3xl mx-auto mb-12 relative">
+          <Badge variant="outline" className="mb-4 border-brand-primary/30 text-brand-primary">
             Live Market Data
           </Badge>
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Source Smarter with Real-Time Insights
+          <h2 className="text-3xl md:text-4xl font-bold text-brand-textDark mb-4">
+            Source smarter with real-time insights
           </h2>
-          <p className="text-lg text-gray-600">
+          <p className="text-lg text-brand-textMedium">
             Get competitive quotes from verified suppliers. No login required.
           </p>
         </div>
@@ -102,10 +106,10 @@ export function MarketDataSection() {
           {/* Left Side: Market Data + Stats */}
           <div className="space-y-6">
             {/* Market Prices */}
-            <Card>
+            <Card className="border border-white/80 shadow-lg">
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-blue-600" />
+                  <BarChart3 className="h-5 w-5 text-brand-primary" />
                   Today's Market Prices
                 </CardTitle>
               </CardHeader>
@@ -121,7 +125,7 @@ export function MarketDataSection() {
                         <span className="font-medium">{item.commodity}</span>
                       </div>
                       <div className="text-right">
-                        <p className="font-semibold">
+                        <p className="font-semibold text-brand-textDark">
                           ${item.price.toLocaleString()}
                           <span className="text-xs text-gray-500 ml-1">
                             /{item.unit.split('/')[1]}
@@ -146,11 +150,11 @@ export function MarketDataSection() {
               {stats.map((stat) => {
                 const Icon = stat.icon;
                 return (
-                  <Card key={stat.label} className="text-center">
+                  <Card key={stat.label} className="text-center border border-white/80">
                     <CardContent className="pt-6">
-                      <Icon className="h-6 w-6 mx-auto text-blue-600 mb-2" />
-                      <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                      <p className="text-sm text-gray-500">{stat.label}</p>
+                      <Icon className="h-6 w-6 mx-auto text-brand-accent mb-2" />
+                      <p className="text-2xl font-bold text-brand-textDark">{stat.value}</p>
+                      <p className="text-sm text-brand-textMedium">{stat.label}</p>
                     </CardContent>
                   </Card>
                 );
@@ -158,9 +162,9 @@ export function MarketDataSection() {
             </div>
 
             {/* Trust Badges */}
-            <Card className="bg-blue-50 border-blue-100">
+            <Card className="bg-gradient-to-r from-brand-primary/10 to-brand-accent/10 border-brand-primary/20">
               <CardContent className="py-4">
-                <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-blue-800">
+                <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-brand-textDark">
                   <span className="flex items-center gap-1">
                     ✓ Verified Suppliers Only
                   </span>

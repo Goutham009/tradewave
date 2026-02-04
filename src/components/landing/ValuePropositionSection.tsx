@@ -5,46 +5,54 @@ const values = [
   {
     icon: Shield,
     title: 'Secure Escrow Payments',
-    description: 'Your funds are protected in escrow until delivery is confirmed. No more payment anxiety or supplier trust issues.',
+    description: 'Funds stay protected until delivery is confirmed, eliminating payment anxiety for both sides.',
+    accent: 'bg-brand-success/10 text-brand-success',
   },
   {
     icon: FileCheck,
     title: 'Blockchain Verification',
-    description: 'Every document and transaction is verified and recorded on the blockchain for complete transparency and immutability.',
+    description: 'Every document and milestone is tamper-proof, creating instant trust and compliance clarity.',
+    accent: 'bg-brand-primary/10 text-brand-primary',
   },
   {
     icon: Users,
-    title: 'Verified Supplier Network',
-    description: 'Access our curated network of pre-vetted, certified suppliers with transparent ratings and track records.',
+    title: 'Verified Partner Network',
+    description: 'Work only with vetted businesses backed by performance history and continuous monitoring.',
+    accent: 'bg-brand-accent/10 text-brand-accent',
   },
   {
     icon: Clock,
-    title: 'Streamlined Process',
-    description: 'From requirement to delivery in fewer steps. Our platform handles the complexity so you can focus on your business.',
+    title: 'Streamlined Operations',
+    description: 'Accelerate trade cycles with automated workflows, smart alerts, and guided steps.',
+    accent: 'bg-brand-warning/10 text-brand-warning',
   },
   {
     icon: TrendingUp,
     title: 'Competitive Pricing',
-    description: 'Get multiple quotes from verified suppliers. Our transparent pricing ensures you always get the best deal.',
+    description: 'Compare live quotes and market benchmarks to lock the best deal every time.',
+    accent: 'bg-brand-primary/10 text-brand-primary',
   },
   {
     icon: Lock,
     title: 'Smart Contract Automation',
-    description: 'Automated contract execution based on pre-defined conditions. Reduce disputes and manual intervention.',
+    description: 'Programmatic release rules reduce disputes and speed up payment completion.',
+    accent: 'bg-brand-success/10 text-brand-success',
   },
 ];
 
 export function ValuePropositionSection() {
   return (
-    <section className="py-20 sm:py-28">
+    <section className="py-20 sm:py-28 bg-white">
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Why Choose Tradewave?
+          <span className="inline-flex items-center rounded-full bg-brand-accent/10 px-4 py-1.5 text-sm font-medium text-brand-accent">
+            Why Tradewave
+          </span>
+          <h2 className="mt-4 text-3xl font-bold text-brand-textDark sm:text-4xl">
+            The most trusted B2B marketplace stack
           </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
-            We&apos;ve built the most secure and transparent B2B trade platform by combining 
-            traditional payment security with blockchain technology.
+          <p className="mt-4 text-lg text-brand-textMedium">
+            We combine secure escrow, compliance monitoring, and transparent performance insights to help you trade with confidence.
           </p>
         </div>
 
@@ -54,13 +62,13 @@ export function ValuePropositionSection() {
             return (
               <div
                 key={value.title}
-                className="group relative rounded-2xl border bg-card p-8 transition-all hover:shadow-lg hover:-translate-y-1"
+                className="group relative rounded-2xl border border-slate-200/70 bg-slate-50 p-8 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
               >
-                <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <div className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl ${value.accent}`}>
                   <Icon className="h-6 w-6" />
                 </div>
-                <h3 className="text-xl font-semibold text-foreground">{value.title}</h3>
-                <p className="mt-2 text-muted-foreground">{value.description}</p>
+                <h3 className="text-xl font-semibold text-brand-textDark">{value.title}</h3>
+                <p className="mt-2 text-brand-textMedium">{value.description}</p>
               </div>
             );
           })}

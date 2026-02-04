@@ -37,17 +37,17 @@ import { cn } from '@/lib/utils';
 import { SidebarSection } from './SidebarSection';
 import { NavItem } from './NavItem';
 
-interface BuyerSidebarProps {
+interface UserSidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onCloseMobile?: () => void;
 }
 
-export function BuyerSidebar({ 
+export function UserSidebar({ 
   isCollapsed = false, 
   onToggleCollapse,
   onCloseMobile 
-}: BuyerSidebarProps) {
+}: UserSidebarProps) {
   const pathname = usePathname();
 
   const handleNavClick = () => {
@@ -87,19 +87,30 @@ export function BuyerSidebar({
           onClick={handleNavClick}
         />
 
-        {/* Procurement Section */}
+        {/* My Requirements Section (Buyer) */}
         <SidebarSection
-          id="procurement"
-          title="Procurement"
-          icon={Search}
+          id="requirements"
+          title="My Requirements"
+          icon={FileText}
           defaultExpanded={true}
           isCollapsed={isCollapsed}
         >
-          <NavItem icon={FileText} label="My RFQs" href="/rfq" badge={4} onClick={handleNavClick} />
-          <NavItem icon={Search} label="Discover RFQs" href="/seller/rfq" onClick={handleNavClick} />
-          <NavItem icon={Heart} label="Saved Quotes" href="/buyer/saved-quotes" onClick={handleNavClick} />
-          <NavItem icon={Star} label="Favorite Suppliers" href="/buyer/favorites" onClick={handleNavClick} />
-          <NavItem icon={Building2} label="Discover Suppliers" href="/suppliers" onClick={handleNavClick} />
+          <NavItem icon={FileText} label="Submit Requirement" href="/requirements/new" onClick={handleNavClick} />
+          <NavItem icon={ClipboardList} label="My Requirements" href="/requirements" badge={4} onClick={handleNavClick} />
+          <NavItem icon={MessageSquare} label="My Quotations" href="/quotations" badge="3 New" badgeVariant="success" onClick={handleNavClick} />
+        </SidebarSection>
+
+        {/* Quotation Requests Section (Seller) */}
+        <SidebarSection
+          id="quotation-requests"
+          title="Quotation Requests"
+          icon={MessageSquare}
+          defaultExpanded={true}
+          isCollapsed={isCollapsed}
+        >
+          <NavItem icon={MessageSquare} label="Quotation Invitations" href="/seller/rfq" badge="2 New" badgeVariant="success" onClick={handleNavClick} />
+          <NavItem icon={ClipboardList} label="My Submitted Quotes" href="/seller/quotes" onClick={handleNavClick} />
+          <NavItem icon={Star} label="Won Contracts" href="/seller/contracts" onClick={handleNavClick} />
         </SidebarSection>
 
         {/* Orders & Fulfillment Section */}
@@ -116,16 +127,15 @@ export function BuyerSidebar({
           <NavItem icon={RotateCcw} label="Returns & Claims" href="/returns" onClick={handleNavClick} />
         </SidebarSection>
 
-        {/* Relationships Section */}
+        {/* Support Section */}
         <SidebarSection
-          id="relationships"
-          title="Relationships"
+          id="support"
+          title="Support"
           icon={Users}
           defaultExpanded={false}
           isCollapsed={isCollapsed}
         >
-          <NavItem icon={Star} label="Supplier Reviews" href="/reviews" onClick={handleNavClick} />
-          <NavItem icon={Shield} label="Supplier Trust" href="/seller/trust" onClick={handleNavClick} />
+          <NavItem icon={Users} label="My Account Manager" href="/account-manager" onClick={handleNavClick} />
           <NavItem icon={MessageSquare} label="Messages" href="/messages" badge="3 New" badgeVariant="success" onClick={handleNavClick} />
         </SidebarSection>
 

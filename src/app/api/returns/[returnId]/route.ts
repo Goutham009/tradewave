@@ -21,7 +21,7 @@ export async function GET(
         transaction: {
           include: {
             buyer: { select: { id: true, name: true, email: true } },
-            supplier: { select: { companyName: true, userId: true } }
+            supplier: { select: { id: true, companyName: true } }
           }
         },
         refunds: true,
@@ -35,7 +35,7 @@ export async function GET(
 
     // Check authorization
     const isBuyer = returnRequest.transaction.buyerId === session.user.id;
-    const isSeller = returnRequest.transaction.supplier.userId === session.user.id;
+    const isSeller = returnRequest.transaction.supplier.id === session.user.id;
     const isAdmin = session.user.role === 'ADMIN';
 
     if (!isBuyer && !isSeller && !isAdmin) {

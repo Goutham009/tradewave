@@ -2,41 +2,85 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Search, Filter, MapPin, Calendar, Package, Eye, Send, Clock } from 'lucide-react';
+import { Mail, Package, Clock, CheckCircle, Send, Bell, Shield, Calendar, DollarSign } from 'lucide-react';
 
-export default function DiscoverRFQPage() {
-  const [rfqs, setRfqs] = useState<any[]>([]);
+interface Invitation {
+  id: string;
+  requirementId: string;
+  requirement: {
+    title: string;
+    description: string;
+    quantity: number;
+    unit: string;
+    deliveryDeadline: string;
+    buyer: {
+      companyName: string;
+    };
+  };
+  status: 'PENDING' | 'QUOTED' | 'EXPIRED';
+  invitedAt: string;
+  expiresAt: string;
+}
+
+export default function SupplierInvitationsPage() {
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [myQuotations, setMyQuotations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    search: '',
-    category: '',
-    country: ''
-  });
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
-  const [categories, setCategories] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'invitations' | 'quotations'>('invitations');
 
   useEffect(() => {
-    fetchRFQs();
-  }, [filters, pagination.page]);
+    fetchData();
+  }, []);
 
-  const fetchRFQs = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (filters.search) params.set('search', filters.search);
-      if (filters.category) params.set('category', filters.category);
-      if (filters.country) params.set('country', filters.country);
-      params.set('page', pagination.page.toString());
-      params.set('limit', pagination.limit.toString());
+      // Fetch invitations (mock data for demo)
+      setInvitations([
+        {
+          id: '1',
+          requirementId: 'req-1',
+          requirement: {
+            title: 'Industrial Pumps - High Capacity',
+            description: 'Looking for centrifugal pumps with 500 GPM capacity for chemical processing plant.',
+            quantity: 50,
+            unit: 'units',
+            deliveryDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            buyer: { companyName: 'ChemProcess Industries' },
+          },
+          status: 'PENDING',
+          invitedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+        {
+          id: '2',
+          requirementId: 'req-2',
+          requirement: {
+            title: 'Electronic Components - Microcontrollers',
+            description: 'Bulk order for ARM-based microcontrollers for IoT devices.',
+            quantity: 10000,
+            unit: 'pieces',
+            deliveryDeadline: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(),
+            buyer: { companyName: 'TechGadgets Inc.' },
+          },
+          status: 'PENDING',
+          invitedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+          expiresAt: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString(),
+        },
+      ]);
 
-      const res = await fetch(`/api/rfq/discover?${params}`);
-      const data = await res.json();
-      
-      setRfqs(data.rfqs || []);
-      setCategories(data.filters?.categories || []);
-      setPagination(prev => ({ ...prev, total: data.pagination?.total || 0, pages: data.pagination?.pages || 0 }));
+      setMyQuotations([
+        {
+          id: 'q1',
+          requirementTitle: 'Steel Beams - Construction Grade',
+          status: 'SUBMITTED',
+          submittedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+          unitPrice: 450,
+          totalPrice: 45000,
+        },
+      ]);
     } catch (err) {
-      console.error('Failed to fetch RFQs:', err);
+      console.error('Failed to fetch data:', err);
     } finally {
       setLoading(false);
     }
@@ -49,133 +93,161 @@ export default function DiscoverRFQPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Discover RFQs</h1>
-        <p className="text-gray-600 mt-1">Find opportunities and submit competitive quotes</p>
+        <h1 className="text-3xl font-bold text-gray-900">Quotation Invitations</h1>
+        <p className="text-gray-600 mt-1">
+          You&apos;ve been selected by our procurement team to submit quotes for these requirements
+        </p>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white border rounded-lg p-4 mb-6">
-        <div className="flex flex-wrap gap-4">
-          <div className="flex-1 min-w-[250px]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input type="text" placeholder="Search RFQs by keyword..."
-                value={filters.search} onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg" />
-            </div>
+      {/* Info Banner */}
+      <div className="bg-gradient-to-r from-brand-primary/10 to-brand-accent/10 rounded-2xl p-6 mb-8">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 bg-brand-primary/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Shield className="w-6 h-6 text-brand-primary" />
           </div>
-          <select value={filters.category} onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
-            className="px-4 py-2 border rounded-lg">
-            <option value="">All Categories</option>
-            {categories.map((cat: any) => (
-              <option key={cat.name} value={cat.name}>{cat.name} ({cat.count})</option>
-            ))}
-          </select>
-          <input type="text" placeholder="Country (e.g., US)"
-            value={filters.country} onChange={(e) => setFilters(prev => ({ ...prev, country: e.target.value }))}
-            className="px-4 py-2 border rounded-lg w-32" />
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Curated Opportunity Matching</h3>
+            <p className="text-gray-600">
+              At Tradewave, we match you with high-quality buyers based on your expertise and track record. 
+              You only see requirements where you&apos;ve been <strong>specifically invited</strong> to quote.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Results */}
+      {/* Tabs */}
+      <div className="flex gap-4 mb-6 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('invitations')}
+          className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'invitations'
+              ? 'border-brand-primary text-brand-primary'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Mail className="w-4 h-4 inline mr-2" />
+          Pending Invitations ({invitations.filter(i => i.status === 'PENDING').length})
+        </button>
+        <button
+          onClick={() => setActiveTab('quotations')}
+          className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'quotations'
+              ? 'border-brand-primary text-brand-primary'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Send className="w-4 h-4 inline mr-2" />
+          My Quotations ({myQuotations.length})
+        </button>
+      </div>
+
+      {/* Content */}
       {loading ? (
         <div className="text-center py-12 text-gray-500">Loading...</div>
-      ) : rfqs.length === 0 ? (
-        <div className="text-center py-12">
-          <Package className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500">No RFQs found matching your criteria</p>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {rfqs.map((rfq: any) => {
-            const daysLeft = daysUntilExpiry(rfq.expiresAt);
-            const isUrgent = daysLeft <= 3;
+      ) : activeTab === 'invitations' ? (
+        invitations.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
+            <Bell className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Pending Invitations</h3>
+            <p className="text-gray-600 max-w-md mx-auto">
+              When our procurement team identifies a requirement matching your expertise, 
+              you&apos;ll receive an invitation to submit a quote here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {invitations.map((invitation) => {
+              const daysLeft = daysUntilExpiry(invitation.expiresAt);
+              const isUrgent = daysLeft <= 3;
 
-            return (
-              <div key={rfq.id} className="bg-white border rounded-lg p-6 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-semibold">{rfq.title}</h3>
-                      {isUrgent && (
-                        <span className="px-2 py-1 bg-red-100 text-red-600 rounded text-xs font-medium">
-                          Urgent - {daysLeft} days left
+              return (
+                <div key={invitation.id} className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-lg transition-shadow">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-lg font-semibold text-gray-900">{invitation.requirement.title}</h3>
+                        {isUrgent && (
+                          <span className="px-2 py-1 bg-red-100 text-red-600 rounded-full text-xs font-medium">
+                            Urgent - {daysLeft} days left
+                          </span>
+                        )}
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                          Invited
                         </span>
-                      )}
+                      </div>
+                      <p className="text-gray-600 text-sm mb-4">{invitation.requirement.description}</p>
+
+                      <div className="flex flex-wrap items-center gap-6 text-sm text-gray-600">
+                        <span className="flex items-center gap-2">
+                          <Package className="w-4 h-4 text-gray-400" />
+                          <strong>{invitation.requirement.quantity.toLocaleString()}</strong> {invitation.requirement.unit}
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-gray-400" />
+                          Delivery by {new Date(invitation.requirement.deliveryDeadline).toLocaleDateString()}
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-400" />
+                          {daysLeft} days to respond
+                        </span>
+                      </div>
+
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <p className="text-sm text-gray-500">
+                          Buyer: <strong>{invitation.requirement.buyer.companyName}</strong>
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-gray-600 text-sm line-clamp-2">{rfq.description}</p>
-                    
-                    <div className="flex flex-wrap items-center gap-4 mt-4 text-sm text-gray-600">
-                      <span className="flex items-center gap-1">
-                        <Package className="w-4 h-4" />
-                        {rfq.requestedQuantity.toLocaleString()} {rfq.quantityUnit}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-4 h-4" />
-                        {rfq.deliveryCity}, {rfq.deliveryCountry}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        Delivery by {new Date(rfq.deliveryDate).toLocaleDateString()}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Eye className="w-4 h-4" />
-                        {rfq.viewCount} views
-                      </span>
-                      <span className="flex items-center gap-1">
+
+                    <div className="ml-6">
+                      <Link
+                        href={`/seller/rfq/${invitation.requirementId}`}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-brand-primary text-white font-semibold rounded-xl hover:bg-brand-primaryHover transition-colors"
+                      >
                         <Send className="w-4 h-4" />
-                        {rfq._count?.quotes || 0} quotes
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">{rfq.industryCategory}</span>
-                      <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">{rfq.productCategory}</span>
-                      {rfq.incoterms && (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{rfq.incoterms}</span>
-                      )}
-                      {rfq.qualityStandards?.slice(0, 2).map((std: string) => (
-                        <span key={std} className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">{std}</span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="ml-6 text-right">
-                    <p className="text-sm text-gray-500">By {rfq.buyer?.companyName || 'Buyer'}</p>
-                    <div className="mt-4 space-y-2">
-                      <Link href={`/seller/rfq/${rfq.id}`}
-                        className="block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-center">
-                        View & Quote
+                        Submit Quote
                       </Link>
-                      <p className="text-xs text-gray-500">
-                        <Clock className="w-3 h-3 inline mr-1" />
-                        {daysLeft} days left
-                      </p>
                     </div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        myQuotations.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
+            <Send className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Quotations Yet</h3>
+            <p className="text-gray-600">You haven&apos;t submitted any quotations yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {myQuotations.map((quote) => (
+              <div key={quote.id} className="bg-white rounded-2xl border border-gray-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{quote.requirementTitle}</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Submitted on {new Date(quote.submittedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                      <CheckCircle className="w-4 h-4" />
+                      {quote.status}
+                    </span>
+                    <p className="text-lg font-bold text-gray-900 mt-2">
+                      ${quote.totalPrice.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {pagination.pages > 1 && (
-        <div className="flex items-center justify-center gap-4 mt-8">
-          <button onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
-            disabled={pagination.page === 1} className="px-4 py-2 border rounded-lg disabled:opacity-50">
-            Previous
-          </button>
-          <span className="text-sm text-gray-600">
-            Page {pagination.page} of {pagination.pages}
-          </span>
-          <button onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
-            disabled={pagination.page >= pagination.pages} className="px-4 py-2 border rounded-lg disabled:opacity-50">
-            Next
-          </button>
-        </div>
+            ))}
+          </div>
+        )
       )}
     </div>
   );

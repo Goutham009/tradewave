@@ -39,15 +39,22 @@ export function FAQSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   return (
-    <section id="faq" className="bg-slate-50 py-20 dark:bg-slate-900 sm:py-28">
-      <div className="container mx-auto px-4">
+    <section id="faq" className="relative overflow-hidden bg-brand-bgLight py-20 sm:py-28">
+      <div className="absolute inset-0">
+        <div className="absolute top-0 right-16 h-40 w-40 rounded-full bg-brand-primary/10 blur-3xl" />
+        <div className="absolute bottom-0 left-10 h-52 w-52 rounded-full bg-brand-accent/10 blur-3xl" />
+      </div>
+      <div className="container relative mx-auto px-4">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Frequently Asked Questions
+          <span className="inline-flex items-center rounded-full bg-brand-primary/10 px-4 py-1.5 text-sm font-medium text-brand-primary">
+            FAQs
+          </span>
+          <h2 className="mt-4 text-3xl font-bold tracking-tight text-brand-textDark sm:text-4xl">
+            Frequently asked questions
           </h2>
-          <p className="mt-4 text-lg text-muted-foreground">
+          <p className="mt-4 text-lg text-brand-textMedium">
             Everything you need to know about Tradewave. Can&apos;t find the answer you&apos;re looking for?{' '}
-            <a href="/contact" className="text-primary hover:underline">
+            <a href="/contact" className="text-brand-primary hover:underline">
               Contact our support team
             </a>
             .
@@ -59,16 +66,16 @@ export function FAQSection() {
             {faqs.map((faq, index) => (
               <div
                 key={index}
-                className="rounded-lg border bg-background"
+                className="rounded-2xl border border-slate-200/70 bg-white shadow-sm transition-all duration-300 hover:shadow-md"
               >
                 <button
-                  className="flex w-full items-center justify-between px-6 py-4 text-left"
+                  className="flex w-full items-center justify-between px-6 py-5 text-left"
                   onClick={() => setOpenIndex(openIndex === index ? null : index)}
                 >
-                  <span className="font-medium text-foreground">{faq.question}</span>
+                  <span className="font-medium text-brand-textDark">{faq.question}</span>
                   <ChevronDown
                     className={cn(
-                      'h-5 w-5 text-muted-foreground transition-transform',
+                      'h-5 w-5 text-brand-textMedium transition-transform',
                       openIndex === index && 'rotate-180'
                     )}
                   />
@@ -79,7 +86,7 @@ export function FAQSection() {
                     openIndex === index ? 'max-h-96' : 'max-h-0'
                   )}
                 >
-                  <p className="px-6 pb-4 text-muted-foreground">{faq.answer}</p>
+                  <p className="px-6 pb-5 text-brand-textMedium">{faq.answer}</p>
                 </div>
               </div>
             ))}

@@ -58,25 +58,32 @@ export async function POST(request: NextRequest) {
     }
 
     if (type === 'SELLER' || type === 'ALL') {
-      const sellers = await prisma.supplier.findMany({
+      const sellers = await prisma.user.findMany({
         where: {
+          role: 'SUPPLIER',
           OR: [
             { companyName: { contains: query, mode: 'insensitive' } },
-            { description: { contains: query, mode: 'insensitive' } }
+            { name: { contains: query, mode: 'insensitive' } }
           ],
-          isVerified: true
+          status: 'ACTIVE'
         },
-        include: {
-          user: { select: { id: true, name: true, email: true } }
+        select: {
+          id: true,
+          name: true,
+          companyName: true,
+          email: true,
+          createdAt: true
         },
         skip: type === 'ALL' ? 0 : skip,
         take: type === 'ALL' ? 5 : limit
       });
 
-      const sellerCount = await prisma.supplier.count({
+      const sellerCount = await prisma.user.count({
         where: {
+          role: 'SUPPLIER',
           OR: [
-            { companyName: { contains: query, mode: 'insensitive' } }
+            { companyName: { contains: query, mode: 'insensitive' } },
+            { name: { contains: query, mode: 'insensitive' } }
           ]
         }
       });

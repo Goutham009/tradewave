@@ -2,7 +2,7 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
-import { BuyerSidebarWrapper } from '@/components/sidebar/BuyerSidebarWrapper';
+import { UserSidebarWrapper } from '@/components/sidebar/UserSidebarWrapper';
 
 export default async function DashboardLayout({
   children,
@@ -15,11 +15,10 @@ export default async function DashboardLayout({
     redirect('/login');
   }
 
+  // Unified dashboard for all users (buyers and sellers)
   return (
-    <BuyerSidebarWrapper>
-      <div className="p-6">
-        {children}
-      </div>
-    </BuyerSidebarWrapper>
+    <UserSidebarWrapper>
+      {children}
+    </UserSidebarWrapper>
   );
 }

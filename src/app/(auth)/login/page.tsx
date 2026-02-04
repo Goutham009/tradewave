@@ -33,9 +33,15 @@ export default function LoginPage() {
       if (result?.error) {
         setError('Invalid email or password. Please try again.');
       } else {
-        // Redirect admin users to admin panel, others to dashboard
-        const isAdmin = email === 'admin@tradewave.io';
-        router.push(isAdmin ? '/admin' : '/dashboard');
+        // Redirect based on user role
+        const isAdmin = email === 'admin@tradewave.io' || email === 'admin@tradewave.com';
+        
+        if (isAdmin) {
+          router.push('/admin');
+        } else {
+          // All users (buyers and sellers) go to unified dashboard
+          router.push('/dashboard');
+        }
         router.refresh();
       }
     } catch (err) {
@@ -141,7 +147,7 @@ export default function LoginPage() {
           <strong>Demo User:</strong> demo@tradewave.io / password123
         </p>
         <p className="text-xs text-muted-foreground text-center">
-          <strong>Admin Panel:</strong> admin@tradewave.io / password123
+          <strong>Admin:</strong> admin@tradewave.io / password123
         </p>
       </div>
     </div>

@@ -8,22 +8,26 @@ import { cn } from '@/lib/utils';
 
 const navigation = [
   { name: 'How It Works', href: '#how-it-works' },
+  { name: 'Trust', href: '#trust' },
   { name: 'Features', href: '#features' },
-  { name: 'FAQ', href: '#faq' },
+  { name: 'Testimonials', href: '#testimonials' },
 ];
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <nav className="container mx-auto flex h-16 items-center justify-between px-4">
+    <header className="sticky top-0 z-50 w-full border-b border-slate-200/60 bg-white/80 backdrop-blur-xl">
+      <nav className="container mx-auto flex h-20 items-center justify-between px-4">
         {/* Logo */}
-        <Link href="/" className="flex items-center space-x-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+        <Link href="/" className="flex items-center space-x-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-primary to-brand-accent shadow-lg shadow-brand-primary/25">
             <span className="text-lg font-bold text-white">T</span>
           </div>
-          <span className="text-xl font-bold text-foreground">Tradewave</span>
+          <div>
+            <span className="text-xl font-bold text-brand-textDark">Tradewave</span>
+            <p className="text-xs text-brand-textMedium">B2B Trading Network</p>
+          </div>
         </Link>
 
         {/* Desktop Navigation */}
@@ -32,7 +36,7 @@ export function Header() {
             <Link
               key={item.name}
               href={item.href}
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="text-sm font-semibold text-brand-textMedium transition-colors hover:text-brand-textDark"
             >
               {item.name}
             </Link>
@@ -48,7 +52,7 @@ export function Header() {
           </Link>
           <Link href="/register">
             <Button size="sm" variant="gradient">
-              Get Started
+              Start Trading Free
             </Button>
           </Link>
         </div>
@@ -94,7 +98,7 @@ export function Header() {
             </Link>
             <Link href="/register">
               <Button className="w-full" variant="gradient">
-                Get Started
+                Start Trading Free
               </Button>
             </Link>
           </div>

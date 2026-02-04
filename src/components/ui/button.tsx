@@ -4,23 +4,23 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]',
+  'inline-flex items-center justify-center whitespace-nowrap rounded-full text-sm font-semibold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:shadow-md',
-        destructive: 'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 hover:shadow-md',
-        outline: 'border-2 border-input bg-background hover:bg-accent hover:text-accent-foreground hover:border-accent-foreground/20',
-        secondary: 'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 hover:shadow-md',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
-        link: 'text-primary underline-offset-4 hover:underline',
-        gradient: 'bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white shadow-md hover:shadow-lg hover:shadow-teal-500/25',
+        default: 'bg-brand-primary text-white shadow-sm hover:bg-brand-primaryHover hover:shadow-md hover:-translate-y-0.5',
+        destructive: 'bg-brand-error text-white shadow-sm hover:bg-brand-error/90 hover:shadow-md',
+        outline: 'border-2 border-brand-border bg-transparent text-brand-textDark hover:border-brand-primary/30 hover:bg-brand-primaryLight',
+        secondary: 'bg-brand-accent text-white shadow-sm hover:bg-brand-accent/90 hover:shadow-md hover:-translate-y-0.5',
+        ghost: 'text-brand-textDark hover:bg-brand-primaryLight',
+        link: 'text-brand-primary underline-offset-4 hover:text-brand-primaryHover hover:underline',
+        gradient: 'bg-gradient-to-r from-brand-primary via-brand-primaryHover to-brand-accent text-white shadow-md hover:shadow-lg hover:-translate-y-0.5',
       },
       size: {
-        default: 'h-10 px-5 py-2',
-        sm: 'h-9 rounded-lg px-4 text-xs',
-        lg: 'h-12 rounded-lg px-8 text-base',
-        icon: 'h-10 w-10',
+        default: 'h-11 px-6 text-sm',
+        sm: 'h-9 px-4 text-xs',
+        lg: 'h-12 px-8 text-base',
+        icon: 'h-11 w-11',
       },
     },
     defaultVariants: {

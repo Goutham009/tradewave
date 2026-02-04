@@ -31,7 +31,7 @@ export async function POST(
     }
 
     // Check authorization (seller or admin)
-    const isSeller = returnRequest.transaction.supplier.userId === session.user.id;
+    const isSeller = returnRequest.transaction.supplier.id === session.user.id;
     const isAdmin = session.user.role === 'ADMIN';
 
     if (!isSeller && !isAdmin) {

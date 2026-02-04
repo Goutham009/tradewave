@@ -95,32 +95,32 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
   // Success State
   if (showSuccess && submittedData) {
     return (
-      <Card className="border-green-200 bg-green-50">
+      <Card className="border-brand-success/30 bg-brand-success/10">
         <CardContent className="pt-8 pb-8 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 mb-4">
-            <CheckCircle2 className="h-8 w-8 text-green-600" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-success/20 mb-4">
+            <CheckCircle2 className="h-8 w-8 text-brand-success" />
           </div>
-          <h3 className="text-2xl font-bold text-green-800 mb-2">
+          <h3 className="text-2xl font-bold text-brand-textDark mb-2">
             Thank You, {submittedData.fullName}!
           </h3>
-          <p className="text-green-700 mb-4">
+          <p className="text-brand-textMedium mb-4">
             Your requirement has been submitted successfully.
           </p>
-          <div className="bg-white rounded-lg p-4 mb-6 text-left">
-            <p className="text-sm text-gray-600 mb-2">
+          <div className="bg-white rounded-lg p-4 mb-6 text-left shadow-sm">
+            <p className="text-sm text-brand-textMedium mb-2">
               <strong>What happens next?</strong>
             </p>
-            <ul className="text-sm text-gray-600 space-y-2">
+            <ul className="text-sm text-brand-textMedium space-y-2">
               <li className="flex items-start gap-2">
-                <Phone className="h-4 w-4 mt-0.5 text-green-600" />
+                <Phone className="h-4 w-4 mt-0.5 text-brand-success" />
                 <span>Our team will call you at <strong>{submittedData.phoneNumber}</strong> within 24 hours</span>
               </li>
               <li className="flex items-start gap-2">
-                <Mail className="h-4 w-4 mt-0.5 text-green-600" />
+                <Mail className="h-4 w-4 mt-0.5 text-brand-success" />
                 <span>A confirmation has been sent to <strong>{submittedData.email}</strong></span>
               </li>
               <li className="flex items-start gap-2">
-                <Package className="h-4 w-4 mt-0.5 text-green-600" />
+                <Package className="h-4 w-4 mt-0.5 text-brand-success" />
                 <span>We'll find the best suppliers for <strong>{submittedData.requirement.productName}</strong></span>
               </li>
             </ul>
@@ -149,13 +149,13 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
   }
 
   return (
-    <Card className="shadow-xl border-0">
-      <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-lg">
+    <Card className="shadow-xl border border-white/80">
+      <CardHeader className="bg-gradient-to-r from-brand-primary to-brand-primaryHover text-white rounded-t-xl">
         <CardTitle className="text-xl flex items-center gap-2">
           <Package className="h-5 w-5" />
           Get Free Quotes - No Login Required
         </CardTitle>
-        <p className="text-blue-100 text-sm mt-1">
+        <p className="text-white/80 text-sm mt-1">
           Tell us what you need and we'll connect you with verified suppliers
         </p>
       </CardHeader>
@@ -170,19 +170,19 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
 
           {/* SECTION 1: Contact Information */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-              <User className="h-4 w-4 text-blue-600" />
+            <h3 className="font-semibold text-brand-textDark flex items-center gap-2">
+              <User className="h-4 w-4 text-brand-primary" />
               Your Contact Information
             </h3>
 
             <div className="grid gap-4 sm:grid-cols-2">
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-brand-textMedium mb-1">
                   Email Address *
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-textMedium/60" />
                   <Input
                     type="email"
                     placeholder="your@company.com"
@@ -197,11 +197,11 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
 
               {/* Full Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-brand-textMedium mb-1">
                   Full Name *
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-textMedium/60" />
                   <Input
                     type="text"
                     placeholder="John Smith"
@@ -216,11 +216,11 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
 
               {/* Company Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-brand-textMedium mb-1">
                   Company Name *
                 </label>
                 <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-textMedium/60" />
                   <Input
                     type="text"
                     placeholder="ABC Industries"
@@ -235,11 +235,11 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
 
               {/* Phone Number */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-brand-textMedium mb-1">
                   Phone Number *
                 </label>
                 <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-textMedium/60" />
                   <Input
                     type="tel"
                     placeholder="+1 (555) 123-4567"
@@ -250,7 +250,7 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
                 {errors.phoneNumber && (
                   <p className="text-red-500 text-xs mt-1">{errors.phoneNumber.message}</p>
                 )}
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-brand-textMedium mt-1">
                   We'll call you to discuss your requirements
                 </p>
               </div>
@@ -258,24 +258,24 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
           </div>
 
           {/* Divider */}
-          <hr className="border-gray-200" />
+          <hr className="border-slate-200" />
 
           {/* SECTION 2: Requirement Details */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-              <Package className="h-4 w-4 text-blue-600" />
+            <h3 className="font-semibold text-brand-textDark flex items-center gap-2">
+              <Package className="h-4 w-4 text-brand-primary" />
               What Are You Looking For?
             </h3>
 
             <div className="grid gap-4 sm:grid-cols-2">
               {/* Category */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-brand-textMedium mb-1">
                   Product Category *
                 </label>
                 <select
                   {...register('category')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent text-sm"
                 >
                   <option value="">Select a category</option>
                   {CATEGORIES.map((cat) => (
@@ -291,7 +291,7 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
 
               {/* Product Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-brand-textMedium mb-1">
                   Product Name *
                 </label>
                 <Input
@@ -306,7 +306,7 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
 
               {/* Quantity */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-brand-textMedium mb-1">
                   Quantity *
                 </label>
                 <Input
@@ -321,12 +321,12 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
 
               {/* Unit */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-brand-textMedium mb-1">
                   Unit *
                 </label>
                 <select
                   {...register('unit')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent text-sm"
                 >
                   <option value="">Select unit</option>
                   {UNITS.map((unit) => (
@@ -342,11 +342,11 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
 
               {/* Location */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-brand-textMedium mb-1">
                   Delivery Location *
                 </label>
                 <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-textMedium/60" />
                   <Input
                     type="text"
                     placeholder="Mumbai, India"
@@ -361,14 +361,14 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
 
               {/* Timeline */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-brand-textMedium mb-1">
                   Delivery Timeline *
                 </label>
                 <div className="relative">
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none z-10" />
+                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-textMedium/60 pointer-events-none z-10" />
                   <select
                     {...register('timeline')}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent text-sm"
                   >
                     <option value="">Select timeline</option>
                     {TIMELINES.map((t) => (
@@ -386,15 +386,15 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
 
             {/* Additional Requirements */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-brand-textMedium mb-1">
                 Additional Requirements (Optional)
               </label>
               <div className="relative">
-                <FileText className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <FileText className="absolute left-3 top-3 h-4 w-4 text-brand-textMedium/60" />
                 <textarea
                   placeholder="Quality specs, certifications needed, special packaging, etc."
                   {...register('additionalReqs')}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm min-h-[80px] resize-none"
+                  className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent text-sm min-h-[80px] resize-none"
                   maxLength={500}
                 />
               </div>
@@ -426,7 +426,7 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
           </Button>
 
           {/* Trust Indicators */}
-          <div className="flex items-center justify-center gap-4 text-xs text-gray-500 pt-2">
+          <div className="flex items-center justify-center gap-4 text-xs text-brand-textMedium pt-2">
             <span className="flex items-center gap-1">
               <Shield className="h-3 w-3" />
               100% Free

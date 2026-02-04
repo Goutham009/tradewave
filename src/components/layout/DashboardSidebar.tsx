@@ -31,22 +31,15 @@ import {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'My RFQs', href: '/rfq', icon: FileText },
-  { name: 'Discover RFQs', href: '/seller/rfq', icon: Zap },
-  { name: 'Buyer Risk', href: '/seller/trust', icon: Shield },
-  { name: 'Requirements', href: '/requirements', icon: ClipboardList },
-  { name: 'Quotations', href: '/quotations', icon: MessageSquare },
-  { name: 'Transactions', href: '/transactions', icon: Package },
+  { name: 'Submit Requirement', href: '/requirements/new', icon: FileText },
+  { name: 'My Requirements', href: '/requirements', icon: ClipboardList },
+  { name: 'My Quotations', href: '/quotations', icon: MessageSquare },
+  { name: 'Active Orders', href: '/transactions', icon: Package },
   { name: 'Shipments', href: '/shipments', icon: Truck },
-  { name: 'Reviews', href: '/reviews', icon: Star },
-  { name: 'KYB Verification', href: '/kyb/status', icon: Users },
-  { name: 'Earnings', href: '/earnings', icon: DollarSign },
-  { name: 'Payments', href: '/payments', icon: CreditCard },
-  { name: 'Blockchain', href: '/blockchain', icon: LinkIcon },
   { name: 'Order History', href: '/buyer/history', icon: History },
+  { name: 'KYB Verification', href: '/kyb/status', icon: Users },
+  { name: 'Payments', href: '/payments', icon: CreditCard },
   { name: 'Analytics', href: '/buyer/analytics', icon: BarChart3 },
-  { name: 'Loyalty', href: '/buyer/loyalty', icon: Crown },
-  { name: 'Subscriptions', href: '/buyer/subscriptions', icon: RefreshCw },
 ];
 
 const secondaryNavigation = [

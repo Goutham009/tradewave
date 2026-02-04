@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     // Resolution breakdown
     const resolvedDisputes = disputes.filter(d => d.resolvedAt);
     const resolutionBreakdown = resolvedDisputes.reduce((acc: any, d) => {
-      const resolution = d.resolution || 'Unknown';
+      const resolution = d.status || 'Unknown';
       acc[resolution] = (acc[resolution] || 0) + 1;
       return acc;
     }, {});
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     // Calculate chargebacks (disputes resolved in buyer's favor)
     const chargebacks = resolvedDisputes.filter(
-      d => d.resolution === 'BUYER_FAVOR' || d.resolution === 'REFUND_ISSUED'
+      d => d.status === 'RESOLVED'
     ).length;
     const chargebackRate = disputes.length > 0
       ? (chargebacks / disputes.length * 100)

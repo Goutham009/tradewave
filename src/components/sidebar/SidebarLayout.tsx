@@ -21,7 +21,7 @@ interface SidebarLayoutProps {
   sidebar: React.ReactNode;
   mobileSidebar?: React.ReactNode;
   children: React.ReactNode;
-  variant?: 'buyer' | 'admin';
+  variant?: 'buyer' | 'seller' | 'admin';
 }
 
 export function SidebarLayout({

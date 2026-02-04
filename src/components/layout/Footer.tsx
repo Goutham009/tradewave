@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { Mail, Phone, MapPin, Linkedin, Twitter, Facebook } from 'lucide-react';
+import { Mail, Phone, MapPin, Linkedin, Twitter, Facebook, ArrowRight } from 'lucide-react';
 
 const footerLinks = {
   product: [
@@ -31,42 +31,60 @@ const footerLinks = {
 
 export function Footer() {
   return (
-    <footer className="border-t bg-slate-50 dark:bg-slate-900">
+    <footer className="border-t border-white/10 bg-brand-bgDark text-white">
       <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
+        <div className="grid gap-10 md:grid-cols-6">
           {/* Brand Column */}
-          <div className="col-span-2 md:col-span-1">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+          <div className="md:col-span-2">
+            <Link href="/" className="flex items-center space-x-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-primary to-brand-accent shadow-lg shadow-brand-primary/25">
                 <span className="text-lg font-bold text-white">T</span>
               </div>
-              <span className="text-xl font-bold">Tradewave</span>
+              <div>
+                <span className="text-xl font-bold text-white">Tradewave</span>
+                <p className="text-xs text-white/60">B2B Trading Network</p>
+              </div>
             </Link>
-            <p className="mt-4 text-sm text-muted-foreground">
-              Transforming B2B trade with blockchain-powered transparency and secure escrow payments.
+            <p className="mt-4 text-sm text-white/70">
+              Transforming B2B trade with verified partners, escrow protection, and real-time compliance intelligence.
             </p>
             <div className="mt-6 flex space-x-4">
-              <a href="#" className="text-muted-foreground hover:text-foreground">
+              <a href="#" className="text-white/60 hover:text-white">
                 <Twitter className="h-5 w-5" />
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground">
+              <a href="#" className="text-white/60 hover:text-white">
                 <Linkedin className="h-5 w-5" />
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground">
+              <a href="#" className="text-white/60 hover:text-white">
                 <Facebook className="h-5 w-5" />
               </a>
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-sm font-semibold text-white">Stay ahead of market updates</p>
+              <p className="mt-1 text-xs text-white/60">Monthly insights and trade trends delivered to your inbox.</p>
+              <div className="mt-4 flex items-center gap-2">
+                <input
+                  type="email"
+                  placeholder="you@company.com"
+                  className="w-full rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-brand-accent/50"
+                />
+                <button className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-accent text-brand-bgDark">
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Product */}
           <div>
-            <h3 className="text-sm font-semibold text-foreground">Product</h3>
+            <h3 className="text-sm font-semibold text-white">Product</h3>
             <ul className="mt-4 space-y-3">
               {footerLinks.product.map((link) => (
                 <li key={link.name}>
                   <Link
                     href={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground"
+                    className="text-sm text-white/70 hover:text-white"
                   >
                     {link.name}
                   </Link>
@@ -77,13 +95,13 @@ export function Footer() {
 
           {/* Company */}
           <div>
-            <h3 className="text-sm font-semibold text-foreground">Company</h3>
+            <h3 className="text-sm font-semibold text-white">Company</h3>
             <ul className="mt-4 space-y-3">
               {footerLinks.company.map((link) => (
                 <li key={link.name}>
                   <Link
                     href={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground"
+                    className="text-sm text-white/70 hover:text-white"
                   >
                     {link.name}
                   </Link>
@@ -94,13 +112,13 @@ export function Footer() {
 
           {/* Resources */}
           <div>
-            <h3 className="text-sm font-semibold text-foreground">Resources</h3>
+            <h3 className="text-sm font-semibold text-white">Resources</h3>
             <ul className="mt-4 space-y-3">
               {footerLinks.resources.map((link) => (
                 <li key={link.name}>
                   <Link
                     href={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground"
+                    className="text-sm text-white/70 hover:text-white"
                   >
                     {link.name}
                   </Link>
@@ -111,13 +129,13 @@ export function Footer() {
 
           {/* Legal */}
           <div>
-            <h3 className="text-sm font-semibold text-foreground">Legal</h3>
+            <h3 className="text-sm font-semibold text-white">Legal</h3>
             <ul className="mt-4 space-y-3">
               {footerLinks.legal.map((link) => (
                 <li key={link.name}>
                   <Link
                     href={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground"
+                    className="text-sm text-white/70 hover:text-white"
                   >
                     {link.name}
                   </Link>
@@ -128,9 +146,9 @@ export function Footer() {
         </div>
 
         {/* Contact Info */}
-        <div className="mt-12 border-t pt-8">
+        <div className="mt-12 border-t border-white/10 pt-8">
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
-            <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-white/70">
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
                 <span>contact@tradewave.io</span>
@@ -144,7 +162,7 @@ export function Footer() {
                 <span>San Francisco, CA</span>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-white/60">
               &copy; {new Date().getFullYear()} Tradewave. All rights reserved.
             </p>
           </div>

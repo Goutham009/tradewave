@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -17,37 +17,87 @@ import {
   Package,
   Truck,
   Building2,
-  FileCheck,
-  Mail,
+  TrendingUp,
+  DollarSign,
+  UserCheck,
+  UserX,
   Star,
-  Crown,
-  RefreshCw,
+  Briefcase,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
-const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { name: 'Users', href: '/admin/users', icon: Users },
-  { name: 'Suppliers', href: '/admin/suppliers', icon: Building2 },
-  { name: 'KYB Verification', href: '/admin/kyb', icon: Shield },
-  { name: 'Trust & Blacklist', href: '/admin/trust', icon: Shield },
-  { name: 'Tier Changes', href: '/admin/tier-changes', icon: Crown },
-  { name: 'Loyalty Program', href: '/admin/loyalty', icon: Crown },
-  { name: 'Repeat Buyers', href: '/admin/repeat-buyers', icon: RefreshCw },
-  { name: 'RFQs & Quotes', href: '/admin/rfq', icon: FileCheck },
-  { name: 'Transactions', href: '/admin/transactions', icon: CreditCard },
-  { name: 'Requirements', href: '/admin/requirements', icon: Package },
-  { name: 'Shipments', href: '/admin/shipments', icon: Truck },
-  { name: 'Disputes', href: '/admin/disputes', icon: AlertTriangle },
-  { name: 'Reviews', href: '/admin/reviews', icon: Star },
-  { name: 'Emails', href: '/admin/emails/logs', icon: Mail },
-  { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
-  { name: 'System', href: '/admin/system', icon: Activity },
-  { name: 'Reports', href: '/admin/reports', icon: FileText },
-];
+interface NavSection {
+  title: string;
+  items: { name: string; href: string; icon: any }[];
+}
 
-const secondaryNavigation = [
-  { name: 'Settings', href: '/admin/settings', icon: Settings },
-  { name: 'Security', href: '/admin/security', icon: Shield },
+const navSections: NavSection[] = [
+  {
+    title: 'Overview',
+    items: [
+      { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+    ],
+  },
+  {
+    title: 'User Management',
+    items: [
+      { name: 'All Users', href: '/admin/users', icon: Users },
+      { name: 'KYB Verification', href: '/admin/kyb', icon: Shield },
+    ],
+  },
+  {
+    title: 'Buyer Management',
+    items: [
+      { name: 'Buyer Analytics', href: '/admin/buyers/analytics', icon: BarChart3 },
+      { name: 'Top Performers', href: '/admin/buyers/top-performers', icon: Star },
+      { name: 'At Risk Buyers', href: '/admin/buyers/at-risk', icon: UserX },
+      { name: 'Buyer Payout', href: '/admin/buyers/payout', icon: DollarSign },
+    ],
+  },
+  {
+    title: 'Supplier Management',
+    items: [
+      { name: 'All Suppliers', href: '/admin/suppliers', icon: Building2 },
+      { name: 'Supplier Analytics', href: '/admin/suppliers/analytics', icon: BarChart3 },
+      { name: 'Top Performers', href: '/admin/suppliers/top-performers', icon: Star },
+      { name: 'At Risk Suppliers', href: '/admin/suppliers/at-risk', icon: UserX },
+      { name: 'Supplier Payout', href: '/admin/suppliers/payout', icon: DollarSign },
+    ],
+  },
+  {
+    title: 'Account Managers',
+    items: [
+      { name: 'All Managers', href: '/admin/account-managers', icon: Briefcase },
+      { name: 'Manager Analytics', href: '/admin/account-managers/analytics', icon: BarChart3 },
+      { name: 'Top Performers', href: '/admin/account-managers/top-performers', icon: Star },
+      { name: 'Manager Payout', href: '/admin/account-managers/payout', icon: DollarSign },
+    ],
+  },
+  {
+    title: 'Order Management',
+    items: [
+      { name: 'Requirements', href: '/admin/requirements', icon: Package },
+      { name: 'Transactions', href: '/admin/transactions', icon: CreditCard },
+      { name: 'Shipments', href: '/admin/shipments', icon: Truck },
+      { name: 'Disputes', href: '/admin/disputes', icon: AlertTriangle },
+    ],
+  },
+  {
+    title: 'Analytics & Reports',
+    items: [
+      { name: 'Platform Analytics', href: '/admin/analytics', icon: TrendingUp },
+      { name: 'Reports', href: '/admin/reports', icon: FileText },
+    ],
+  },
+  {
+    title: 'System',
+    items: [
+      { name: 'System Health', href: '/admin/system', icon: Activity },
+      { name: 'Settings', href: '/admin/settings', icon: Settings },
+      { name: 'Security', href: '/admin/security', icon: Shield },
+    ],
+  },
 ];
 
 export function AdminSidebar() {
@@ -70,53 +120,38 @@ export function AdminSidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1 px-4 py-6 overflow-y-auto">
-          <div className="space-y-1">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href || 
-                (item.href !== '/admin' && pathname?.startsWith(item.href));
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={cn(
-                    'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
-                    isActive
-                      ? 'bg-gradient-to-r from-red-500/20 to-rose-500/10 text-red-400 shadow-sm'
-                      : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                  )}
-                >
-                  <item.icon className={cn("h-5 w-5", isActive && "text-red-400")} />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </div>
-
-          <div className="pt-8">
-            <div className="px-4 text-xs font-semibold uppercase tracking-wider text-slate-600 mb-3">
-              Settings
-            </div>
-            <div className="space-y-1">
-              {secondaryNavigation.map((item) => {
-                const isActive = pathname === item.href;
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    className={cn(
-                      'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
-                      isActive
-                        ? 'bg-gradient-to-r from-red-500/20 to-rose-500/10 text-red-400 shadow-sm'
-                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                    )}
-                  >
-                    <item.icon className={cn("h-5 w-5", isActive && "text-red-400")} />
-                    {item.name}
-                  </Link>
-                );
-              })}
-            </div>
+        <nav className="flex-1 px-3 py-4 overflow-y-auto">
+          <div className="space-y-6">
+            {navSections.map((section) => (
+              <div key={section.title}>
+                {section.title !== 'Overview' && (
+                  <div className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    {section.title}
+                  </div>
+                )}
+                <div className="space-y-1">
+                  {section.items.map((item) => {
+                    const isActive = pathname === item.href || 
+                      (item.href !== '/admin' && pathname?.startsWith(item.href));
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        className={cn(
+                          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200',
+                          isActive
+                            ? 'bg-gradient-to-r from-red-500/20 to-rose-500/10 text-red-400'
+                            : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                        )}
+                      >
+                        <item.icon className={cn("h-4 w-4", isActive && "text-red-400")} />
+                        {item.name}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </nav>
 

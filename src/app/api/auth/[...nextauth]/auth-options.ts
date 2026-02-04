@@ -47,6 +47,15 @@ export const authOptions: NextAuthOptions = {
             companyName: 'Demo Company Ltd',
             walletAddress: null,
           },
+          'supplier@tradewave.io': {
+            id: 'demo-supplier-001',
+            email: 'supplier@tradewave.io',
+            name: 'Demo Supplier',
+            password: 'password123',
+            role: 'SUPPLIER',
+            companyName: 'Premium Supplies Co.',
+            walletAddress: null,
+          },
         };
 
         const demoUser = demoUsers[credentials.email];

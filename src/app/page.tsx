@@ -1,4 +1,5 @@
 import { HeroSection } from '@/components/landing/HeroSection';
+import { TrustSection } from '@/components/landing/TrustSection';
 import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
 import { ValuePropositionSection } from '@/components/landing/ValuePropositionSection';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
@@ -15,6 +16,7 @@ export default function HomePage() {
       <Header />
       <main className="flex-1">
         <HeroSection />
+        <TrustSection />
         <MarketDataSection />
         <ValuePropositionSection />
         <HowItWorksSection />

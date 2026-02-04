@@ -16,7 +16,9 @@ import { DisputeResolvedEmail } from './templates/DisputeResolvedEmail';
 import { AdminAlertEmail } from './templates/AdminAlertEmail';
 import { WeeklyDigestEmail } from './templates/WeeklyDigestEmail';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY 
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 const FROM_EMAIL = process.env.EMAIL_FROM || 'Tradewave <noreply@tradewave.io>';
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://tradewave.io';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@tradewave.io';
@@ -39,6 +41,9 @@ async function canSendEmail(email: string, userId?: string, preferenceKey?: stri
 }
 
 async function logAndSend(to: string, subject: string, templateName: string, html: string, metadata?: object): Promise<EmailResult> {
+  if (!resend) {
+    return { success: false, error: 'Email service not configured' };
+  }
   const log = await prisma.emailLog.create({
     data: { recipient: to, subject, templateName, status: 'PENDING', metadata: metadata || {} },
   });

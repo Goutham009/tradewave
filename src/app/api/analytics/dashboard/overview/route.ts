@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     });
 
     const sellerCount = await prisma.user.count({
-      where: { role: 'SELLER' }
+      where: { role: 'SUPPLIER' }
     });
 
     const buyerCount = await prisma.user.count({
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     // Dispute metrics
     const totalDisputes = await prisma.dispute.count();
     const openDisputes = await prisma.dispute.count({
-      where: { status: { in: ['OPEN', 'UNDER_REVIEW', 'PENDING_EVIDENCE'] } }
+      where: { status: { in: ['PENDING', 'UNDER_REVIEW', 'AWAITING_RESPONSE'] } }
     });
 
     // Calculate success rate

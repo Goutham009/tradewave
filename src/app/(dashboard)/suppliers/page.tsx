@@ -1,207 +1,86 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, Building2, Star, MapPin, Package, Filter, Heart } from 'lucide-react';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Loader2, ShieldCheck, Users, Clock } from 'lucide-react';
 import Link from 'next/link';
 
-interface Supplier {
-  id: string;
-  name: string;
-  companyName: string | null;
-  avatar: string | null;
-  trustScore: number | null;
-  location: string | null;
-  categories: string[];
-  totalTransactions: number;
-}
-
 export default function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('');
-
-  useEffect(() => {
-    fetchSuppliers();
-  }, [search, category]);
-
-  const fetchSuppliers = async () => {
-    try {
-      const params = new URLSearchParams();
-      if (search) params.append('search', search);
-      if (category) params.append('category', category);
-      
-      const res = await fetch(`/api/suppliers?${params}`);
-      const data = await res.json();
-      setSuppliers(data.suppliers || []);
-    } catch (error) {
-      console.error('Error fetching suppliers:', error);
-      // Mock data for demo
-      setSuppliers([
-        {
-          id: '1',
-          name: 'John Smith',
-          companyName: 'TechParts Global',
-          avatar: null,
-          trustScore: 4.8,
-          location: 'Shanghai, China',
-          categories: ['Electronics', 'Components'],
-          totalTransactions: 245
-        },
-        {
-          id: '2',
-          name: 'Sarah Chen',
-          companyName: 'Premium Textiles Co.',
-          avatar: null,
-          trustScore: 4.6,
-          location: 'Mumbai, India',
-          categories: ['Textiles', 'Fabrics'],
-          totalTransactions: 189
-        },
-        {
-          id: '3',
-          name: 'Mike Johnson',
-          companyName: 'Industrial Solutions Ltd',
-          avatar: null,
-          trustScore: 4.9,
-          location: 'Seoul, South Korea',
-          categories: ['Machinery', 'Equipment'],
-          totalTransactions: 312
-        }
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const addToFavorites = async (supplierId: string) => {
-    try {
-      await fetch('/api/buyer/favorites', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'SUPPLIER', supplierId })
-      });
-    } catch (error) {
-      console.error('Error adding to favorites:', error);
-    }
-  };
+  const router = useRouter();
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Discover Suppliers</h1>
-          <p className="text-gray-500 mt-1">Find verified suppliers for your business</p>
+    <div className="min-h-[80vh] flex items-center justify-center p-6">
+      <div className="max-w-2xl mx-auto text-center">
+        <div className="w-20 h-20 bg-gradient-to-br from-brand-primary to-brand-accent rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <ShieldCheck className="w-10 h-10 text-white" />
         </div>
-      </div>
+        
+        <h1 className="text-3xl font-bold text-gray-900 mb-4">
+          White-Glove Supplier Matching
+        </h1>
+        
+        <p className="text-lg text-gray-600 mb-8">
+          At Tradewave, we don&apos;t leave supplier discovery to chance. Our expert procurement team 
+          personally curates the <strong>top 3 best-matched suppliers</strong> for each of your requirements.
+        </p>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex flex-wrap gap-4">
-          <div className="flex-1 min-w-[200px]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search suppliers..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <Users className="w-8 h-8 text-brand-primary mx-auto mb-3" />
+            <h3 className="font-semibold text-gray-900 mb-2">5,000+ Verified Suppliers</h3>
+            <p className="text-sm text-gray-600">Pre-vetted and compliance-checked suppliers in our network</p>
           </div>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <ShieldCheck className="w-8 h-8 text-brand-success mx-auto mb-3" />
+            <h3 className="font-semibold text-gray-900 mb-2">Expert Curation</h3>
+            <p className="text-sm text-gray-600">Senior procurement team selects the best 3 matches for you</p>
+          </div>
+          
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <Clock className="w-8 h-8 text-brand-accent mx-auto mb-3" />
+            <h3 className="font-semibold text-gray-900 mb-2">24-48 Hour Turnaround</h3>
+            <p className="text-sm text-gray-600">Receive curated quotations within 2 business days</p>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-brand-primary/10 to-brand-accent/10 rounded-2xl p-8 mb-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-3">How It Works</h2>
+          <ol className="text-left space-y-3 text-gray-700">
+            <li className="flex items-start gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-brand-primary text-white rounded-full flex items-center justify-center text-sm font-bold">1</span>
+              <span>Submit your requirement through our simple form</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-brand-primary text-white rounded-full flex items-center justify-center text-sm font-bold">2</span>
+              <span>Your dedicated account manager verifies and refines your needs</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-brand-primary text-white rounded-full flex items-center justify-center text-sm font-bold">3</span>
+              <span>Our AI + expert team curates the TOP 3 best suppliers</span>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-brand-primary text-white rounded-full flex items-center justify-center text-sm font-bold">4</span>
+              <span>Compare quotations side-by-side with full supplier details</span>
+            </li>
+          </ol>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Link
+            href="/requirements/new"
+            className="inline-flex items-center justify-center px-8 py-3 bg-brand-primary text-white font-semibold rounded-xl hover:bg-brand-primaryHover transition-colors"
           >
-            <option value="">All Categories</option>
-            <option value="Electronics">Electronics</option>
-            <option value="Textiles">Textiles</option>
-            <option value="Machinery">Machinery</option>
-            <option value="Chemicals">Chemicals</option>
-            <option value="Raw Materials">Raw Materials</option>
-          </select>
+            Submit a Requirement
+          </Link>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center justify-center px-8 py-3 border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:border-brand-primary hover:text-brand-primary transition-colors"
+          >
+            View My Quotations
+          </Link>
         </div>
       </div>
-
-      {/* Suppliers Grid */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-gray-500">Loading suppliers...</div>
-        </div>
-      ) : suppliers.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No suppliers found</h3>
-          <p className="text-gray-500">Try adjusting your search criteria</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {suppliers.map((supplier) => (
-            <div key={supplier.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-shadow">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-                    {supplier.avatar ? (
-                      <img src={supplier.avatar} alt="" className="w-14 h-14 rounded-xl object-cover" />
-                    ) : (
-                      <span className="text-white font-bold text-xl">
-                        {(supplier.companyName || supplier.name).charAt(0)}
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">
-                      {supplier.companyName || supplier.name}
-                    </h3>
-                    {supplier.location && (
-                      <div className="flex items-center gap-1 text-sm text-gray-500">
-                        <MapPin className="w-3 h-3" />
-                        {supplier.location}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={() => addToFavorites(supplier.id)}
-                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
-                >
-                  <Heart className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-4 mb-4 text-sm">
-                {supplier.trustScore && (
-                  <div className="flex items-center gap-1">
-                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                    <span className="font-medium">{supplier.trustScore}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-1 text-gray-500">
-                  <Package className="w-4 h-4" />
-                  {supplier.totalTransactions} orders
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-4">
-                {supplier.categories?.slice(0, 3).map((cat) => (
-                  <span key={cat} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                    {cat}
-                  </span>
-                ))}
-              </div>
-
-              <Link
-                href={`/suppliers/${supplier.id}`}
-                className="block w-full text-center py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
-              >
-                View Profile
-              </Link>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

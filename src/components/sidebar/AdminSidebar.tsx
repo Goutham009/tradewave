@@ -103,7 +103,6 @@ export function AdminSidebar({
           isCollapsed={isCollapsed}
         >
           <NavItem icon={Users} label="All Users" href="/admin/users" onClick={handleNavClick} />
-          <NavItem icon={Building2} label="Suppliers" href="/admin/suppliers" onClick={handleNavClick} />
           <NavItem icon={UserCheck} label="KYB Reviews" href="/admin/kyb" badge={5} badgeVariant="warning" onClick={handleNavClick} />
           <NavItem icon={Shield} label="Trust & Blacklist" href="/admin/trust" onClick={handleNavClick} />
           <NavItem icon={AlertTriangle} label="Appeals Review" href="/admin/appeals" badge={2} onClick={handleNavClick} />
@@ -125,31 +124,47 @@ export function AdminSidebar({
           <NavItem icon={AlertCircle} label="Failed Payments" href="/admin/payments/failed" badge={1} badgeVariant="critical" onClick={handleNavClick} />
         </SidebarSection>
 
-        {/* Loyalty & Buyers */}
+        {/* Buyer Management */}
         <SidebarSection
-          id="loyalty"
-          title="Loyalty & Buyers"
+          id="buyers"
+          title="Buyer Management"
           icon={Crown}
           defaultExpanded={false}
           isCollapsed={isCollapsed}
         >
-          <NavItem icon={Crown} label="Loyalty Program" href="/admin/loyalty" onClick={handleNavClick} />
-          <NavItem icon={RefreshCw} label="Repeat Buyers" href="/admin/repeat-buyers" onClick={handleNavClick} />
-          <NavItem icon={TrendingUp} label="Churn Analysis" href="/admin/churn" onClick={handleNavClick} />
+          <NavItem icon={BarChart3} label="Buyer Analytics" href="/admin/buyers/analytics" onClick={handleNavClick} />
+          <NavItem icon={Star} label="Top Performers" href="/admin/buyers/top-performers" onClick={handleNavClick} />
+          <NavItem icon={AlertTriangle} label="At Risk Buyers" href="/admin/buyers/at-risk" badge={2} badgeVariant="warning" onClick={handleNavClick} />
+          <NavItem icon={Wallet} label="Buyer Payout" href="/admin/buyers/payout" onClick={handleNavClick} />
         </SidebarSection>
 
-        {/* Seller Management */}
+        {/* Supplier Management */}
         <SidebarSection
-          id="sellers"
-          title="Seller Management"
+          id="suppliers"
+          title="Supplier Management"
           icon={Building2}
           defaultExpanded={false}
           isCollapsed={isCollapsed}
         >
-          <NavItem icon={BarChart3} label="Seller Analytics" href="/admin/sellers/analytics" onClick={handleNavClick} />
-          <NavItem icon={Star} label="Top Performers" href="/admin/sellers/top" onClick={handleNavClick} />
-          <NavItem icon={AlertTriangle} label="At-Risk Sellers" href="/admin/sellers/risk" badge={2} badgeVariant="warning" onClick={handleNavClick} />
-          <NavItem icon={Wallet} label="Seller Payouts" href="/admin/sellers/payouts" onClick={handleNavClick} />
+          <NavItem icon={Building2} label="All Suppliers" href="/admin/suppliers" onClick={handleNavClick} />
+          <NavItem icon={BarChart3} label="Supplier Analytics" href="/admin/suppliers/analytics" onClick={handleNavClick} />
+          <NavItem icon={Star} label="Top Performers" href="/admin/suppliers/top-performers" onClick={handleNavClick} />
+          <NavItem icon={AlertTriangle} label="At Risk Suppliers" href="/admin/suppliers/at-risk" badge={2} badgeVariant="warning" onClick={handleNavClick} />
+          <NavItem icon={Wallet} label="Supplier Payout" href="/admin/suppliers/payout" onClick={handleNavClick} />
+        </SidebarSection>
+
+        {/* Account Managers */}
+        <SidebarSection
+          id="account-managers"
+          title="Account Managers"
+          icon={UserCog}
+          defaultExpanded={false}
+          isCollapsed={isCollapsed}
+        >
+          <NavItem icon={Users} label="All Managers" href="/admin/account-managers" onClick={handleNavClick} />
+          <NavItem icon={BarChart3} label="Manager Analytics" href="/admin/account-managers/analytics" onClick={handleNavClick} />
+          <NavItem icon={Star} label="Top Performers" href="/admin/account-managers/top-performers" onClick={handleNavClick} />
+          <NavItem icon={Wallet} label="Manager Payout" href="/admin/account-managers/payout" onClick={handleNavClick} />
         </SidebarSection>
 
         {/* Platform Content */}

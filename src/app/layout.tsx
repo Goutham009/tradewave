@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Manrope, Poppins } from 'next/font/google';
 import '@/styles/globals.css';
 import '@/styles/variables.css';
 import '@/styles/animations.css';
@@ -7,7 +7,17 @@ import { AuthProvider } from '@/lib/context/AuthContext';
 import { Toaster } from '@/components/ui/toaster';
 import { SocketProvider } from '@/providers/SocketProvider';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const poppins = Poppins({
+  subsets: ['latin'],
+  variable: '--font-display',
+  weight: ['400', '500', '600', '700'],
+});
+
+const manrope = Manrope({
+  subsets: ['latin'],
+  variable: '--font-body',
+  weight: ['400', '500', '600', '700'],
+});
 
 export const metadata: Metadata = {
   title: 'Tradewave - B2B Trade & Logistics Platform',
@@ -22,7 +32,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${poppins.variable} ${manrope.variable} font-sans antialiased`}>
         <AuthProvider>
           <SocketProvider>
             {children}

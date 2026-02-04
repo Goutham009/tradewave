@@ -1,71 +1,80 @@
 import React from 'react';
+import Image from 'next/image';
 import { Star, Quote } from 'lucide-react';
 
 const testimonials = [
   {
-    quote: "Tradewave transformed our procurement process. The blockchain verification gives us confidence in every transaction, and the escrow system has eliminated payment disputes.",
-    author: "Sarah Chen",
-    role: "Head of Procurement",
-    company: "TechFlow Industries",
+    quote: 'Tradewave transformed our procurement process. Escrow removes risk, and the real-time compliance monitoring makes approvals effortless.',
+    author: 'Sarah Chen',
+    role: 'Head of Procurement',
+    company: 'TechFlow Industries',
     rating: 5,
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
   },
   {
-    quote: "We've reduced our sourcing time by 60% since switching to Tradewave. The curated supplier network and transparent pricing make decision-making so much easier.",
-    author: "Michael Rodriguez",
-    role: "Supply Chain Director",
-    company: "Global Manufacturing Co.",
+    quote: 'We cut sourcing time by 60%. The platform surfaces the right suppliers quickly and keeps every milestone transparent.',
+    author: 'Michael Rodriguez',
+    role: 'Supply Chain Director',
+    company: 'Global Manufacturing Co.',
     rating: 5,
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
   },
   {
-    quote: "The smart contract automation has saved us countless hours in contract management. Plus, the audit trail feature is invaluable for compliance.",
-    author: "Emma Thompson",
-    role: "Operations Manager",
-    company: "Atlantic Trade Partners",
+    quote: 'Smart automation and reliable payouts make Tradewave our preferred partner for high-value international trades.',
+    author: 'Emma Thompson',
+    role: 'Operations Manager',
+    company: 'Atlantic Trade Partners',
     rating: 5,
+    avatar: 'https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=200&q=80',
   },
 ];
 
 export function TestimonialsSection() {
   return (
-    <section className="bg-gradient-to-b from-slate-50 to-slate-100 py-24 dark:from-slate-900 dark:to-slate-800/50 sm:py-32">
-      <div className="container mx-auto px-4">
+    <section id="testimonials" className="relative overflow-hidden bg-white py-24 sm:py-32">
+      <div className="absolute inset-0">
+        <div className="absolute top-8 left-8 h-40 w-40 rounded-full bg-brand-primary/10 blur-3xl" />
+        <div className="absolute bottom-0 right-12 h-52 w-52 rounded-full bg-brand-accent/10 blur-3xl" />
+      </div>
+
+      <div className="container relative mx-auto px-4">
         <div className="mx-auto max-w-3xl text-center">
-          <span className="inline-block rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary mb-4">
+          <span className="inline-flex items-center rounded-full bg-brand-primary/10 px-4 py-1.5 text-sm font-medium text-brand-primary">
             Testimonials
           </span>
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
-            Trusted by Industry Leaders
+          <h2 className="mt-4 text-3xl font-bold text-brand-textDark sm:text-4xl lg:text-5xl">
+            Trusted by global trade leaders
           </h2>
-          <p className="mt-6 text-lg text-muted-foreground leading-relaxed">
-            See what our customers have to say about their experience with Tradewave.
+          <p className="mt-6 text-lg text-brand-textMedium">
+            Hear from teams who rely on Tradewave to move millions in cross-border trade every month.
           </p>
         </div>
 
-        <div className="mx-auto mt-16 grid max-w-6xl gap-8 sm:grid-cols-3">
-          {testimonials.map((testimonial, index) => (
+        <div className="mx-auto mt-16 grid max-w-6xl gap-6 lg:grid-cols-3">
+          {testimonials.map((testimonial) => (
             <div
-              key={index}
-              className="group relative rounded-2xl bg-background p-8 shadow-lg shadow-slate-200/50 dark:shadow-slate-900/50 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 border border-slate-100 dark:border-slate-800"
+              key={testimonial.author}
+              className="group relative rounded-2xl border border-slate-200/70 bg-slate-50 p-8 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
             >
-              <Quote className="absolute right-6 top-6 h-10 w-10 text-primary/10 group-hover:text-primary/20 transition-colors" />
-              
+              <Quote className="absolute right-6 top-6 h-10 w-10 text-brand-primary/10 group-hover:text-brand-primary/20 transition-colors" />
+
               <div className="mb-5 flex gap-1">
                 {Array.from({ length: testimonial.rating }).map((_, i) => (
                   <Star key={i} className="h-5 w-5 fill-amber-400 text-amber-400" />
                 ))}
               </div>
 
-              <blockquote className="text-foreground leading-relaxed text-base">
+              <blockquote className="text-brand-textDark leading-relaxed text-base">
                 &ldquo;{testimonial.quote}&rdquo;
               </blockquote>
 
-              <div className="mt-8 flex items-center gap-4 pt-6 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-lg font-semibold text-white shadow-md">
-                  {testimonial.author.charAt(0)}
+              <div className="mt-8 flex items-center gap-4 pt-6 border-t border-slate-200/70">
+                <div className="relative h-12 w-12 overflow-hidden rounded-full">
+                  <Image src={testimonial.avatar} alt={testimonial.author} fill sizes="48px" className="object-cover" />
                 </div>
                 <div>
-                  <div className="font-semibold text-foreground">{testimonial.author}</div>
-                  <div className="text-sm text-muted-foreground">
+                  <div className="font-semibold text-brand-textDark">{testimonial.author}</div>
+                  <div className="text-sm text-brand-textMedium">
                     {testimonial.role}, {testimonial.company}
                   </div>
                 </div>

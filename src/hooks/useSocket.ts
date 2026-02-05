@@ -20,6 +20,12 @@ export const SOCKET_EVENTS = {
   ESCROW_UPDATE: 'escrow_update',
   DASHBOARD_REFRESH: 'dashboard_refresh',
   STATS_UPDATE: 'stats_update',
+  // Phase B: Real-time updates
+  REQUIREMENT_STATUS_UPDATE: 'requirement-status-update',
+  QUOTATION_RECEIVED: 'quotation-received',
+  QUOTATIONS_READY: 'quotations-ready',
+  NEW_INVITATION: 'new-invitation',
+  MODIFICATION_REQUEST_UPDATE: 'modification-request-update',
 } as const;
 
 export interface Notification {

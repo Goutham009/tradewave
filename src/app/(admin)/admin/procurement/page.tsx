@@ -21,28 +21,56 @@ interface Supplier {
 interface Requirement {
   id: string;
   buyerCompany: string;
+  buyerEmail: string;
   productType: string;
   quantity: number;
   unit: string;
-  status: 'AWAITING_MATCHING' | 'AI_MATCHED' | 'CURATED' | 'INVITATIONS_SENT';
+  targetDeliveryDate: string;
+  additionalNotes: string;
+  status: 'VERIFIED' | 'AWAITING_SUPPLIER_SELECTION' | 'INVITATIONS_SENT' | 'AWAITING_QUOTATIONS' | 'QUOTATIONS_RECEIVED';
+  verifiedAt: string;
+  accountManager: string;
 }
 
 const mockRequirements: Requirement[] = [
   {
-    id: '1',
+    id: 'REQ-2024-001',
     buyerCompany: 'TechCorp Industries',
+    buyerEmail: 'john@techcorp.com',
     productType: 'Industrial Sensors',
     quantity: 5000,
     unit: 'pieces',
-    status: 'AI_MATCHED',
+    targetDeliveryDate: '2024-03-15',
+    additionalNotes: 'ISO 9001 certified suppliers preferred',
+    status: 'VERIFIED',
+    verifiedAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+    accountManager: 'Sarah Johnson',
   },
   {
-    id: '2',
+    id: 'REQ-2024-002',
     buyerCompany: 'Global Manufacturing Co.',
-    productType: 'Steel Beams',
+    buyerEmail: 'mike@globalmanuf.com',
+    productType: 'Steel Beams - Construction Grade',
     quantity: 100,
     unit: 'tons',
-    status: 'AWAITING_MATCHING',
+    targetDeliveryDate: '2024-04-01',
+    additionalNotes: 'Need ASTM A36 grade',
+    status: 'INVITATIONS_SENT',
+    verifiedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    accountManager: 'David Chen',
+  },
+  {
+    id: 'REQ-2024-003',
+    buyerCompany: 'Premier Retail Ltd',
+    buyerEmail: 'lisa@premierretail.com',
+    productType: 'LED Display Panels',
+    quantity: 200,
+    unit: 'units',
+    targetDeliveryDate: '2024-02-28',
+    additionalNotes: '55-inch commercial grade displays',
+    status: 'QUOTATIONS_RECEIVED',
+    verifiedAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+    accountManager: 'Sarah Johnson',
   },
 ];
 
@@ -119,7 +147,7 @@ export default function ProcurementDashboard() {
   const toggleSupplierSelection = (id: string) => {
     if (selectedSuppliers.includes(id)) {
       setSelectedSuppliers(prev => prev.filter(s => s !== id));
-    } else if (selectedSuppliers.length < 3) {
+    } else if (selectedSuppliers.length < 10) {
       setSelectedSuppliers(prev => [...prev, id]);
     }
   };
@@ -159,8 +187,9 @@ export default function ProcurementDashboard() {
                   {req.quantity.toLocaleString()} {req.unit}
                 </p>
                 <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-xs ${
-                  req.status === 'AI_MATCHED' ? 'bg-purple-500/20 text-purple-400' :
-                  req.status === 'CURATED' ? 'bg-green-500/20 text-green-400' :
+                  req.status === 'VERIFIED' ? 'bg-blue-500/20 text-blue-400' :
+                  req.status === 'INVITATIONS_SENT' ? 'bg-purple-500/20 text-purple-400' :
+                  req.status === 'QUOTATIONS_RECEIVED' ? 'bg-green-500/20 text-green-400' :
                   'bg-yellow-500/20 text-yellow-400'
                 }`}>
                   {req.status.replace('_', ' ')}
@@ -172,18 +201,22 @@ export default function ProcurementDashboard() {
 
         {/* Supplier Matching */}
         <div className="lg:col-span-3 space-y-6">
-          {/* AI Matching Info */}
+          {/* Manual Supplier Selection Info */}
           {selectedReq && (
-            <div className="bg-gradient-to-r from-purple-900/50 to-blue-900/50 rounded-xl p-4 border border-purple-500/30">
+            <div className="bg-gradient-to-r from-blue-900/50 to-slate-900/50 rounded-xl p-4 border border-blue-500/30">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-purple-400" />
+                <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                  <Users className="w-5 h-5 text-blue-400" />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-white">AI-Suggested Suppliers</h3>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-white">Manual Supplier Selection</h3>
                   <p className="text-sm text-slate-300">
-                    Top 10 matches for &quot;{selectedReq.productType}&quot; • Select up to 3 to send invitations
+                    Browse and select suppliers for &quot;{selectedReq.productType}&quot; • Select 5-10 suppliers to send quotation requests
                   </p>
+                </div>
+                <div className="text-right text-sm">
+                  <p className="text-slate-400">Verified by: <span className="text-white">{selectedReq.accountManager}</span></p>
+                  <p className="text-slate-500">Buyer: {selectedReq.buyerCompany}</p>
                 </div>
               </div>
             </div>
@@ -193,10 +226,10 @@ export default function ProcurementDashboard() {
           <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <span className="text-slate-400">
-                Selected: <strong className="text-white">{selectedSuppliers.length}/3</strong> suppliers
+                Selected: <strong className="text-white">{selectedSuppliers.length}</strong> suppliers (recommend 5-10)
               </span>
-              {selectedSuppliers.length === 3 && (
-                <span className="text-green-400 text-sm">✓ Ready to send invitations</span>
+              {selectedSuppliers.length >= 5 && (
+                <span className="text-green-400 text-sm">✓ Ready to send quotation requests</span>
               )}
             </div>
             <button

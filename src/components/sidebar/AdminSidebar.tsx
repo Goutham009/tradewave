@@ -116,12 +116,40 @@ export function AdminSidebar({
           defaultExpanded={true}
           isCollapsed={isCollapsed}
         >
-          <NavItem icon={ClipboardList} label="All Orders" href="/admin/transactions" onClick={handleNavClick} />
-          <NavItem icon={Eye} label="Pending Review" href="/admin/orders/pending" badge={8} badgeVariant="warning" onClick={handleNavClick} />
+          <NavItem icon={ClipboardList} label="Requirements" href="/admin/requirements" badge={5} badgeVariant="warning" onClick={handleNavClick} />
+          <NavItem icon={FileText} label="Quotations" href="/admin/quotations" badge={8} onClick={handleNavClick} />
+          <NavItem icon={Package} label="All Orders" href="/admin/transactions" onClick={handleNavClick} />
           <NavItem icon={Truck} label="Shipments" href="/admin/shipments" onClick={handleNavClick} />
           <NavItem icon={MessageSquare} label="Disputes" href="/admin/disputes" badge={3} badgeVariant="critical" onClick={handleNavClick} />
           <NavItem icon={CreditCard} label="Payments" href="/admin/payments" onClick={handleNavClick} />
-          <NavItem icon={AlertCircle} label="Failed Payments" href="/admin/payments/failed" badge={1} badgeVariant="critical" onClick={handleNavClick} />
+        </SidebarSection>
+
+        {/* Account Managers - CONCIERGE WORKFLOW */}
+        <SidebarSection
+          id="account-managers"
+          title="Account Managers"
+          icon={UserCog}
+          defaultExpanded={true}
+          isCollapsed={isCollapsed}
+        >
+          <NavItem icon={ClipboardList} label="Verification Queue" href="/admin/account-manager" badge={3} badgeVariant="warning" onClick={handleNavClick} />
+          <NavItem icon={Star} label="Enhanced Dashboard" href="/admin/account-manager/enhanced" onClick={handleNavClick} />
+          <NavItem icon={Users} label="All Managers" href="/admin/account-managers" onClick={handleNavClick} />
+          <NavItem icon={BarChart3} label="Manager Analytics" href="/admin/account-managers/analytics" onClick={handleNavClick} />
+        </SidebarSection>
+
+        {/* Procurement Team - CONCIERGE WORKFLOW */}
+        <SidebarSection
+          id="procurement"
+          title="Procurement Team"
+          icon={Search}
+          defaultExpanded={true}
+          isCollapsed={isCollapsed}
+        >
+          <NavItem icon={Building2} label="Supplier Selection" href="/admin/procurement" badge={2} badgeVariant="warning" onClick={handleNavClick} />
+          <NavItem icon={Star} label="Enhanced Dashboard" href="/admin/procurement/enhanced" onClick={handleNavClick} />
+          <NavItem icon={FileText} label="Quotation Curation" href="/admin/procurement/curation" badge={3} onClick={handleNavClick} />
+          <NavItem icon={BarChart3} label="Procurement Analytics" href="/admin/procurement/analytics" onClick={handleNavClick} />
         </SidebarSection>
 
         {/* Buyer Management */}
@@ -151,20 +179,6 @@ export function AdminSidebar({
           <NavItem icon={Star} label="Top Performers" href="/admin/suppliers/top-performers" onClick={handleNavClick} />
           <NavItem icon={AlertTriangle} label="At Risk Suppliers" href="/admin/suppliers/at-risk" badge={2} badgeVariant="warning" onClick={handleNavClick} />
           <NavItem icon={Wallet} label="Supplier Payout" href="/admin/suppliers/payout" onClick={handleNavClick} />
-        </SidebarSection>
-
-        {/* Account Managers */}
-        <SidebarSection
-          id="account-managers"
-          title="Account Managers"
-          icon={UserCog}
-          defaultExpanded={false}
-          isCollapsed={isCollapsed}
-        >
-          <NavItem icon={Users} label="All Managers" href="/admin/account-managers" onClick={handleNavClick} />
-          <NavItem icon={BarChart3} label="Manager Analytics" href="/admin/account-managers/analytics" onClick={handleNavClick} />
-          <NavItem icon={Star} label="Top Performers" href="/admin/account-managers/top-performers" onClick={handleNavClick} />
-          <NavItem icon={Wallet} label="Manager Payout" href="/admin/account-managers/payout" onClick={handleNavClick} />
         </SidebarSection>
 
         {/* Platform Content */}

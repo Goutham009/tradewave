@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   TrendingUp,
   TrendingDown,
@@ -18,7 +19,11 @@ import {
   Calendar,
   Building2,
   BarChart3,
+  Activity,
+  LineChart,
 } from 'lucide-react';
+import { OperationsAnalyticsDashboard } from '@/components/admin/OperationsAnalyticsDashboard';
+import { BIDashboard } from '@/components/admin/BIDashboard';
 
 interface AnalyticsData {
   gmv: { current: number; previous: number; change: number };
@@ -43,6 +48,27 @@ export default function AdminAnalyticsPage() {
   const [topCategories, setTopCategories] = useState<TopItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<'7d' | '30d' | '90d' | '1y'>('30d');
+  const [activeTab, setActiveTab] = useState('overview');
+
+  const dateRange = useMemo(() => {
+    const endDate = new Date();
+    const startDate = new Date();
+    switch (period) {
+      case '7d':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(startDate.getDate() - 30);
+        break;
+      case '90d':
+        startDate.setDate(startDate.getDate() - 90);
+        break;
+      case '1y':
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        break;
+    }
+    return { startDate, endDate };
+  }, [period]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -141,6 +167,24 @@ export default function AdminAnalyticsPage() {
         </div>
       </div>
 
+      {/* Tabs for different analytics views */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="bg-slate-800 border border-slate-700">
+          <TabsTrigger value="overview" className="data-[state=active]:bg-slate-700 data-[state=active]:text-white text-slate-400">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="operations" className="data-[state=active]:bg-slate-700 data-[state=active]:text-white text-slate-400">
+            <Activity className="w-4 h-4 mr-2" />
+            Operations Analytics
+          </TabsTrigger>
+          <TabsTrigger value="bi" className="data-[state=active]:bg-slate-700 data-[state=active]:text-white text-slate-400">
+            <LineChart className="w-4 h-4 mr-2" />
+            Business Intelligence
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-6">
       {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* GMV */}
@@ -376,6 +420,18 @@ export default function AdminAnalyticsPage() {
           </div>
         </CardContent>
       </Card>
+      </TabsContent>
+
+        {/* Operations Analytics Tab */}
+        <TabsContent value="operations" className="mt-6">
+          <OperationsAnalyticsDashboard dateRange={dateRange} />
+        </TabsContent>
+
+        {/* Business Intelligence Tab */}
+        <TabsContent value="bi" className="mt-6">
+          <BIDashboard dateRange={dateRange} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

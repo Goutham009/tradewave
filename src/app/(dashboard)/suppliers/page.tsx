@@ -57,7 +57,7 @@ export default function SuppliersPage() {
             </li>
             <li className="flex items-start gap-3">
               <span className="flex-shrink-0 w-6 h-6 bg-brand-primary text-white rounded-full flex items-center justify-center text-sm font-bold">3</span>
-              <span>Our AI + expert team curates the TOP 3 best suppliers</span>
+              <span>Our expert procurement team manually curates the TOP 3 best suppliers</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="flex-shrink-0 w-6 h-6 bg-brand-primary text-white rounded-full flex items-center justify-center text-sm font-bold">4</span>

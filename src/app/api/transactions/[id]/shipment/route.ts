@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import { prisma } from '@/lib/db';
 import { emitToUser } from '@/lib/socket/server';
+import { getTrackingService } from '@/lib/logistics/tracking';
 
 export async function POST(
   request: NextRequest,
@@ -212,18 +213,53 @@ export async function GET(
       );
     }
 
+    // If we have tracking info, fetch real-time data from carrier
+    if (transaction.trackingNumber && transaction.shippingProvider) {
+      try {
+        const trackingService = getTrackingService();
+        const liveTracking = await trackingService.trackShipment(
+          transaction.trackingNumber,
+          transaction.shippingProvider
+        );
+
+        // Update shipment record with latest info
+        if (transaction.shipment) {
+          await prisma.shipment.update({
+            where: { id: transaction.shipment.id },
+            data: {
+              status: liveTracking.status,
+              currentLocation: liveTracking.currentLocation,
+              estimatedDelivery: liveTracking.estimatedDelivery,
+              lastUpdated: new Date(),
+            },
+          });
+        }
+
+        return NextResponse.json({
+          trackingNumber: liveTracking.trackingNumber,
+          carrier: liveTracking.carrier,
+          status: liveTracking.status,
+          origin: liveTracking.origin,
+          destination: liveTracking.destination,
+          estimatedDelivery: liveTracking.estimatedDelivery,
+          currentLocation: liveTracking.currentLocation,
+          updates: liveTracking.updates,
+        });
+      } catch (trackingError) {
+        console.error('Live tracking error:', trackingError);
+        // Fall through to return stored data
+      }
+    }
+
     return NextResponse.json({
-      success: true,
-      shipment: {
-        trackingNumber: transaction.trackingNumber,
-        trackingUrl: transaction.trackingUrl,
-        shippingProvider: transaction.shippingProvider,
-        shipmentDate: transaction.shipmentDate,
-        estimatedDelivery: transaction.estimatedDelivery,
-        notes: transaction.shipmentNotes,
-        photos: transaction.shipmentPhotos,
-        details: transaction.shipment,
-      },
+      trackingNumber: transaction.trackingNumber,
+      carrier: transaction.shippingProvider,
+      status: transaction.shipment?.status || 'IN_TRANSIT',
+      origin: transaction.shipment?.originLocation || 'Origin',
+      destination: transaction.shipment?.destinationLocation || 'Destination',
+      estimatedDelivery: transaction.estimatedDelivery,
+      currentLocation: transaction.shipment?.currentLocation || 'In Transit',
+      updates: [],
     });
   } catch (error) {
     console.error('Get shipment error:', error);

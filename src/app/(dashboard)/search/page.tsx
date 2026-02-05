@@ -64,8 +64,8 @@ export default function SearchPage() {
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0 w-8 h-8 bg-brand-primary text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
               <div>
-                <h4 className="font-semibold text-gray-900">AI + Expert Matching</h4>
-                <p className="text-gray-600 text-sm">Our AI analyzes 5,000+ suppliers, then our senior procurement team manually curates the TOP 3 best matches.</p>
+                <h4 className="font-semibold text-gray-900">Expert Procurement Team</h4>
+                <p className="text-gray-600 text-sm">Our senior procurement team manually searches our 5,000+ supplier database and curates the TOP 3 best matches for you.</p>
               </div>
             </div>
             <div className="flex items-start gap-4">

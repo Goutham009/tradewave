@@ -16,21 +16,36 @@ interface KYBData {
   verifiedAt: string | null;
   expiresAt: string | null;
   rejectionReason: string | null;
+  infoRequestReason: string | null;
   documents: any[];
   complianceItems: any[];
   riskAssessment: any;
   badge: any;
   verificationLogs: any[];
+  // Automated checks
+  sanctionsCheckStatus: string | null;
+  pepCheckStatus: string | null;
+  adverseMediaCheckStatus: string | null;
+  creditCheckStatus: string | null;
+  registryCheckStatus: string | null;
+  documentAICheckStatus: string | null;
+  bankVerificationStatus: string | null;
+  automatedChecksStartedAt: string | null;
+  automatedChecksCompletedAt: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { color: string; icon: any; label: string; bgColor: string }> = {
-  PENDING: { color: 'text-yellow-600', icon: Clock, label: 'Pending Review', bgColor: 'bg-yellow-50' },
+  DRAFT: { color: 'text-gray-600', icon: Clock, label: 'Draft', bgColor: 'bg-gray-50' },
+  PENDING: { color: 'text-yellow-600', icon: Clock, label: 'Submitted', bgColor: 'bg-yellow-50' },
+  AUTOMATED_CHECKS_IN_PROGRESS: { color: 'text-blue-600', icon: RefreshCw, label: 'Automated Checks Running', bgColor: 'bg-blue-50' },
+  AUTOMATED_CHECKS_COMPLETE: { color: 'text-indigo-600', icon: CheckCircle, label: 'Awaiting Manual Review', bgColor: 'bg-indigo-50' },
   UNDER_REVIEW: { color: 'text-blue-600', icon: RefreshCw, label: 'Under Review', bgColor: 'bg-blue-50' },
+  INFO_REQUESTED: { color: 'text-orange-600', icon: AlertTriangle, label: 'Info Requested', bgColor: 'bg-orange-50' },
   DOCUMENTS_REQUIRED: { color: 'text-orange-600', icon: AlertTriangle, label: 'Documents Required', bgColor: 'bg-orange-50' },
   VERIFIED: { color: 'text-green-600', icon: CheckCircle, label: 'Verified', bgColor: 'bg-green-50' },
   REJECTED: { color: 'text-red-600', icon: XCircle, label: 'Rejected', bgColor: 'bg-red-50' },
   SUSPENDED: { color: 'text-gray-600', icon: XCircle, label: 'Suspended', bgColor: 'bg-gray-50' },
-  EXPIRED: { color: 'text-gray-600', icon: Clock, label: 'Expired', bgColor: 'bg-gray-50' }
+  EXPIRED: { color: 'text-gray-600', icon: Clock, label: 'Expired - Renewal Required', bgColor: 'bg-gray-50' }
 };
 
 const BADGE_CONFIG: Record<string, { color: string; bgColor: string; label: string }> = {
@@ -139,12 +154,52 @@ export function KYBStatusPage() {
           </div>
         )}
 
+        {kyb.status === 'INFO_REQUESTED' && kyb.infoRequestReason && (
+          <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+            <h4 className="font-medium text-orange-800 mb-1">Additional Information Required</h4>
+            <p className="text-orange-700">{kyb.infoRequestReason}</p>
+            <p className="text-sm text-orange-600 mt-2">Please provide the requested information or documents to continue your verification.</p>
+          </div>
+        )}
+
         {kyb.verifiedAt && (
           <div className="mt-4 text-sm text-gray-500">
             Verified on: {new Date(kyb.verifiedAt).toLocaleDateString()}
             {kyb.expiresAt && ` • Expires: ${new Date(kyb.expiresAt).toLocaleDateString()}`}
           </div>
         )}
+
+        {/* Renewal Warning */}
+        {kyb.status === 'EXPIRED' && (
+          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <h4 className="font-medium text-red-800 mb-1">KYB Verification Expired</h4>
+            <p className="text-red-700 mb-3">Your business verification has expired. Please renew to continue accepting quotes and receiving requirements.</p>
+            <button 
+              onClick={() => {/* TODO: Trigger renewal */}}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+            >
+              Start Renewal Process
+            </button>
+          </div>
+        )}
+
+        {kyb.status === 'VERIFIED' && kyb.expiresAt && (() => {
+          const expiresAt = new Date(kyb.expiresAt);
+          const now = new Date();
+          const thirtyDaysFromNow = new Date();
+          thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+          const daysUntilExpiry = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (expiresAt < thirtyDaysFromNow && daysUntilExpiry > 0) {
+            return (
+              <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <h4 className="font-medium text-yellow-800 mb-1">Renewal Reminder</h4>
+                <p className="text-yellow-700">Your KYB verification expires in <strong>{daysUntilExpiry} days</strong>. Consider renewing soon to avoid service interruption.</p>
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {/* Tabs */}
@@ -201,6 +256,37 @@ export function KYBStatusPage() {
                     <span>Verification Complete</span>
                   </div>
                 </div>
+
+                {/* Automated Checks Progress */}
+                {(kyb.status === 'AUTOMATED_CHECKS_IN_PROGRESS' || kyb.status === 'AUTOMATED_CHECKS_COMPLETE' || kyb.automatedChecksStartedAt) && (
+                  <div className="mt-6">
+                    <h4 className="font-medium mb-3 text-sm text-gray-700">Automated Compliance Checks</h4>
+                    <div className="space-y-2">
+                      {[
+                        { key: 'sanctionsCheckStatus', label: 'Sanctions Screening (OFAC, UN, EU)' },
+                        { key: 'pepCheckStatus', label: 'PEP Check (Politically Exposed Persons)' },
+                        { key: 'adverseMediaCheckStatus', label: 'Adverse Media Check' },
+                        { key: 'creditCheckStatus', label: 'Business Credit Check' },
+                        { key: 'registryCheckStatus', label: 'Company Registry Verification' },
+                        { key: 'documentAICheckStatus', label: 'Document AI Verification' },
+                        { key: 'bankVerificationStatus', label: 'Bank Account Verification' },
+                      ].map(check => {
+                        const status = (kyb as any)[check.key];
+                        const isPassed = status === 'PASSED' || status === 'VERIFIED';
+                        const isPending = status === 'PENDING' || !status;
+                        const isFailed = status === 'FAILED' || status === 'FLAGGED';
+                        return (
+                          <div key={check.key} className="flex items-center justify-between text-sm p-2 rounded bg-gray-50">
+                            <span>{check.label}</span>
+                            <span className={`font-medium ${isPassed ? 'text-green-600' : isFailed ? 'text-red-600' : 'text-yellow-600'}`}>
+                              {isPassed ? '✓ Passed' : isFailed ? '✗ Review Required' : '⏳ Pending'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {kyb.riskAssessment && (

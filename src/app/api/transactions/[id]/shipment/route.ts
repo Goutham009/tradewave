@@ -223,11 +223,16 @@ export async function GET(
         );
 
         // Update shipment record with latest info
+        const VALID_SHIPMENT_STATUSES = ['PENDING', 'PICKED_UP', 'IN_TRANSIT', 'CUSTOMS', 'OUT_FOR_DELIVERY', 'DELIVERED', 'DELAYED', 'LOST', 'CANCELLED'] as const;
+        const sanitizedStatus = VALID_SHIPMENT_STATUSES.includes(liveTracking.status as any)
+          ? liveTracking.status as typeof VALID_SHIPMENT_STATUSES[number]
+          : 'IN_TRANSIT';
+
         if (transaction.shipment) {
           await prisma.shipment.update({
             where: { id: transaction.shipment.id },
             data: {
-              status: liveTracking.status,
+              status: sanitizedStatus,
               currentLocation: liveTracking.currentLocation,
               estimatedDelivery: liveTracking.estimatedDelivery,
               lastUpdated: new Date(),

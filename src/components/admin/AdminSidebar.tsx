@@ -7,7 +7,6 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
   Users,
-  CreditCard,
   AlertTriangle,
   BarChart3,
   Activity,
@@ -19,20 +18,19 @@ import {
   Building2,
   TrendingUp,
   DollarSign,
-  UserCheck,
   UserX,
   Star,
   Briefcase,
-  ChevronDown,
-  ChevronRight,
 } from 'lucide-react';
 
 interface NavSection {
   title: string;
   items: { name: string; href: string; icon: any }[];
+  roles?: string[]; // If specified, only show for these roles
 }
 
-const navSections: NavSection[] = [
+// Full admin navigation
+const adminNavSections: NavSection[] = [
   {
     title: 'Overview',
     items: [
@@ -52,7 +50,6 @@ const navSections: NavSection[] = [
       { name: 'Buyer Analytics', href: '/admin/buyers/analytics', icon: BarChart3 },
       { name: 'Top Performers', href: '/admin/buyers/top-performers', icon: Star },
       { name: 'At Risk Buyers', href: '/admin/buyers/at-risk', icon: UserX },
-      { name: 'Buyer Payout', href: '/admin/buyers/payout', icon: DollarSign },
     ],
   },
   {
@@ -62,7 +59,6 @@ const navSections: NavSection[] = [
       { name: 'Supplier Analytics', href: '/admin/suppliers/analytics', icon: BarChart3 },
       { name: 'Top Performers', href: '/admin/suppliers/top-performers', icon: Star },
       { name: 'At Risk Suppliers', href: '/admin/suppliers/at-risk', icon: UserX },
-      { name: 'Supplier Payout', href: '/admin/suppliers/payout', icon: DollarSign },
     ],
   },
   {
@@ -78,7 +74,9 @@ const navSections: NavSection[] = [
     title: 'Order Management',
     items: [
       { name: 'Requirements', href: '/admin/requirements', icon: Package },
-      { name: 'Transactions', href: '/admin/transactions', icon: CreditCard },
+      { name: 'Quotations', href: '/admin/quotations', icon: FileText },
+      { name: 'All Orders', href: '/admin/orders', icon: Package },
+      { name: 'Payments', href: '/admin/payments', icon: DollarSign },
       { name: 'Shipments', href: '/admin/shipments', icon: Truck },
       { name: 'Disputes', href: '/admin/disputes', icon: AlertTriangle },
     ],
@@ -100,8 +98,13 @@ const navSections: NavSection[] = [
   },
 ];
 
+
 export function AdminSidebar() {
   const pathname = usePathname();
+  
+  // Admin-only navigation
+  const navSections = adminNavSections;
+  const panelTitle = 'Admin Panel';
 
   return (
     <aside className="hidden w-72 flex-shrink-0 border-r border-slate-800 bg-gradient-to-b from-slate-900 to-slate-950 lg:block">
@@ -113,7 +116,7 @@ export function AdminSidebar() {
               <Shield className="h-5 w-5 text-white" />
             </div>
             <div>
-              <span className="text-lg font-bold text-white">Admin Panel</span>
+              <span className="text-lg font-bold text-white">{panelTitle}</span>
               <p className="text-xs text-slate-500">Tradewave Platform</p>
             </div>
           </Link>
@@ -122,7 +125,7 @@ export function AdminSidebar() {
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <div className="space-y-6">
-            {navSections.map((section) => (
+            {navSections.map((section: NavSection) => (
               <div key={section.title}>
                 {section.title !== 'Overview' && (
                   <div className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -130,7 +133,7 @@ export function AdminSidebar() {
                   </div>
                 )}
                 <div className="space-y-1">
-                  {section.items.map((item) => {
+                  {section.items.map((item: { name: string; href: string; icon: any }) => {
                     const isActive = pathname === item.href || 
                       (item.href !== '/admin' && pathname?.startsWith(item.href));
                     return (

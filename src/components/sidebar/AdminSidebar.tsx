@@ -94,6 +94,17 @@ export function AdminSidebar({
           onClick={handleNavClick}
         />
 
+        {/* Lead Management */}
+        <NavItem
+          icon={Target}
+          label="Leads"
+          href="/admin/leads"
+          badge={3}
+          badgeVariant="warning"
+          isCollapsed={isCollapsed}
+          onClick={handleNavClick}
+        />
+
         {/* User Management */}
         <SidebarSection
           id="users"

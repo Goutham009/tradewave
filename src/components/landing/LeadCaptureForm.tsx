@@ -56,36 +56,27 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
     setServerError(null);
 
     try {
-      // Simulate API call for now - replace with actual API when ready
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
-      // Mock success response
-      const mockResult = {
-        status: 'success',
-        data: {
-          email: data.email,
-          fullName: data.fullName,
-          companyName: data.companyName,
-          phoneNumber: data.phoneNumber,
-          requirement: {
-            category: data.category,
-            productName: data.productName,
-            quantity: data.quantity,
-            unit: data.unit,
-            location: data.location,
-            timeline: data.timeline,
-          },
-          createdAt: new Date().toISOString(),
-        },
-      };
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || 'Failed to submit enquiry');
+      }
 
       // Success!
-      setSubmittedData(mockResult.data);
+      setSubmittedData(result.data);
       setShowSuccess(true);
       reset();
-      onSuccess?.(mockResult);
+      onSuccess?.(result);
     } catch (error) {
-      setServerError('Failed to create requirement. Please try again.');
+      setServerError(
+        error instanceof Error ? error.message : 'Failed to create requirement. Please try again.'
+      );
       console.error('Form submission error:', error);
     } finally {
       setIsSubmitting(false);

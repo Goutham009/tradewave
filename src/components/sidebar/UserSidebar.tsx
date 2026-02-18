@@ -87,33 +87,20 @@ export function UserSidebar({
           onClick={handleNavClick}
         />
 
-        {/* My Requirements Section (Buyer) */}
+        {/* Requirements & Quotations */}
         <SidebarSection
           id="requirements"
-          title="My Requirements"
+          title="Requirements & Quotes"
           icon={FileText}
           defaultExpanded={true}
           isCollapsed={isCollapsed}
         >
-          <NavItem icon={FileText} label="Submit Requirement" href="/requirements/new" onClick={handleNavClick} />
-          <NavItem icon={ClipboardList} label="My Requirements" href="/requirements" badge={4} onClick={handleNavClick} />
-          <NavItem icon={MessageSquare} label="My Quotations" href="/quotations" badge="3 New" badgeVariant="success" onClick={handleNavClick} />
+          <NavItem icon={FileText} label="New Requirement" href="/requirements/new" onClick={handleNavClick} />
+          <NavItem icon={ClipboardList} label="Requirements" href="/requirements" badge={4} onClick={handleNavClick} />
+          <NavItem icon={MessageSquare} label="Quotations" href="/quotations" badge="3 New" badgeVariant="success" onClick={handleNavClick} />
         </SidebarSection>
 
-        {/* Quotation Requests Section (Seller) */}
-        <SidebarSection
-          id="quotation-requests"
-          title="Quotation Requests"
-          icon={MessageSquare}
-          defaultExpanded={true}
-          isCollapsed={isCollapsed}
-        >
-          <NavItem icon={MessageSquare} label="Quotation Invitations" href="/seller/rfq" badge="2 New" badgeVariant="success" onClick={handleNavClick} />
-          <NavItem icon={ClipboardList} label="My Submitted Quotes" href="/seller/quotes" onClick={handleNavClick} />
-          <NavItem icon={Star} label="Won Contracts" href="/seller/contracts" onClick={handleNavClick} />
-        </SidebarSection>
-
-        {/* Orders & Fulfillment Section */}
+        {/* Orders & Fulfillment */}
         <SidebarSection
           id="orders"
           title="Orders & Fulfillment"
@@ -121,9 +108,9 @@ export function UserSidebar({
           defaultExpanded={true}
           isCollapsed={isCollapsed}
         >
-          <NavItem icon={ClipboardList} label="Active Orders" href="/transactions" badge={3} onClick={handleNavClick} />
-          <NavItem icon={Package} label="Order History" href="/buyer/history" onClick={handleNavClick} />
-          <NavItem icon={Truck} label="Track Shipments" href="/shipments" onClick={handleNavClick} />
+          <NavItem icon={ClipboardList} label="Orders" href="/orders" badge={3} onClick={handleNavClick} />
+          <NavItem icon={Truck} label="Shipments" href="/shipments" onClick={handleNavClick} />
+          <NavItem icon={Wallet} label="Payments" href="/payments" onClick={handleNavClick} />
           <NavItem icon={RotateCcw} label="Returns & Claims" href="/returns" onClick={handleNavClick} />
         </SidebarSection>
 
@@ -139,7 +126,7 @@ export function UserSidebar({
           <NavItem icon={MessageSquare} label="Messages" href="/messages" badge="3 New" badgeVariant="success" onClick={handleNavClick} />
         </SidebarSection>
 
-        {/* Account & Billing Section */}
+        {/* Account & Billing */}
         <SidebarSection
           id="account"
           title="Account & Billing"
@@ -147,7 +134,6 @@ export function UserSidebar({
           defaultExpanded={false}
           isCollapsed={isCollapsed}
         >
-          <NavItem icon={Wallet} label="Payment Methods" href="/payments" onClick={handleNavClick} />
           <NavItem icon={CreditCard} label="Billing History" href="/billing" onClick={handleNavClick} />
           <NavItem icon={Gift} label="Referral Program" href="/referrals" onClick={handleNavClick} />
           <NavItem icon={Building} label="Company Info" href="/profile" onClick={handleNavClick} />
@@ -155,17 +141,14 @@ export function UserSidebar({
           <NavItem icon={DollarSign} label="Earnings" href="/earnings" onClick={handleNavClick} />
         </SidebarSection>
 
-        {/* Analytics & Insights Section */}
-        <SidebarSection
-          id="analytics"
-          title="Analytics & Insights"
+        {/* Analytics */}
+        <NavItem
           icon={BarChart3}
-          defaultExpanded={false}
+          label="Analytics"
+          href="/analytics"
           isCollapsed={isCollapsed}
-        >
-          <NavItem icon={TrendingUp} label="Spending Trends" href="/buyer/analytics" onClick={handleNavClick} />
-          <NavItem icon={PieChart} label="Supplier Analysis" href="/buyer/analytics/suppliers" onClick={handleNavClick} />
-        </SidebarSection>
+          onClick={handleNavClick}
+        />
 
         {/* Integrations Section */}
         <SidebarSection

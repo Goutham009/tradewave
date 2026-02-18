@@ -27,6 +27,35 @@ model User {
   walletAddress String?
   industry      String?
   department    String?
+  country       String?
+  region        String?
+  city          String?
+  source        String?           // BUSINESS_DEVELOPMENT, ORGANIC, REFERRAL, LANDING_PAGE, DIRECT_SIGNUP
+  referralCode  String?           // BD-SARAH-2026 style referral code used at registration
+  referredBy    String?           // User ID of referrer (BD member, existing user, etc.)
+  createdByUserId String?         // AM or admin who created the account
+  accountManagerId String?        // Assigned Account Manager
+  assignedBy    String?           // Who assigned the AM (admin ID or 'SYSTEM_AUTO_BD')
+  assignmentReason String?        // Why AM was assigned
+  assignedAt    DateTime?         // When AM was assigned
+  kybStatus     String?           @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, REJECTED
+  kybCompletedAt DateTime?
+  kybApprovedAt DateTime?
+  
+  // Supplier-specific fields
+  supplierTier       String?      @default("REVIEW") // REVIEW, STANDARD, TRUSTED, PREMIUM
+  verificationLevel  String?      // NONE, EMAIL_VERIFIED, KYB_SUBMITTED, FULL
+  acceptingRequirements Boolean   @default(false) // Can receive requirement cards
+  firstLogin    Boolean           @default(true)
+  firstLoginAt  DateTime?
+  
+  // Good standing & transaction limits (for repeat buyers)
+  goodStanding        Boolean     @default(true)
+  goodStandingCheckedAt DateTime?
+  transactionLimit    Decimal?    @db.Decimal(15, 2) // Max outstanding escrow
+  onTimePaymentRatio  Float?     // 0.0 - 1.0
+  totalOrderCount     Int        @default(0)
+  totalSpent          Decimal?   @db.Decimal(15, 2) @default(0)
   
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -174,13 +203,41 @@ enum UserRole {
   BUYER
   ADMIN
   SUPPLIER
+  ACCOUNT_MANAGER
+  PROCUREMENT_OFFICER
 }
 
 enum UserStatus {
   ACTIVE
   INACTIVE
   PENDING
+  PENDING_VERIFICATION
   SUSPENDED
+}
+
+// =============================================================================
+// REFERRAL CODES (BD team, partner, user referrals)
+// =============================================================================
+
+model ReferralCode {
+  id            String    @id @default(cuid())
+  code          String    @unique // e.g. "BD-SARAH-2026"
+  type          String    // BD_TEAM_MEMBER, PARTNER, USER_REFERRAL
+  ownerId       String    // User ID of the BD member / partner / referring user
+  ownerName     String    // Display name
+  ownerEmail    String?
+  
+  isActive      Boolean   @default(true)
+  usageCount    Int       @default(0)
+  maxUsages     Int?      // null = unlimited
+  
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([code])
+  @@index([ownerId])
+  @@map("referral_codes")
 }
 
 // =============================================================================
@@ -195,15 +252,83 @@ model Requirement {
   category         String
   subcategory      String?
   specifications   Json              @default("{}")
+  technicalSpecs   String?           @db.Text
   quantity         Int
   unit             String
-  targetPrice      Decimal?          @db.Decimal(15, 2)
+  targetPrice      Decimal?          @db.Decimal(15, 2) // Internal: buyer's expected price (hidden from suppliers)
+  budgetMin        Decimal?          @db.Decimal(15, 2) // Shown to suppliers
+  budgetMax        Decimal?          @db.Decimal(15, 2) // Shown to suppliers
+  totalBudgetMin   Decimal?          @db.Decimal(15, 2)
+  totalBudgetMax   Decimal?          @db.Decimal(15, 2)
   currency         String            @default("USD")
+  
+  // Delivery
   deliveryLocation String
+  deliveryAddress  String?           @db.Text
   deliveryDeadline DateTime
+  incoterms        String?           // FOB, CIF, DDP, etc.
+  packagingRequirements String?      @db.Text
+  
+  // Quality
+  requiredCertifications String[]    // ISO_9001, CE_MARKING, MTC, etc.
+  qualityInspectionRequired Boolean  @default(false)
+  
+  // Payment
+  paymentTerms     String?
+  paymentMethod    String?           // ESCROW, LC, BANK_TRANSFER
+  
+  // Documents
+  specialInstructions String?        @db.Text
+  
+  // Matching Preferences
+  preferredSupplierTiers String[]    // TRUSTED, STANDARD, REVIEW
+  preferredGeographies   String[]    // Country preferences
+  maxSuppliersToMatch    Int?        @default(10)
+  communicationPreference String?    @default("THROUGH_AM") // THROUGH_AM, DIRECT
+  
+  // Reorder metadata
+  isReorder        Boolean           @default(false)
+  originalRequirementId String?      // Previous requirement this reorder is based on
+  originalTransactionId String?      // Previous transaction this reorder is based on
+  preferredSupplierId   String?      // Preferred supplier for reorder
+  sentDirectlyToSupplier Boolean     @default(false) // Admin sent directly to preferred supplier
+  
+  // Buyer context (for existing buyer new orders)
+  buyerIsExisting  Boolean           @default(false)
+  buyerTotalOrders Int?              @default(0)
+  buyerGoodStanding Boolean?         @default(true)
+  
+  // AM & Admin tracking
+  createdByUserId  String?           // AM or admin who created
+  createdByRole    String?           // ACCOUNT_MANAGER, BUYER, ADMIN
+  assignedAccountManagerId String?
+  assignedTo       String?           // Procurement officer
+  internalNotes    String?           @db.Text // Not shown to suppliers or buyer
+  amNotes          String?           @db.Text // AM verification notes
+  
+  // Admin Review
+  adminReviewed    Boolean           @default(false)
+  adminReviewedBy  String?
+  adminReviewedAt  DateTime?
+  adminNotes       String?           @db.Text
+  
+  // Procurement
+  procurementAssigned Boolean        @default(false)
+  assignedProcurementOfficerId String?
+  procurementAssignedAt DateTime?
+  procurementPriority String?        @default("NORMAL") // NORMAL, HIGH, URGENT
+  
+  // Supplier matching
+  suppliersSent    Int?              @default(0)
+  quotesReceived   Int?              @default(0)
+  suppliersSentAt  DateTime?
+  quoteDeadline    DateTime?
+  
   priority         RequirementPriority @default(MEDIUM)
   status           RequirementStatus @default(DRAFT)
-  assignedTo       String?
+  amVerified       Boolean           @default(false)
+  amVerifiedAt     DateTime?
+  fulfilledAt      DateTime?
   
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -213,24 +338,35 @@ model Requirement {
   quotations       Quotation[]
   transactions     Transaction[]
   attachments      Attachment[]
+  procurementTasks ProcurementTask[]
+  supplierCards    SupplierRequirementCard[]
+  negotiationThreads NegotiationThread[]
   
   @@index([status])
   @@index([buyerId, status])
   @@index([category])
   @@index([createdAt])
+  @@index([assignedAccountManagerId])
+  @@index([assignedProcurementOfficerId])
   @@map("requirements")
 }
 
 enum RequirementStatus {
   DRAFT
   SUBMITTED
+  PENDING_AM_VERIFICATION
+  PENDING_ADMIN_REVIEW
   UNDER_REVIEW
+  VERIFIED
   SOURCING
+  QUOTES_PENDING
   QUOTATIONS_READY
   NEGOTIATING
   ACCEPTED
   COMPLETED
+  FULFILLED
   CANCELLED
+  REJECTED
 }
 
 enum RequirementPriority {
@@ -285,6 +421,7 @@ model Supplier {
   certifications    Certification[]
   quotations        Quotation[]
   transactions      Transaction[]
+  requirementCards  SupplierRequirementCard[]
   
   // Phase 9: Supplier Compliance & Tier Relations
   complianceRecords       SupplierComplianceRecord[]      @relation("SupplierComplianceRecords")
@@ -326,7 +463,18 @@ model Quotation {
   requirementId   String
   supplierId      String
   userId          String?
+  supplierRequirementCardId String?
   
+  // Supplier's original pricing
+  supplierPricePerUnit Decimal?   @db.Decimal(15, 2)
+  supplierTotalAmount  Decimal?   @db.Decimal(15, 2)
+  
+  // Platform margin (admin sets)
+  marginType      String?         // PERCENTAGE, FIXED_AMOUNT
+  marginPercentage Decimal?       @db.Decimal(5, 2)
+  marginAmount    Decimal?        @db.Decimal(15, 2)
+  
+  // Buyer-visible pricing (after margin)
   unitPrice       Decimal         @db.Decimal(15, 2)
   quantity        Int
   subtotal        Decimal         @db.Decimal(15, 2)
@@ -339,19 +487,44 @@ model Quotation {
   currency        String          @default("USD")
   
   leadTime        Int
+  deliveryTimeline Int?           // days
+  deliveryTimelineUnit String?    @default("DAYS")
+  warranty        String?
   validUntil      DateTime
   terms           String?         @db.Text
+  paymentTerms    String?
   notes           String?         @db.Text
+  additionalTerms String?         @db.Text
   certifications  String[]
   samples         Boolean         @default(false)
   sampleCost      Decimal?        @db.Decimal(15, 2)
+  
+  // Visibility & admin review
+  visibleToBuyer  Boolean         @default(false)
+  adminReviewed   Boolean         @default(false)
+  adminReviewedBy String?
+  adminReviewedAt DateTime?
+  adminNotes      String?         @db.Text
+  
   status          QuotationStatus @default(PENDING)
   ranking         Int?
+  
+  // Negotiation
+  negotiationThreadId String?
+  negotiationStartedAt DateTime?
+  isCounterOffer  Boolean         @default(false)
+  parentQuotationId String?       // Original quote this is a revision of
+  revisionNumber  Int?            @default(0)
+  
+  // Acceptance / Rejection
+  acceptedBy      String?
+  declinedReason  String?
   
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   acceptedAt      DateTime?
   rejectedAt      DateTime?
+  submittedAt     DateTime?
   
   // Relations
   requirement     Requirement     @relation(fields: [requirementId], references: [id])
@@ -361,6 +534,7 @@ model Quotation {
   
   @@index([status])
   @@index([supplierId, status])
+  @@index([requirementId, status])
   @@index([createdAt])
   @@map("quotations")
 }
@@ -370,8 +544,12 @@ enum QuotationStatus {
   SUBMITTED
   UNDER_REVIEW
   SHORTLISTED
+  APPROVED_BY_ADMIN
+  VISIBLE_TO_BUYER
+  IN_NEGOTIATION
   ACCEPTED
   REJECTED
+  DECLINED
   EXPIRED
 }
 
@@ -388,9 +566,28 @@ model Transaction {
   
   status                TransactionStatus @default(INITIATED)
   amount                Decimal           @db.Decimal(15, 2)
+  advanceAmount         Decimal?          @db.Decimal(15, 2)
+  balanceAmount         Decimal?          @db.Decimal(15, 2)
   currency              String            @default("USD")
   paymentMethod         String?
+  paymentTerms          String?
   paymentStatus         PaymentStatus?
+  paymentConfirmedAt    DateTime?
+  
+  // Product details (denormalized for quick access)
+  productName           String?
+  productQuantity       Int?
+  productUnit           String?
+  pricePerUnit          Decimal?          @db.Decimal(15, 2)
+  
+  // Admin review
+  adminReviewed         Boolean           @default(false)
+  adminReviewedBy       String?
+  adminReviewedAt       DateTime?
+  adminNotes            String?           @db.Text
+  escrowAccountId       String?
+  
+  completedAt           DateTime?
   
   smartContractAddress  String?
   
@@ -544,6 +741,8 @@ model SupplierComplianceRecord {
   kycDocumentUrl          String?
 
   kybStatus               String      @default("PENDING")
+  kybApplicationId        String?     // Links to SupplierKYB.id
+  kybSubmittedAt          DateTime?   // When KYB was first submitted
   kybVerifiedAt           DateTime?
   kybExpiresAt            DateTime?
   companyRegistration     String?
@@ -995,11 +1194,16 @@ model SupplierComplianceDashboardWidget {
 
 enum TransactionStatus {
   INITIATED
+  PENDING_ADMIN_REVIEW
+  APPROVED
+  ESCROW_CREATED
   PAYMENT_PENDING
   PAYMENT_RECEIVED
+  PAYMENT_CONFIRMED
   PAID
   ESCROW_HELD
   PRODUCTION
+  QUALITY_INSPECTION
   SHIPPED
   IN_TRANSIT
   CUSTOMS
@@ -1092,7 +1296,12 @@ enum DocumentType {
 model EscrowTransaction {
   id                  String        @id @default(cuid())
   transactionId       String        @unique
+  buyerId             String?
+  supplierId          String?
+  totalAmount         Decimal       @db.Decimal(15, 2)
   amount              Decimal       @db.Decimal(15, 2)
+  advanceAmount       Decimal?      @db.Decimal(15, 2)
+  balanceAmount       Decimal?      @db.Decimal(15, 2)
   currency            String        @default("USD")
   status              EscrowStatus  @default(PENDING)
   holdDate            DateTime?
@@ -1100,9 +1309,25 @@ model EscrowTransaction {
   contractAddress     String?
   blockchainTxHash    String?
   
+  // Advance payment tracking
+  advancePaid         Boolean       @default(false)
+  advancePaidAt       DateTime?
+  advancePaidAmount   Decimal?      @db.Decimal(15, 2)
+  
+  // Balance payment tracking
+  balancePaid         Boolean       @default(false)
+  balancePaidAt       DateTime?
+  balanceReleasedAmount Decimal?    @db.Decimal(15, 2)
+  
+  // Release tracking
+  releaseConditionsText String?     @db.Text
+  releaseInitiatedAt  DateTime?
+  releaseInitiatedBy  String?
+  releasedBy          String?
+  
   // Phase C: Blockchain escrow enhancements
-  blockchainEscrowId  String?       // ID from smart contract
-  transactionHash     String?       // Creation tx hash
+  blockchainEscrowId  String?
+  transactionHash     String?
   depositedAt         DateTime?
   depositTxHash       String?
   releasedAt          DateTime?
@@ -1117,21 +1342,27 @@ model EscrowTransaction {
   documentsVerifiedAt DateTime?
   autoReleaseDate     DateTime?
   
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  createdBy           String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
   
   // Relations
   transaction       Transaction   @relation(fields: [transactionId], references: [id])
   releaseConditions ReleaseCondition[]
   
   @@index([blockchainEscrowId])
+  @@index([status])
   @@map("escrow_transactions")
 }
 
 enum EscrowStatus {
   PENDING
+  PENDING_PAYMENT
+  FUNDS_HELD
   HELD
+  RELEASING_BALANCE
   RELEASING
+  FUNDS_RELEASED
   RELEASED
   DISPUTED
   REFUNDED
@@ -1156,6 +1387,120 @@ enum ReleaseConditionType {
   QUALITY_APPROVED
   DOCUMENTS_VERIFIED
   TIME_ELAPSED
+}
+
+// =============================================================================
+// PROCUREMENT TASKS
+// =============================================================================
+
+model ProcurementTask {
+  id                  String      @id @default(cuid())
+  requirementId       String
+  assignedTo          String      // Procurement officer user ID
+  status              String      @default("ASSIGNED") // ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED
+  priority            String      @default("NORMAL") // NORMAL, HIGH, URGENT
+  
+  matchingCriteria    Json?       // Preferred tiers, geographies, experience, etc.
+  dueDate             DateTime?
+  
+  suppliersMatched    Int         @default(0)
+  notes               String?     @db.Text
+  
+  createdBy           String?
+  completedAt         DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  
+  requirement         Requirement @relation(fields: [requirementId], references: [id])
+  
+  @@index([assignedTo, status])
+  @@index([requirementId])
+  @@map("procurement_tasks")
+}
+
+// =============================================================================
+// SUPPLIER REQUIREMENT CARDS (sent to matched suppliers)
+// =============================================================================
+
+model SupplierRequirementCard {
+  id                  String      @id @default(cuid())
+  requirementId       String
+  supplierId          String
+  status              String      @default("SENT") // SENT, VIEWED, QUOTE_SUBMITTED, DECLINED, EXPIRED
+  sentBy              String?     // Procurement officer who sent it
+  sentAt              DateTime    @default(now())
+  viewedAt            DateTime?
+  
+  // Visible info (what supplier sees)
+  visibleInfo         Json?       // Product, specs, budget range, delivery, etc.
+  
+  // Internal info (hidden from supplier)
+  internalInfo        Json?       // Buyer expected price, company name, AM info, etc.
+  
+  responseDeadline    DateTime?
+  declinedReason      String?     @db.Text
+  
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  
+  requirement         Requirement @relation(fields: [requirementId], references: [id])
+  supplier            Supplier    @relation(fields: [supplierId], references: [id])
+  
+  @@unique([requirementId, supplierId])
+  @@index([supplierId, status])
+  @@map("supplier_requirement_cards")
+}
+
+// =============================================================================
+// NEGOTIATION
+// =============================================================================
+
+model NegotiationThread {
+  id                  String      @id @default(cuid())
+  requirementId       String
+  buyerId             String
+  accountManagerId    String?
+  status              String      @default("ACTIVE") // ACTIVE, COMPLETED, ABANDONED, EXPIRED
+  
+  quotationsInNegotiation String[] // Quotation IDs
+  selectedQuotationId String?
+  
+  buyerTargets        Json?       // desiredPrice, budget, paymentTerms, deliveryTimeline, etc.
+  negotiationPoints   String[]    // PRICE, PAYMENT_TERMS, DELIVERY_TIMELINE, WARRANTY, etc.
+  buyerComments       String?     @db.Text
+  
+  completedAt         DateTime?
+  lastActivity        DateTime    @default(now())
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  
+  requirement         Requirement @relation(fields: [requirementId], references: [id])
+  messages            NegotiationMessage[]
+  
+  @@index([buyerId, status])
+  @@index([requirementId])
+  @@map("negotiation_threads")
+}
+
+model NegotiationMessage {
+  id                  String      @id @default(cuid())
+  threadId            String
+  senderId            String      // User ID (buyer, AM, or system)
+  senderRole          String      // BUYER, ACCOUNT_MANAGER, SYSTEM
+  
+  messageType         String      @default("TEXT") // TEXT, COUNTER_OFFER, STATUS_UPDATE, CALL_LOG
+  content             String      @db.Text
+  metadata            Json?       // Counter-offer details, call duration, etc.
+  
+  isReadByBuyer       Boolean     @default(false)
+  isReadByAM          Boolean     @default(false)
+  
+  createdAt           DateTime    @default(now())
+  
+  thread              NegotiationThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  
+  @@index([threadId, createdAt])
+  @@map("negotiation_messages")
 }
 
 // =============================================================================
@@ -1305,24 +1650,42 @@ model Lead {
   unit            String
   location        String
   timeline        String
+  targetPrice     String?     // Buyer's target price
   additionalReqs  String?     @db.Text
+  
+  source          String      @default("LANDING_PAGE_FORM") // LANDING_PAGE_FORM, REFERRAL, DIRECT
+  leadScore       String?     @default("MEDIUM") // HIGH, MEDIUM, LOW
   
   status          LeadStatus  @default(NEW_LEAD)
   notes           String?     @db.Text
-  assignedTo      String?
+  assignedTo      String?     // Assigned Account Manager ID
+  assignedAt      DateTime?
   lastContactedAt DateTime?
+  
+  // Call scheduling
+  callScheduledAt DateTime?
+  callCompletedAt DateTime?
+  callNotes       String?     @db.Text
+  callChecklist   Json?       // JSON checklist from discovery call
+  
+  // Conversion tracking
   convertedAt     DateTime?
   convertedUserId String?
   
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   
+  @@index([status])
+  @@index([assignedTo])
   @@map("leads")
 }
 
 enum LeadStatus {
   NEW_LEAD
+  ASSIGNED_TO_AM
   CONTACTED
+  CALL_SCHEDULED
+  CALL_COMPLETED
   QUALIFIED
   CONVERTED
   REJECTED
@@ -1423,6 +1786,8 @@ enum NotificationType {
   KYB_BADGE_EARNED
   KYB_EXPIRATION_REMINDER
   KYB_SUSPENDED
+  KYB_CHECKS_COMPLETE
+  KYB_INFO_REQUESTED
   SYSTEM
 }
 
@@ -1521,6 +1886,7 @@ enum ShipmentStatus {
   PENDING
   PICKED_UP
   IN_TRANSIT
+  CUSTOMS
   OUT_FOR_DELIVERY
   DELIVERED
   DELAYED
@@ -1906,6 +2272,43 @@ model SupplierKYB {
   riskScore               Int         @default(50)          // 0-100 scale (0=low risk, 100=high risk)
   riskAssessment          RiskAssessment?
   
+  // Automated Compliance Checks
+  sanctionsCheckStatus    String?     // PENDING, PASSED, FLAGGED, FAILED
+  sanctionsCheckResult    String?     @db.Text  // JSON: OFAC, UN, EU sanctions list results
+  sanctionsCheckAt        DateTime?
+  
+  pepCheckStatus          String?     // PENDING, PASSED, FLAGGED, FAILED
+  pepCheckResult          String?     @db.Text  // JSON: Politically Exposed Persons check
+  pepCheckAt              DateTime?
+  
+  adverseMediaCheckStatus String?     // PENDING, PASSED, FLAGGED, FAILED
+  adverseMediaCheckResult String?     @db.Text  // JSON: Negative news search results
+  adverseMediaCheckAt     DateTime?
+  
+  creditCheckStatus       String?     // PENDING, PASSED, FLAGGED, NOT_AVAILABLE
+  creditCheckResult       String?     @db.Text  // JSON: Business credit score
+  creditCheckAt           DateTime?
+  
+  registryCheckStatus     String?     // PENDING, VERIFIED, FAILED, NOT_AVAILABLE
+  registryCheckResult     String?     @db.Text  // JSON: Company registry verification
+  registryCheckAt         DateTime?
+  
+  documentAICheckStatus   String?     // PENDING, PASSED, FLAGGED, FAILED
+  documentAICheckResult   String?     @db.Text  // JSON: OCR + AI document validation
+  documentAICheckAt       DateTime?
+  
+  bankVerificationStatus  String?     // PENDING, VERIFIED, FAILED
+  bankVerificationResult  String?     @db.Text  // JSON: Micro-deposit verification
+  bankVerificationAt      DateTime?
+  
+  automatedChecksStartedAt DateTime?
+  automatedChecksCompletedAt DateTime?
+  
+  // Info Request (when admin needs more docs)
+  infoRequestReason       String?     @db.Text
+  infoRequestedAt         DateTime?
+  infoRequestedByAdminId  String?
+  
   // Admin Review
   reviewedByAdminId       String?
   reviewedByAdmin         User?       @relation("KYBReviewer", fields: [reviewedByAdminId], references: [id])
@@ -2124,13 +2527,17 @@ model CountryComplianceConfig {
 
 // KYB Enums
 enum KYBStatus {
-  PENDING
-  UNDER_REVIEW
-  DOCUMENTS_REQUIRED
-  VERIFIED
-  REJECTED
-  SUSPENDED
-  EXPIRED
+  DRAFT                           // User started but not submitted
+  PENDING                         // Submitted, waiting for processing
+  AUTOMATED_CHECKS_IN_PROGRESS    // Sanctions, PEP, adverse media checks running
+  AUTOMATED_CHECKS_COMPLETE       // Automated checks done, ready for manual review
+  UNDER_REVIEW                    // Admin is reviewing
+  INFO_REQUESTED                  // Admin requested additional documents/info
+  DOCUMENTS_REQUIRED              // Missing mandatory documents
+  VERIFIED                        // KYB approved
+  REJECTED                        // KYB rejected
+  SUSPENDED                       // Account suspended
+  EXPIRED                         // Annual renewal required
 }
 
 enum DocumentVerificationStatus {

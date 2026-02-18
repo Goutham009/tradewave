@@ -130,8 +130,8 @@ export default function EnhancedProcurementDashboard() {
             <Card className="p-6 bg-slate-800 border-slate-700">
               <QuotationComparisonMatrix 
                 requirementId={selectedRequirement.id}
-                onSendToBuyer={(quotationIds) => {
-                  console.log('Sending quotations to buyer:', quotationIds);
+                onSendToAdmin={(quotationIds) => {
+                  console.log('Sending quotations to admin for approval:', quotationIds);
                 }}
               />
             </Card>

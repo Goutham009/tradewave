@@ -8,7 +8,7 @@ import { ConsultationScheduler } from '@/components/admin/ConsultationScheduler'
 import { DocumentUploadManager } from '@/components/admin/DocumentUploadManager';
 import { BuyerCommunicationHistory } from '@/components/admin/BuyerCommunicationHistory';
 import { RequirementStatusTimeline } from '@/components/admin/RequirementStatusTimeline';
-import { Calendar, FileText, MessageSquare, Clock, Users, Package } from 'lucide-react';
+import { Calendar, FileText, MessageSquare, Clock, Users, Package, Scale } from 'lucide-react';
 
 interface Requirement {
   id: string;
@@ -180,6 +180,10 @@ export default function EnhancedAccountManagerDashboard() {
               <Clock className="w-4 h-4" />
               Status Timeline
             </TabsTrigger>
+            <TabsTrigger value="negotiations" className="flex items-center gap-2">
+              <Scale className="w-4 h-4" />
+              Negotiations
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="scheduler" className="mt-4">
@@ -209,6 +213,108 @@ export default function EnhancedAccountManagerDashboard() {
           <TabsContent value="timeline" className="mt-4">
             <Card className="p-6 bg-slate-800 border-slate-700">
               <RequirementStatusTimeline requirementId={selectedRequirement.id} />
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="negotiations" className="mt-4">
+            <Card className="p-6 bg-slate-800 border-slate-700">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <Scale className="w-5 h-5" />
+                Active Negotiations
+              </h3>
+              <div className="space-y-4">
+                {/* Sample negotiations */}
+                <div className="p-4 bg-slate-700/50 rounded-lg border border-slate-600">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-medium text-white">Price Negotiation - Steel Coils</p>
+                      <p className="text-sm text-slate-400">Supplier: Shanghai Steel Works</p>
+                    </div>
+                    <Badge className="bg-yellow-500/20 text-yellow-400">In Progress</Badge>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
+                    <div>
+                      <p className="text-slate-400">Original Quote</p>
+                      <p className="text-white font-medium">$450/ton</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">Buyer Counter</p>
+                      <p className="text-white font-medium">$420/ton</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">Latest Offer</p>
+                      <p className="text-green-400 font-medium">$435/ton</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <button className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded">
+                      Accept Offer
+                    </button>
+                    <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">
+                      Counter Offer
+                    </button>
+                    <button className="px-3 py-1 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded">
+                      Message Supplier
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-700/50 rounded-lg border border-slate-600">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-medium text-white">Delivery Terms - Cotton Fabric</p>
+                      <p className="text-sm text-slate-400">Supplier: Premium Textiles India</p>
+                    </div>
+                    <Badge className="bg-blue-500/20 text-blue-400">Awaiting Response</Badge>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
+                    <div>
+                      <p className="text-slate-400">Original Terms</p>
+                      <p className="text-white font-medium">45 days</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">Buyer Request</p>
+                      <p className="text-white font-medium">30 days</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">Status</p>
+                      <p className="text-blue-400 font-medium">Pending</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                    <button className="px-3 py-1 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded">
+                      Send Reminder
+                    </button>
+                    <button className="px-3 py-1 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded">
+                      View History
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-700/50 rounded-lg border border-green-600/50">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-medium text-white">Payment Terms - Electronic Components</p>
+                      <p className="text-sm text-slate-400">Supplier: ElecParts Japan</p>
+                    </div>
+                    <Badge className="bg-green-500/20 text-green-400">Agreed</Badge>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
+                    <div>
+                      <p className="text-slate-400">Original Terms</p>
+                      <p className="text-white font-medium">100% Upfront</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">Final Terms</p>
+                      <p className="text-green-400 font-medium">50% Upfront, 50% on Delivery</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">Agreed On</p>
+                      <p className="text-white font-medium">Feb 15, 2024</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </Card>
           </TabsContent>
         </Tabs>

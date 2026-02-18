@@ -8,6 +8,99 @@ function encryptBankAccount(accountNumber: string): string {
   return Buffer.from(accountNumber).toString('base64');
 }
 
+// Trigger automated compliance checks (simulated - in production, integrate with real services)
+async function triggerAutomatedChecks(kybId: string, businessName: string, registrationCountry: string) {
+  // Initialize all checks to PENDING
+  await prisma.supplierKYB.update({
+    where: { id: kybId },
+    data: {
+      status: 'AUTOMATED_CHECKS_IN_PROGRESS',
+      automatedChecksStartedAt: new Date(),
+      sanctionsCheckStatus: 'PENDING',
+      pepCheckStatus: 'PENDING',
+      adverseMediaCheckStatus: 'PENDING',
+      creditCheckStatus: 'PENDING',
+      registryCheckStatus: 'PENDING',
+      documentAICheckStatus: 'PENDING',
+      bankVerificationStatus: 'PENDING',
+    }
+  });
+
+  // Log the automated checks start
+  await prisma.verificationLog.create({
+    data: {
+      kybId,
+      action: 'AUTOMATED_CHECKS_STARTED',
+      actionDetails: `Automated compliance checks initiated for ${businessName}`
+    }
+  });
+
+  // In production, these would be async calls to external services:
+  // - OFAC, UN, EU sanctions list APIs
+  // - PEP screening services (World-Check, etc.)
+  // - Adverse media monitoring (LexisNexis, etc.)
+  // - Credit bureaus (Dun & Bradstreet, etc.)
+  // - Company registries (OpenCorporates, etc.)
+  // - Document AI verification (AWS Textract, Google Document AI, etc.)
+  // - Bank account verification (Plaid, Stripe, etc.)
+  
+  // For demo, simulate checks completing after a delay (in production, use webhooks or polling)
+  // This would be handled by a background job/queue system (Bull, SQS, etc.)
+  setTimeout(async () => {
+    try {
+      await prisma.supplierKYB.update({
+        where: { id: kybId },
+        data: {
+          status: 'AUTOMATED_CHECKS_COMPLETE',
+          automatedChecksCompletedAt: new Date(),
+          sanctionsCheckStatus: 'PASSED',
+          sanctionsCheckResult: JSON.stringify({ ofac: 'clear', un: 'clear', eu: 'clear' }),
+          sanctionsCheckAt: new Date(),
+          pepCheckStatus: 'PASSED',
+          pepCheckResult: JSON.stringify({ directors: [], matches: 0 }),
+          pepCheckAt: new Date(),
+          adverseMediaCheckStatus: 'PASSED',
+          adverseMediaCheckResult: JSON.stringify({ articles: [], riskScore: 0 }),
+          adverseMediaCheckAt: new Date(),
+          creditCheckStatus: 'PASSED',
+          creditCheckResult: JSON.stringify({ score: 75, rating: 'Good' }),
+          creditCheckAt: new Date(),
+          registryCheckStatus: 'VERIFIED',
+          registryCheckResult: JSON.stringify({ verified: true, status: 'Active' }),
+          registryCheckAt: new Date(),
+          documentAICheckStatus: 'PENDING', // Requires documents to be uploaded
+          bankVerificationStatus: 'PENDING', // Requires micro-deposit verification
+        }
+      });
+
+      await prisma.verificationLog.create({
+        data: {
+          kybId,
+          action: 'AUTOMATED_CHECKS_COMPLETE',
+          actionDetails: 'Automated compliance checks completed. Ready for manual review.'
+        }
+      });
+
+      // Notify admins that checks are complete
+      const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } });
+      for (const admin of admins) {
+        await prisma.notification.create({
+          data: {
+            userId: admin.id,
+            type: 'KYB_CHECKS_COMPLETE',
+            title: 'KYB Automated Checks Complete',
+            message: `${businessName} automated checks complete. Manual review required.`,
+            resourceType: 'kyb',
+            resourceId: kybId
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error completing automated checks:', error);
+    }
+  }, 5000); // Simulate 5 second delay for demo
+}
+
 // Get country-specific compliance items
 async function getCountryComplianceItems(countryCode: string) {
   const config = await prisma.countryComplianceConfig.findUnique({
@@ -253,6 +346,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Update User record with KYB status
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: {
+        kybStatus: 'SUBMITTED',
+        kybApplicationId: kyb.id,
+        kybSubmittedAt: new Date()
+      }
+    });
+
     // Notify admins
     const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } });
     for (const admin of admins) {
@@ -267,6 +370,9 @@ export async function POST(req: NextRequest) {
         }
       });
     }
+
+    // Trigger automated compliance checks (runs in background)
+    triggerAutomatedChecks(kyb.id, businessName, registrationCountry);
 
     // Fetch complete KYB with all relations
     const completeKYB = await prisma.supplierKYB.findUnique({

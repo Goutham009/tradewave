@@ -20,6 +20,7 @@ export async function createEscrow(params: CreateEscrowParams): Promise<EscrowRe
     const escrow = await prisma.escrowTransaction.create({
       data: {
         transactionId,
+        totalAmount: amount,
         amount,
         currency,
         status: 'PENDING',

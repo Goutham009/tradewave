@@ -3,27 +3,50 @@
 import { useState, useRef } from 'react';
 import { Upload, FileText, CheckCircle, XCircle, Clock, Trash2, Eye } from 'lucide-react';
 
+// ══════════════════════════════════════════════════════════════════════════════
+// KYB DOCUMENT REQUIREMENTS
+// ══════════════════════════════════════════════════════════════════════════════
+// IDENTITY DOCUMENTS (Must upload at least 1-2):
+//   - Trade License / Export-Import License with activities
+//   - Certificate of Incorporation
+//   - Memorandum of Association (MOA)
+//   - Certificate of Good Standing / Latest Registry Filing
+//
+// MANDATORY DOCUMENTS:
+//   - Proof of Business Address (utility bill, bank statement 3-6 months, or tenancy contract)
+//   - Tax ID / VAT Registration / Government-issued Tax Letter
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Identity Documents - User must upload at least 1-2 of these
+export const IDENTITY_DOCUMENT_TYPES = [
+  { value: 'TRADE_LICENSE', label: 'Trade License', description: 'Business trade license with listed activities' },
+  { value: 'EXPORT_IMPORT_LICENSE', label: 'Export/Import License', description: 'License for international trade activities' },
+  { value: 'CERTIFICATE_OF_INCORPORATION', label: 'Certificate of Incorporation', description: 'Official company registration certificate' },
+  { value: 'MEMORANDUM_OF_ASSOCIATION', label: 'Memorandum of Association (MOA)', description: 'Company constitution document' },
+  { value: 'CERTIFICATE_OF_GOOD_STANDING', label: 'Certificate of Good Standing', description: 'Or latest registry filing confirming active status' },
+];
+
+// Mandatory Documents - All must be uploaded
+export const MANDATORY_DOCUMENT_TYPES = [
+  { value: 'PROOF_OF_ADDRESS', label: 'Proof of Business Address', description: 'Utility bill, bank statement (within 3-6 months), or tenancy contract' },
+  { value: 'TAX_DOCUMENT', label: 'Tax Registration Document', description: 'Tax ID, VAT registration, or government-issued tax letter' },
+];
+
+// Optional/Supplementary Documents
+export const OPTIONAL_DOCUMENT_TYPES = [
+  { value: 'BANK_STATEMENT', label: 'Bank Statement', description: 'Recent business bank statement' },
+  { value: 'AUDITED_ACCOUNTS', label: 'Audited Financial Accounts', description: 'Latest audited financial statements' },
+  { value: 'ISO_CERTIFICATION', label: 'ISO Certification', description: 'Quality management certification' },
+  { value: 'INSURANCE_CERTIFICATE', label: 'Insurance Certificate', description: 'Business insurance documentation' },
+  { value: 'PRODUCT_CERTIFICATION', label: 'Product Certification', description: 'Product quality or safety certifications' },
+  { value: 'OTHER', label: 'Other Document', description: 'Any other supporting document' },
+];
+
+// Combined list for dropdown
 const DOCUMENT_TYPES = [
-  { value: 'BUSINESS_LICENSE', label: 'Business License' },
-  { value: 'TAX_CERTIFICATE', label: 'Tax Certificate' },
-  { value: 'REGISTRATION_CERTIFICATE', label: 'Registration Certificate' },
-  { value: 'INCORPORATION_CERTIFICATE', label: 'Incorporation Certificate' },
-  { value: 'BANK_STATEMENT', label: 'Bank Statement' },
-  { value: 'IDENTIFICATION', label: 'Identification Document' },
-  { value: 'UTILITY_BILL', label: 'Utility Bill (Address Proof)' },
-  { value: 'ARTICLES_OF_INCORPORATION', label: 'Articles of Incorporation' },
-  { value: 'MEMORANDUM_OF_ASSOCIATION', label: 'Memorandum of Association' },
-  { value: 'PARTNERSHIP_DEED', label: 'Partnership Deed' },
-  { value: 'TRUST_DEED', label: 'Trust Deed' },
-  { value: 'PROOF_OF_OWNERSHIP', label: 'Proof of Ownership' },
-  { value: 'INSURANCE_CERTIFICATE', label: 'Insurance Certificate' },
-  { value: 'PRODUCT_CERTIFICATION', label: 'Product Certification' },
-  { value: 'EXPORT_LICENSE', label: 'Export License' },
-  { value: 'IMPORT_LICENSE', label: 'Import License' },
-  { value: 'ISO_CERTIFICATION', label: 'ISO Certification' },
-  { value: 'AUDITED_ACCOUNTS', label: 'Audited Financial Accounts' },
-  { value: 'VAT_CERTIFICATE', label: 'VAT Certificate' },
-  { value: 'OTHER', label: 'Other Document' }
+  { group: 'Identity Documents (Required: 1-2)', items: IDENTITY_DOCUMENT_TYPES },
+  { group: 'Mandatory Documents', items: MANDATORY_DOCUMENT_TYPES },
+  { group: 'Optional Documents', items: OPTIONAL_DOCUMENT_TYPES },
 ];
 
 const STATUS_CONFIG: Record<string, { color: string; icon: any; label: string }> = {
@@ -106,7 +129,8 @@ export function KYBDocumentUpload({ kybId, documents, onUpload }: KYBDocumentUpl
   };
 
   const getDocumentTypeLabel = (type: string) => {
-    return DOCUMENT_TYPES.find(t => t.value === type)?.label || type;
+    const allTypes = [...IDENTITY_DOCUMENT_TYPES, ...MANDATORY_DOCUMENT_TYPES, ...OPTIONAL_DOCUMENT_TYPES];
+    return allTypes.find(t => t.value === type)?.label || type;
   };
 
   return (
@@ -122,8 +146,12 @@ export function KYBDocumentUpload({ kybId, documents, onUpload }: KYBDocumentUpl
             <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)}
               className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto">
               <option value="">Select document type</option>
-              {DOCUMENT_TYPES.map(type => (
-                <option key={type.value} value={type.value}>{type.label}</option>
+              {DOCUMENT_TYPES.map(group => (
+                <optgroup key={group.group} label={group.group}>
+                  {group.items.map(item => (
+                    <option key={item.value} value={item.value}>{item.label}</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             

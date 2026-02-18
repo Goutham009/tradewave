@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
     const escrow = await prisma.escrowTransaction.create({
       data: {
         transactionId,
+        totalAmount: amount,
         amount,
         currency: currency || 'USD',
         status: 'PENDING',

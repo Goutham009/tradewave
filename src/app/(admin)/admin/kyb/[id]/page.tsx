@@ -6,12 +6,17 @@ import { ArrowLeft, CheckCircle, XCircle, Clock, FileText, Shield, Globe, Buildi
 import Link from 'next/link';
 
 const STATUS_CONFIG: Record<string, { color: string; bgColor: string; label: string }> = {
-  PENDING: { color: 'text-yellow-600', bgColor: 'bg-yellow-100', label: 'Pending' },
+  DRAFT: { color: 'text-gray-600', bgColor: 'bg-gray-100', label: 'Draft' },
+  PENDING: { color: 'text-yellow-600', bgColor: 'bg-yellow-100', label: 'Submitted' },
+  AUTOMATED_CHECKS_IN_PROGRESS: { color: 'text-blue-600', bgColor: 'bg-blue-100', label: 'Auto Checks Running' },
+  AUTOMATED_CHECKS_COMPLETE: { color: 'text-indigo-600', bgColor: 'bg-indigo-100', label: 'Ready for Review' },
   UNDER_REVIEW: { color: 'text-blue-600', bgColor: 'bg-blue-100', label: 'Under Review' },
+  INFO_REQUESTED: { color: 'text-orange-600', bgColor: 'bg-orange-100', label: 'Info Requested' },
   DOCUMENTS_REQUIRED: { color: 'text-orange-600', bgColor: 'bg-orange-100', label: 'Docs Required' },
   VERIFIED: { color: 'text-green-600', bgColor: 'bg-green-100', label: 'Verified' },
   REJECTED: { color: 'text-red-600', bgColor: 'bg-red-100', label: 'Rejected' },
-  SUSPENDED: { color: 'text-gray-600', bgColor: 'bg-gray-100', label: 'Suspended' }
+  SUSPENDED: { color: 'text-gray-600', bgColor: 'bg-gray-100', label: 'Suspended' },
+  EXPIRED: { color: 'text-gray-600', bgColor: 'bg-gray-100', label: 'Expired' }
 };
 
 export default function AdminKYBReviewPage() {
@@ -31,7 +36,7 @@ export default function AdminKYBReviewPage() {
 
   const fetchKYB = async () => {
     try {
-      const res = await fetch(`/api/kyb/${params.id}/admin/review`);
+      const res = await fetch(`/api/admin/kyb/${params.id}/review`);
       const data = await res.json();
       setKyb(data);
     } catch (err) {
@@ -43,17 +48,21 @@ export default function AdminKYBReviewPage() {
 
   const handleSubmitReview = async () => {
     if (!decision) return;
-    if (decision === 'REJECT' && !rejectionReason) {
-      alert('Please provide a rejection reason');
+    if ((decision === 'REJECT' || decision === 'REQUEST_INFO') && !rejectionReason) {
+      alert('Please provide a reason');
       return;
     }
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/kyb/${params.id}/admin/review`, {
+      const res = await fetch(`/api/admin/kyb/${params.id}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ decision, adminNotes, rejectionReason })
+        body: JSON.stringify({ 
+          action: decision, 
+          notes: adminNotes, 
+          reason: rejectionReason 
+        })
       });
 
       if (res.ok) {

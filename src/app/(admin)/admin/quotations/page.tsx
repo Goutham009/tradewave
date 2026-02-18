@@ -62,6 +62,9 @@ interface Quotation {
   deliveryDays: number;
   rating: number;
   selected?: boolean;
+  adminMarginPercent?: number;
+  adminMarginAmount?: number;
+  buyerPrice?: number;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -91,6 +94,25 @@ export default function AdminQuotationsPage() {
   });
   const { subscribe } = useSocket();
 
+  const loadMockData = () => {
+    setQuotations([
+      { id: 'QUO-2024-001', requirementId: 'REQ-2024-004', supplierName: 'Steel Inc', supplierEmail: 'sales@steelinc.com', buyerName: 'Fashion Hub Ltd', buyerEmail: 'mike@fashion.com', requirementTitle: 'Textile Raw Materials - Cotton', category: 'Textiles', amount: 7200, unitPrice: 3.6, quantity: 2000, currency: 'USD', status: 'SUBMITTED', validUntil: '2024-02-15', createdAt: '2024-01-15', updatedAt: '2024-01-15', deliveryDays: 14, rating: 4.8 },
+      { id: 'QUO-2024-002', requirementId: 'REQ-2024-004', supplierName: 'Textile Masters', supplierEmail: 'sales@textilemasters.com', buyerName: 'Fashion Hub Ltd', buyerEmail: 'mike@fashion.com', requirementTitle: 'Textile Raw Materials - Cotton', category: 'Textiles', amount: 7800, unitPrice: 3.9, quantity: 2000, currency: 'USD', status: 'SUBMITTED', validUntil: '2024-02-20', createdAt: '2024-01-18', updatedAt: '2024-01-19', deliveryDays: 10, rating: 4.6 },
+      { id: 'QUO-2024-003', requirementId: 'REQ-2024-004', supplierName: 'Cotton World', supplierEmail: 'sales@cottonworld.com', buyerName: 'Fashion Hub Ltd', buyerEmail: 'mike@fashion.com', requirementTitle: 'Textile Raw Materials - Cotton', category: 'Textiles', amount: 6900, unitPrice: 3.45, quantity: 2000, currency: 'USD', status: 'SUBMITTED', validUntil: '2024-02-10', createdAt: '2024-01-12', updatedAt: '2024-01-14', deliveryDays: 21, rating: 4.3 },
+      { id: 'QUO-2024-004', requirementId: 'REQ-2024-005', supplierName: 'ChemPro Industries', supplierEmail: 'sales@chempro.com', buyerName: 'Tech Solutions Inc', buyerEmail: 'sarah@tech.com', requirementTitle: 'Chemical Compounds - Industrial', category: 'Chemicals', amount: 2800, unitPrice: 28, quantity: 100, currency: 'USD', status: 'VERIFIED', validUntil: '2024-02-05', createdAt: '2024-01-10', updatedAt: '2024-01-11', deliveryDays: 7, rating: 4.9 },
+      { id: 'QUO-2024-005', requirementId: 'REQ-2024-005', supplierName: 'Industrial Chemicals Co', supplierEmail: 'sales@indchem.com', buyerName: 'Tech Solutions Inc', buyerEmail: 'sarah@tech.com', requirementTitle: 'Chemical Compounds - Industrial', category: 'Chemicals', amount: 3100, unitPrice: 31, quantity: 100, currency: 'USD', status: 'VERIFIED', validUntil: '2024-02-25', createdAt: '2024-01-20', updatedAt: '2024-01-20', deliveryDays: 5, rating: 4.7 },
+      { id: 'QUO-2024-006', requirementId: 'REQ-2024-005', supplierName: 'SafeChem Ltd', supplierEmail: 'sales@safechem.com', buyerName: 'Tech Solutions Inc', buyerEmail: 'sarah@tech.com', requirementTitle: 'Chemical Compounds - Industrial', category: 'Chemicals', amount: 2950, unitPrice: 29.5, quantity: 100, currency: 'USD', status: 'VERIFIED', validUntil: '2024-02-28', createdAt: '2024-01-21', updatedAt: '2024-01-21', deliveryDays: 10, rating: 4.5 },
+      { id: 'QUO-2024-007', requirementId: 'REQ-2024-001', supplierName: 'Steel Industries Ltd', supplierEmail: 'sales@steelindustries.com', buyerName: 'Acme Corporation', buyerEmail: 'john@acme.com', requirementTitle: 'Steel Components for Manufacturing', category: 'Raw Materials', amount: 4800, unitPrice: 4.8, quantity: 1000, currency: 'USD', status: 'SENT_TO_BUYER', validUntil: '2024-02-15', createdAt: '2024-01-22', updatedAt: '2024-01-23', deliveryDays: 12, rating: 4.8 },
+    ]);
+    setStats({
+      total: 1247,
+      pending: 234,
+      accepted: 892,
+      rejected: 121,
+      totalValue: 8540000,
+    });
+  };
+
   const fetchQuotations = useCallback(async () => {
     try {
       setLoading(true);
@@ -103,30 +125,17 @@ export default function AdminQuotationsPage() {
       const response = await fetch(`/api/admin/quotations?${params}`);
       const data = await response.json();
       
-      if (data.status === 'success') {
+      if (data.status === 'success' && data.data.quotations?.length > 0) {
         setQuotations(data.data.quotations);
         setTotalPages(data.data.pagination?.pages || 1);
         setStats(data.data.stats || stats);
+      } else {
+        // Use mock data when API returns empty
+        loadMockData();
       }
     } catch (error) {
       console.error('Failed to fetch quotations:', error);
-      // Mock data - quotations grouped by requirement for admin to verify and send to buyer
-      setQuotations([
-        { id: 'QUO-2024-001', requirementId: 'REQ-2024-004', supplierName: 'Steel Inc', supplierEmail: 'sales@steelinc.com', buyerName: 'Fashion Hub Ltd', buyerEmail: 'mike@fashion.com', requirementTitle: 'Textile Raw Materials - Cotton', category: 'Textiles', amount: 7200, unitPrice: 3.6, quantity: 2000, currency: 'USD', status: 'SUBMITTED', validUntil: '2024-02-15', createdAt: '2024-01-15', updatedAt: '2024-01-15', deliveryDays: 14, rating: 4.8 },
-        { id: 'QUO-2024-002', requirementId: 'REQ-2024-004', supplierName: 'Textile Masters', supplierEmail: 'sales@textilemasters.com', buyerName: 'Fashion Hub Ltd', buyerEmail: 'mike@fashion.com', requirementTitle: 'Textile Raw Materials - Cotton', category: 'Textiles', amount: 7800, unitPrice: 3.9, quantity: 2000, currency: 'USD', status: 'SUBMITTED', validUntil: '2024-02-20', createdAt: '2024-01-18', updatedAt: '2024-01-19', deliveryDays: 10, rating: 4.6 },
-        { id: 'QUO-2024-003', requirementId: 'REQ-2024-004', supplierName: 'Cotton World', supplierEmail: 'sales@cottonworld.com', buyerName: 'Fashion Hub Ltd', buyerEmail: 'mike@fashion.com', requirementTitle: 'Textile Raw Materials - Cotton', category: 'Textiles', amount: 6900, unitPrice: 3.45, quantity: 2000, currency: 'USD', status: 'SUBMITTED', validUntil: '2024-02-10', createdAt: '2024-01-12', updatedAt: '2024-01-14', deliveryDays: 21, rating: 4.3 },
-        { id: 'QUO-2024-004', requirementId: 'REQ-2024-005', supplierName: 'ChemPro Industries', supplierEmail: 'sales@chempro.com', buyerName: 'Tech Solutions Inc', buyerEmail: 'sarah@tech.com', requirementTitle: 'Chemical Compounds - Industrial', category: 'Chemicals', amount: 2800, unitPrice: 28, quantity: 100, currency: 'USD', status: 'VERIFIED', validUntil: '2024-02-05', createdAt: '2024-01-10', updatedAt: '2024-01-11', deliveryDays: 7, rating: 4.9 },
-        { id: 'QUO-2024-005', requirementId: 'REQ-2024-005', supplierName: 'Industrial Chemicals Co', supplierEmail: 'sales@indchem.com', buyerName: 'Tech Solutions Inc', buyerEmail: 'sarah@tech.com', requirementTitle: 'Chemical Compounds - Industrial', category: 'Chemicals', amount: 3100, unitPrice: 31, quantity: 100, currency: 'USD', status: 'VERIFIED', validUntil: '2024-02-25', createdAt: '2024-01-20', updatedAt: '2024-01-20', deliveryDays: 5, rating: 4.7 },
-        { id: 'QUO-2024-006', requirementId: 'REQ-2024-005', supplierName: 'SafeChem Ltd', supplierEmail: 'sales@safechem.com', buyerName: 'Tech Solutions Inc', buyerEmail: 'sarah@tech.com', requirementTitle: 'Chemical Compounds - Industrial', category: 'Chemicals', amount: 2950, unitPrice: 29.5, quantity: 100, currency: 'USD', status: 'VERIFIED', validUntil: '2024-02-28', createdAt: '2024-01-21', updatedAt: '2024-01-21', deliveryDays: 10, rating: 4.5 },
-        { id: 'QUO-2024-007', requirementId: 'REQ-2024-001', supplierName: 'Steel Industries Ltd', supplierEmail: 'sales@steelindustries.com', buyerName: 'Acme Corporation', buyerEmail: 'john@acme.com', requirementTitle: 'Steel Components for Manufacturing', category: 'Raw Materials', amount: 4800, unitPrice: 4.8, quantity: 1000, currency: 'USD', status: 'SENT_TO_BUYER', validUntil: '2024-02-15', createdAt: '2024-01-22', updatedAt: '2024-01-23', deliveryDays: 12, rating: 4.8 },
-      ]);
-      setStats({
-        total: 1247,
-        pending: 234,
-        accepted: 892,
-        rejected: 121,
-        totalValue: 8540000,
-      });
+      loadMockData();
     } finally {
       setLoading(false);
     }
@@ -170,6 +179,38 @@ export default function AdminQuotationsPage() {
   const [showSendModal, setShowSendModal] = useState(false);
   const [currentRequirementId, setCurrentRequirementId] = useState<string | null>(null);
   const [sendingToBuyer, setSendingToBuyer] = useState(false);
+  const [showMarginModal, setShowMarginModal] = useState(false);
+  const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
+  const [marginPercent, setMarginPercent] = useState<number>(10);
+
+  const handleSetMargin = (quoteId: string) => {
+    const quote = quotations.find(q => q.id === quoteId);
+    if (quote) {
+      setMarginPercent(quote.adminMarginPercent || 10);
+      setEditingQuoteId(quoteId);
+      setShowMarginModal(true);
+    }
+  };
+
+  const applyMargin = () => {
+    if (!editingQuoteId) return;
+    
+    setQuotations(prev => prev.map(q => {
+      if (q.id === editingQuoteId) {
+        const marginAmount = q.amount * (marginPercent / 100);
+        return {
+          ...q,
+          adminMarginPercent: marginPercent,
+          adminMarginAmount: marginAmount,
+          buyerPrice: q.amount + marginAmount,
+        };
+      }
+      return q;
+    }));
+    
+    setShowMarginModal(false);
+    setEditingQuoteId(null);
+  };
 
   const filteredQuotations = quotations.filter(q =>
     q.id.toLowerCase().includes(search.toLowerCase()) ||
@@ -458,8 +499,16 @@ export default function AdminQuotationsPage() {
                               <p className="text-xs text-slate-500">{q.supplierEmail}</p>
                             </div>
                             <div className="text-center">
-                              <p className="text-lg font-bold text-white">{formatCurrency(q.amount, q.currency)}</p>
-                              <p className="text-xs text-slate-400">{formatCurrency(q.unitPrice, q.currency)}/unit</p>
+                              <div>
+                                <p className="text-lg font-bold text-white">{formatCurrency(q.amount, q.currency)}</p>
+                                <p className="text-xs text-slate-400">Supplier Price</p>
+                              </div>
+                              {q.buyerPrice && (
+                                <div className="mt-1">
+                                  <p className="text-sm font-bold text-green-400">{formatCurrency(q.buyerPrice, q.currency)}</p>
+                                  <p className="text-xs text-green-500">+{q.adminMarginPercent}% margin</p>
+                                </div>
+                              )}
                             </div>
                             <div className="text-center">
                               <p className="text-sm text-slate-300">{q.deliveryDays} days</p>
@@ -498,6 +547,17 @@ export default function AdminQuotationsPage() {
                                     <ThumbsDown className="h-4 w-4" />
                                   </Button>
                                 </>
+                              )}
+                              {isVerified && !isSent && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleSetMargin(q.id)}
+                                  className="border-yellow-600 text-yellow-400 hover:bg-yellow-600/20"
+                                >
+                                  <DollarSign className="h-4 w-4 mr-1" />
+                                  {q.adminMarginPercent ? `${q.adminMarginPercent}%` : 'Add Margin'}
+                                </Button>
                               )}
                               <Button variant="ghost" size="sm" className="text-slate-400">
                                 <Eye className="h-4 w-4" />
@@ -582,6 +642,91 @@ export default function AdminQuotationsPage() {
                   Send to Buyer
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Margin Edit Modal */}
+      <Dialog open={showMarginModal} onOpenChange={setShowMarginModal}>
+        <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Set Admin Margin</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Add your margin percentage to this quote before sending to buyer.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingQuoteId && (
+            <div className="space-y-4">
+              {(() => {
+                const quote = quotations.find(q => q.id === editingQuoteId);
+                if (!quote) return null;
+                const marginAmount = quote.amount * (marginPercent / 100);
+                const buyerPrice = quote.amount + marginAmount;
+                
+                return (
+                  <>
+                    <div className="bg-slate-900 rounded-lg p-4">
+                      <p className="font-medium text-white">{quote.supplierName}</p>
+                      <p className="text-sm text-slate-400">Supplier Price: {formatCurrency(quote.amount, quote.currency)}</p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-sm font-medium text-slate-300">Margin Percentage</label>
+                      <div className="flex items-center gap-4">
+                        <Input
+                          type="number"
+                          value={marginPercent}
+                          onChange={(e) => setMarginPercent(Number(e.target.value))}
+                          min={0}
+                          max={50}
+                          className="bg-slate-700 border-slate-600 text-white w-24"
+                        />
+                        <span className="text-slate-400">%</span>
+                        <div className="flex gap-2">
+                          {[5, 10, 15, 20].map(p => (
+                            <Button
+                              key={p}
+                              size="sm"
+                              variant={marginPercent === p ? 'default' : 'outline'}
+                              onClick={() => setMarginPercent(p)}
+                              className={marginPercent === p ? 'bg-red-600' : 'border-slate-600 text-slate-300'}
+                            >
+                              {p}%
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Supplier Price:</span>
+                        <span className="text-white">{formatCurrency(quote.amount, quote.currency)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Your Margin ({marginPercent}%):</span>
+                        <span className="text-green-400">+{formatCurrency(marginAmount, quote.currency)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-slate-700 pt-2">
+                        <span className="text-white font-medium">Buyer Price:</span>
+                        <span className="text-white font-bold">{formatCurrency(buyerPrice, quote.currency)}</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowMarginModal(false)} className="border-slate-600 text-slate-300">
+              Cancel
+            </Button>
+            <Button onClick={applyMargin} className="bg-green-600 hover:bg-green-700">
+              <DollarSign className="h-4 w-4 mr-2" />
+              Apply Margin
             </Button>
           </DialogFooter>
         </DialogContent>

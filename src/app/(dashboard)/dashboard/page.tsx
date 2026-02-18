@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { WelcomeTour } from '@/components/buyer/WelcomeTour';
 import {
   FileText,
   Package,
@@ -154,10 +156,30 @@ const getStatusBadge = (status: string) => {
 };
 
 export default function DashboardPage() {
+  const { data: session } = useSession();
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<'delivery' | 'created' | 'value'>('delivery');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showWelcomeTour, setShowWelcomeTour] = useState(false);
+
+  // Check if first-time login
+  useEffect(() => {
+    const tourDismissed = localStorage.getItem('tradewave_tour_completed');
+    if (!tourDismissed) {
+      setShowWelcomeTour(true);
+    }
+  }, []);
+
+  const handleTourComplete = () => {
+    localStorage.setItem('tradewave_tour_completed', 'true');
+    setShowWelcomeTour(false);
+  };
+
+  const handleTourDismiss = () => {
+    localStorage.setItem('tradewave_tour_completed', 'true');
+    setShowWelcomeTour(false);
+  };
 
   // Sort and filter orders
   const filteredOrders = mockLiveOrders
@@ -198,14 +220,49 @@ export default function DashboardPage() {
     }, 0) / activeOrders.length
   );
 
+  const kybStatus = (session?.user as any)?.kybStatus;
+  const isKybDone = kybStatus === 'COMPLETED';
+
   return (
     <div className="space-y-8">
+      {/* Welcome Tour for first-time users */}
+      {showWelcomeTour && (
+        <WelcomeTour
+          userName={session?.user?.name || 'there'}
+          userRole={(session?.user as any)?.role || 'BUYER'}
+          onComplete={handleTourComplete}
+          onDismiss={handleTourDismiss}
+        />
+      )}
+
+      {/* KYB Banner — informational, shown to ALL users who haven't completed KYB */}
+      {!isKybDone && (
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 shrink-0">
+                <AlertCircle className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-blue-900">Complete KYB to complete your first order</h3>
+                <p className="text-sm text-blue-700 mt-0.5">
+                  Verify your business to accept quotes, receive requirements, and start trading on Tradewave.
+                </p>
+              </div>
+              <Link href="/kyb/submit">
+                <Button size="sm" variant="gradient">Complete KYB</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back! Here&apos;s an overview of your trade activities.
+            Welcome back{session?.user?.name ? `, ${session.user.name}` : ''}! Here&apos;s an overview of your trade activities.
           </p>
         </div>
         <Link href="/requirements/new">

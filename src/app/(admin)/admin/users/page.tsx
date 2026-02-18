@@ -43,6 +43,17 @@ interface User {
   transactionCount: number;
 }
 
+const getMockUsers = (): User[] => [
+  { id: '1', name: 'John Doe', email: 'john@example.com', role: 'BUYER', companyName: 'Acme Corp', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-15', lastLogin: '2024-01-20', transactionCount: 15 },
+  { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'SUPPLIER', companyName: 'Steel Inc', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-10', lastLogin: '2024-01-19', transactionCount: 42 },
+  { id: '3', name: 'Bob Wilson', email: 'bob@example.com', role: 'BUYER', companyName: 'Trade Co', verified: false, kycStatus: 'PENDING', createdAt: '2024-01-18', lastLogin: '2024-01-18', transactionCount: 0 },
+  { id: '4', name: 'Alice Brown', email: 'alice@example.com', role: 'SUPPLIER', companyName: 'Metals Ltd', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-05', lastLogin: '2024-01-20', transactionCount: 28 },
+  { id: '5', name: 'Charlie Davis', email: 'charlie@example.com', role: 'BUYER', companyName: 'Import Hub', verified: false, kycStatus: 'REJECTED', createdAt: '2024-01-12', lastLogin: null, transactionCount: 0 },
+  { id: '6', name: 'Sarah Johnson', email: 'sarah@example.com', role: 'SUPPLIER', companyName: 'Global Exports', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-08', lastLogin: '2024-01-21', transactionCount: 35 },
+  { id: '7', name: 'Michael Chen', email: 'michael@example.com', role: 'BUYER', companyName: 'Pacific Trading', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-02', lastLogin: '2024-01-20', transactionCount: 67 },
+  { id: '8', name: 'Emily Watson', email: 'emily@example.com', role: 'SUPPLIER', companyName: 'Premium Goods Co', verified: false, kycStatus: 'PENDING', createdAt: '2024-01-19', lastLogin: '2024-01-19', transactionCount: 0 },
+];
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,20 +77,16 @@ export default function AdminUsersPage() {
       const response = await fetch(`/api/admin/users?${params}`);
       const data = await response.json();
       
-      if (data.status === 'success') {
+      if (data.status === 'success' && data.data.users?.length > 0) {
         setUsers(data.data.users);
         setTotalPages(data.data.pagination?.pages || 1);
+      } else {
+        // Use mock data when no users returned
+        setUsers(getMockUsers());
       }
     } catch (error) {
       console.error('Failed to fetch users:', error);
-      // Mock data for demo
-      setUsers([
-        { id: '1', name: 'John Doe', email: 'john@example.com', role: 'BUYER', companyName: 'Acme Corp', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-15', lastLogin: '2024-01-20', transactionCount: 15 },
-        { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'SUPPLIER', companyName: 'Steel Inc', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-10', lastLogin: '2024-01-19', transactionCount: 42 },
-        { id: '3', name: 'Bob Wilson', email: 'bob@example.com', role: 'BUYER', companyName: 'Trade Co', verified: false, kycStatus: 'PENDING', createdAt: '2024-01-18', lastLogin: '2024-01-18', transactionCount: 0 },
-        { id: '4', name: 'Alice Brown', email: 'alice@example.com', role: 'SUPPLIER', companyName: 'Metals Ltd', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-05', lastLogin: '2024-01-20', transactionCount: 28 },
-        { id: '5', name: 'Charlie Davis', email: 'charlie@example.com', role: 'BUYER', companyName: 'Import Hub', verified: false, kycStatus: 'REJECTED', createdAt: '2024-01-12', lastLogin: null, transactionCount: 0 },
-      ]);
+      setUsers(getMockUsers());
     } finally {
       setLoading(false);
     }
@@ -291,7 +298,10 @@ export default function AdminUsersPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
-                            <DropdownMenuItem className="text-slate-300 hover:bg-slate-700">
+                            <DropdownMenuItem 
+                              className="text-slate-300 hover:bg-slate-700"
+                              onClick={() => window.location.href = `/admin/users/${user.id}`}
+                            >
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>

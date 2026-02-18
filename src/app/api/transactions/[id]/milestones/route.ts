@@ -23,7 +23,7 @@ export async function GET(
         escrow: true,
         shipment: true,
         milestones: {
-          orderBy: { createdAt: 'asc' },
+          orderBy: { timestamp: 'asc' },
         },
       },
     });

@@ -16,6 +16,7 @@ export default async function AdminLayout({
     redirect('/admin/login');
   }
 
+  // Only allow ADMIN role
   if (session.user.role !== 'ADMIN') {
     redirect('/dashboard');
   }

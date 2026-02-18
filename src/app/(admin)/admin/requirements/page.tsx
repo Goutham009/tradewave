@@ -47,19 +47,24 @@ interface Requirement {
   title: string;
   description: string;
   category: string;
-  status: 'NEW' | 'SENT_TO_SUPPLIERS' | 'QUOTES_RECEIVED' | 'QUOTES_SENT_TO_BUYER' | 'COMPLETED';
+  status: 'PENDING_AM_VERIFICATION' | 'PENDING_ADMIN_REVIEW' | 'VERIFIED' | 'QUOTES_PENDING' | 'QUOTATIONS_READY' | 'ACCEPTED' | 'COMPLETED';
   quantity: number;
   unit: string;
-  targetPrice: number | null;
+  budgetMin: number | null;
+  budgetMax: number | null;
   currency: string;
   deliveryLocation: string;
+  deliveryDeadline: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  amVerified: boolean;
+  adminReviewed: boolean;
   buyer: {
     id: string;
     name: string;
     email: string;
     companyName: string;
   };
+  accountManager?: { id: string; name: string };
   suppliersContacted: number;
   quotesReceived: number;
   createdAt: string;
@@ -78,10 +83,12 @@ interface Supplier {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
-  NEW: { label: 'New', color: 'bg-blue-500/20 text-blue-400', icon: Package },
-  SENT_TO_SUPPLIERS: { label: 'Sent to Suppliers', color: 'bg-purple-500/20 text-purple-400', icon: Send },
-  QUOTES_RECEIVED: { label: 'Quotes Received', color: 'bg-yellow-500/20 text-yellow-400', icon: FileText },
-  QUOTES_SENT_TO_BUYER: { label: 'Quotes Sent', color: 'bg-cyan-500/20 text-cyan-400', icon: CheckCircle },
+  PENDING_AM_VERIFICATION: { label: 'Pending AM', color: 'bg-slate-500/20 text-slate-400', icon: Clock },
+  PENDING_ADMIN_REVIEW: { label: 'Pending Review', color: 'bg-blue-500/20 text-blue-400', icon: Package },
+  VERIFIED: { label: 'Verified', color: 'bg-purple-500/20 text-purple-400', icon: CheckCircle },
+  QUOTES_PENDING: { label: 'Quotes Pending', color: 'bg-yellow-500/20 text-yellow-400', icon: Send },
+  QUOTATIONS_READY: { label: 'Quotes Ready', color: 'bg-cyan-500/20 text-cyan-400', icon: FileText },
+  ACCEPTED: { label: 'Accepted', color: 'bg-green-500/20 text-green-400', icon: CheckCircle },
   COMPLETED: { label: 'Completed', color: 'bg-green-500/20 text-green-400', icon: CheckCircle },
 };
 
@@ -93,11 +100,11 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 const mockRequirements: Requirement[] = [
-  { id: 'REQ-2024-001', title: 'Steel Components for Manufacturing', description: 'High-quality steel sheets 2mm thickness', category: 'Raw Materials', status: 'NEW', quantity: 1000, unit: 'kg', targetPrice: 5000, currency: 'USD', deliveryLocation: 'New York, USA', priority: 'HIGH', buyer: { id: 'b1', name: 'John Smith', email: 'john@acme.com', companyName: 'Acme Corporation' }, suppliersContacted: 0, quotesReceived: 0, createdAt: '2024-01-20T10:30:00Z' },
-  { id: 'REQ-2024-002', title: 'Electronic Circuit Boards - PCB', description: 'Double-layer PCB boards for IoT devices', category: 'Electronics', status: 'NEW', quantity: 500, unit: 'pieces', targetPrice: 2500, currency: 'USD', deliveryLocation: 'Los Angeles, USA', priority: 'MEDIUM', buyer: { id: 'b2', name: 'Sarah Johnson', email: 'sarah@tech.com', companyName: 'Tech Solutions Inc' }, suppliersContacted: 0, quotesReceived: 0, createdAt: '2024-01-19T14:20:00Z' },
-  { id: 'REQ-2024-003', title: 'Industrial Machinery Parts', description: 'Replacement gears and bearings', category: 'Machinery', status: 'SENT_TO_SUPPLIERS', quantity: 50, unit: 'pieces', targetPrice: 15000, currency: 'USD', deliveryLocation: 'Chicago, USA', priority: 'URGENT', buyer: { id: 'b1', name: 'John Smith', email: 'john@acme.com', companyName: 'Acme Corporation' }, suppliersContacted: 5, quotesReceived: 0, createdAt: '2024-01-18T09:15:00Z' },
-  { id: 'REQ-2024-004', title: 'Textile Raw Materials - Cotton', description: 'Premium quality cotton fabric', category: 'Textiles', status: 'QUOTES_RECEIVED', quantity: 2000, unit: 'meters', targetPrice: 8000, currency: 'USD', deliveryLocation: 'Miami, USA', priority: 'LOW', buyer: { id: 'b3', name: 'Mike Davis', email: 'mike@fashion.com', companyName: 'Fashion Hub Ltd' }, suppliersContacted: 4, quotesReceived: 3, createdAt: '2024-01-17T16:45:00Z' },
-  { id: 'REQ-2024-005', title: 'Chemical Compounds - Industrial', description: 'Sodium hydroxide solution 50%', category: 'Chemicals', status: 'QUOTES_SENT_TO_BUYER', quantity: 100, unit: 'liters', targetPrice: 3000, currency: 'USD', deliveryLocation: 'Houston, USA', priority: 'MEDIUM', buyer: { id: 'b2', name: 'Sarah Johnson', email: 'sarah@tech.com', companyName: 'Tech Solutions Inc' }, suppliersContacted: 3, quotesReceived: 3, createdAt: '2024-01-15T11:00:00Z' },
+  { id: 'REQ-2024-001', title: 'Steel Coils - Grade A', description: 'Hot rolled steel coils for automotive manufacturing', category: 'Steel', status: 'PENDING_ADMIN_REVIEW', quantity: 500, unit: 'tons', budgetMin: 400, budgetMax: 450, currency: 'USD', deliveryLocation: 'Detroit, USA', deliveryDeadline: '2024-03-15', priority: 'HIGH', amVerified: true, adminReviewed: false, buyer: { id: 'b1', name: 'John Smith', email: 'john@acmecorp.com', companyName: 'Acme Corporation' }, accountManager: { id: 'am1', name: 'Sarah Johnson' }, suppliersContacted: 0, quotesReceived: 0, createdAt: '2024-02-15T10:30:00Z' },
+  { id: 'REQ-2024-002', title: 'Cotton Fabric - Premium Quality', description: '100% cotton fabric for garment production', category: 'Textiles', status: 'VERIFIED', quantity: 10000, unit: 'meters', budgetMin: 2, budgetMax: 3, currency: 'USD', deliveryLocation: 'Los Angeles, USA', deliveryDeadline: '2024-03-20', priority: 'MEDIUM', amVerified: true, adminReviewed: true, buyer: { id: 'b2', name: 'Lisa Wang', email: 'lisa@globalimports.com', companyName: 'Global Imports LLC' }, accountManager: { id: 'am1', name: 'Sarah Johnson' }, suppliersContacted: 0, quotesReceived: 0, createdAt: '2024-02-14T14:20:00Z' },
+  { id: 'REQ-2024-003', title: 'Electronic Components - Capacitors', description: 'Ceramic capacitors 100uF, 50V', category: 'Electronics', status: 'QUOTES_PENDING', quantity: 50000, unit: 'pcs', budgetMin: 0.05, budgetMax: 0.08, currency: 'USD', deliveryLocation: 'Singapore', deliveryDeadline: '2024-03-10', priority: 'HIGH', amVerified: true, adminReviewed: true, buyer: { id: 'b3', name: 'Wei Lin', email: 'wei@asiamart.sg', companyName: 'Asia Mart Pte Ltd' }, accountManager: { id: 'am2', name: 'Michael Chen' }, suppliersContacted: 3, quotesReceived: 2, createdAt: '2024-02-10T09:15:00Z' },
+  { id: 'REQ-2024-004', title: 'Industrial Chemicals - Sulfuric Acid', description: 'Technical grade sulfuric acid 98%', category: 'Chemicals', status: 'PENDING_AM_VERIFICATION', quantity: 100, unit: 'tons', budgetMin: 200, budgetMax: 250, currency: 'USD', deliveryLocation: 'Houston, USA', deliveryDeadline: '2024-04-15', priority: 'LOW', amVerified: false, adminReviewed: false, buyer: { id: 'b1', name: 'John Smith', email: 'john@acmecorp.com', companyName: 'Acme Corporation' }, accountManager: { id: 'am1', name: 'Sarah Johnson' }, suppliersContacted: 0, quotesReceived: 0, createdAt: '2024-02-12T16:45:00Z' },
+  { id: 'REQ-2024-005', title: 'Aluminum Sheets - Aircraft Grade', description: '2024-T3 aluminum alloy sheets', category: 'Metals', status: 'QUOTATIONS_READY', quantity: 200, unit: 'sheets', budgetMin: 150, budgetMax: 200, currency: 'USD', deliveryLocation: 'Seattle, USA', deliveryDeadline: '2024-03-25', priority: 'URGENT', amVerified: true, adminReviewed: true, buyer: { id: 'b4', name: 'Robert Brown', email: 'robert@aerospace.com', companyName: 'Aerospace Parts Inc' }, accountManager: { id: 'am2', name: 'Michael Chen' }, suppliersContacted: 4, quotesReceived: 4, createdAt: '2024-02-08T11:00:00Z' },
 ];
 
 const mockSuppliers: Supplier[] = [
@@ -122,10 +129,29 @@ export default function AdminRequirementsPage() {
 
   const stats = {
     total: requirements.length,
-    new: requirements.filter(r => r.status === 'NEW').length,
-    sentToSuppliers: requirements.filter(r => r.status === 'SENT_TO_SUPPLIERS').length,
-    quotesReceived: requirements.filter(r => r.status === 'QUOTES_RECEIVED').length,
-    completed: requirements.filter(r => r.status === 'COMPLETED' || r.status === 'QUOTES_SENT_TO_BUYER').length,
+    pendingReview: requirements.filter(r => r.status === 'PENDING_ADMIN_REVIEW').length,
+    verified: requirements.filter(r => r.status === 'VERIFIED').length,
+    quotesPending: requirements.filter(r => r.status === 'QUOTES_PENDING').length,
+    quotationsReady: requirements.filter(r => r.status === 'QUOTATIONS_READY').length,
+  };
+
+  const handleApproveAndSendToProcurement = async (reqId: string) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/admin/requirements/${reqId}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve', sendTo: 'procurement' }),
+      });
+      if (response.ok) {
+        setRequirements(prev => prev.map(req => 
+          req.id === reqId ? { ...req, status: 'VERIFIED' as const, adminReviewed: true } : req
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to approve requirement:', error);
+    }
+    setLoading(false);
   };
 
   const filteredRequirements = requirements.filter(req => {
@@ -203,7 +229,7 @@ export default function AdminRequirementsPage() {
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-5">
-        <Card className="bg-slate-800 border-slate-700">
+        <Card className="bg-slate-800 border-slate-700 cursor-pointer hover:border-slate-500/50" onClick={() => setStatusFilter('all')}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -214,47 +240,47 @@ export default function AdminRequirementsPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-800 border-slate-700 cursor-pointer hover:border-blue-500/50" onClick={() => setStatusFilter('NEW')}>
+        <Card className="bg-slate-800 border-slate-700 cursor-pointer hover:border-blue-500/50" onClick={() => setStatusFilter('PENDING_ADMIN_REVIEW')}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-400">New Requirements</p>
-                <p className="text-2xl font-bold text-blue-400">{stats.new}</p>
+                <p className="text-xs text-slate-400">Pending Review</p>
+                <p className="text-2xl font-bold text-blue-400">{stats.pendingReview}</p>
               </div>
               <AlertCircle className="h-8 w-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-800 border-slate-700 cursor-pointer hover:border-purple-500/50" onClick={() => setStatusFilter('SENT_TO_SUPPLIERS')}>
+        <Card className="bg-slate-800 border-slate-700 cursor-pointer hover:border-purple-500/50" onClick={() => setStatusFilter('VERIFIED')}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-400">Sent to Suppliers</p>
-                <p className="text-2xl font-bold text-purple-400">{stats.sentToSuppliers}</p>
+                <p className="text-xs text-slate-400">Verified (Ready)</p>
+                <p className="text-2xl font-bold text-purple-400">{stats.verified}</p>
               </div>
-              <Send className="h-8 w-8 text-purple-600" />
+              <CheckCircle className="h-8 w-8 text-purple-600" />
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-800 border-slate-700 cursor-pointer hover:border-yellow-500/50" onClick={() => setStatusFilter('QUOTES_RECEIVED')}>
+        <Card className="bg-slate-800 border-slate-700 cursor-pointer hover:border-yellow-500/50" onClick={() => setStatusFilter('QUOTES_PENDING')}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-400">Quotes Received</p>
-                <p className="text-2xl font-bold text-yellow-400">{stats.quotesReceived}</p>
+                <p className="text-xs text-slate-400">Quotes Pending</p>
+                <p className="text-2xl font-bold text-yellow-400">{stats.quotesPending}</p>
               </div>
-              <FileText className="h-8 w-8 text-yellow-600" />
+              <Send className="h-8 w-8 text-yellow-600" />
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-800 border-slate-700 cursor-pointer hover:border-green-500/50" onClick={() => setStatusFilter('QUOTES_SENT_TO_BUYER')}>
+        <Card className="bg-slate-800 border-slate-700 cursor-pointer hover:border-cyan-500/50" onClick={() => setStatusFilter('QUOTATIONS_READY')}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-400">Completed</p>
-                <p className="text-2xl font-bold text-green-400">{stats.completed}</p>
+                <p className="text-xs text-slate-400">Quotes Ready</p>
+                <p className="text-2xl font-bold text-cyan-400">{stats.quotationsReady}</p>
               </div>
-              <CheckCircle className="h-8 w-8 text-green-600" />
+              <FileText className="h-8 w-8 text-cyan-600" />
             </div>
           </CardContent>
         </Card>
@@ -281,10 +307,11 @@ export default function AdminRequirementsPage() {
               </SelectTrigger>
               <SelectContent className="bg-slate-800 border-slate-700">
                 <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="NEW">New</SelectItem>
-                <SelectItem value="SENT_TO_SUPPLIERS">Sent to Suppliers</SelectItem>
-                <SelectItem value="QUOTES_RECEIVED">Quotes Received</SelectItem>
-                <SelectItem value="QUOTES_SENT_TO_BUYER">Quotes Sent</SelectItem>
+                <SelectItem value="PENDING_AM_VERIFICATION">Pending AM</SelectItem>
+                <SelectItem value="PENDING_ADMIN_REVIEW">Pending Review</SelectItem>
+                <SelectItem value="VERIFIED">Verified</SelectItem>
+                <SelectItem value="QUOTES_PENDING">Quotes Pending</SelectItem>
+                <SelectItem value="QUOTATIONS_READY">Quotes Ready</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -330,7 +357,11 @@ export default function AdminRequirementsPage() {
                         </div>
                         <div className="flex items-center gap-2 text-sm">
                           <DollarSign className="h-3 w-3 text-slate-500" />
-                          <span className="text-slate-300">{formatCurrency(req.targetPrice, req.currency)}</span>
+                          <span className="text-slate-300">
+                            {req.budgetMin && req.budgetMax 
+                              ? `${formatCurrency(req.budgetMin, req.currency)} - ${formatCurrency(req.budgetMax, req.currency)}`
+                              : formatCurrency(req.budgetMin || req.budgetMax, req.currency)}
+                          </span>
                         </div>
                         <div className="flex items-center gap-2 text-sm">
                           <MapPin className="h-3 w-3 text-slate-500" />
@@ -356,24 +387,35 @@ export default function AdminRequirementsPage() {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="sm" className="text-slate-400">
+                        <Button variant="ghost" size="sm" className="text-slate-400" onClick={() => window.location.href = `/admin/requirements/${req.id}`}>
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {req.status === 'NEW' && (
+                        {req.status === 'PENDING_ADMIN_REVIEW' && (
                           <Button 
                             size="sm" 
                             className="bg-red-600 hover:bg-red-700"
+                            onClick={() => handleApproveAndSendToProcurement(req.id)}
+                            disabled={loading}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Approve & Send to Procurement
+                          </Button>
+                        )}
+                        {req.status === 'VERIFIED' && (
+                          <Button 
+                            size="sm" 
+                            className="bg-purple-600 hover:bg-purple-700"
                             onClick={() => handleOpenSupplierModal(req)}
                           >
                             <Send className="h-4 w-4 mr-1" />
                             Send to Suppliers
                           </Button>
                         )}
-                        {req.status === 'QUOTES_RECEIVED' && (
+                        {req.status === 'QUOTATIONS_READY' && (
                           <Button 
                             size="sm" 
-                            className="bg-green-600 hover:bg-green-700"
-                            onClick={() => window.location.href = '/admin/quotations'}
+                            className="bg-cyan-600 hover:bg-cyan-700"
+                            onClick={() => window.location.href = `/admin/quotations?requirementId=${req.id}`}
                           >
                             <FileText className="h-4 w-4 mr-1" />
                             Review Quotes

@@ -27,6 +27,7 @@ interface Quotation {
 interface QuotationComparisonMatrixProps {
   requirementId: string;
   onSendToBuyer?: (quotationIds: string[]) => void;
+  onSendToAdmin?: (quotationIds: string[]) => void;
 }
 
 const mockQuotations: Quotation[] = [
@@ -112,7 +113,7 @@ const mockQuotations: Quotation[] = [
   },
 ];
 
-export function QuotationComparisonMatrix({ requirementId, onSendToBuyer }: QuotationComparisonMatrixProps) {
+export function QuotationComparisonMatrix({ requirementId, onSendToBuyer, onSendToAdmin }: QuotationComparisonMatrixProps) {
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [selectedTop3, setSelectedTop3] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'price' | 'rating' | 'delivery' | 'score'>('score');
@@ -202,6 +203,33 @@ export function QuotationComparisonMatrix({ requirementId, onSendToBuyer }: Quot
       }
     } catch {
       alert('Error sending quotations');
+    }
+  };
+
+  const handleSendToAdmin = async () => {
+    if (selectedTop3.length === 0) {
+      alert('Please select at least 1 quotation');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/procurement/quotations/send-to-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requirementId,
+          quotationIds: selectedTop3,
+        }),
+      });
+
+      if (response.ok) {
+        alert('Quotations sent to admin for approval!');
+        onSendToAdmin?.(selectedTop3);
+      } else {
+        alert('Failed to send quotations to admin');
+      }
+    } catch {
+      alert('Error sending quotations to admin');
     }
   };
 
@@ -362,19 +390,33 @@ export function QuotationComparisonMatrix({ requirementId, onSendToBuyer }: Quot
         <Card className="mt-6 p-4 bg-teal-50 border-teal-300">
           <div className="flex justify-between items-center">
             <div>
-              <p className="font-semibold text-lg">Selected Top 3 Quotations</p>
+              <p className="font-semibold text-lg">Selected Quotations ({selectedTop3.length})</p>
               <p className="text-sm text-neutral-600">
-                These quotations will be sent to the buyer for review
+                {onSendToAdmin 
+                  ? 'These quotations will be sent to admin for approval' 
+                  : 'These quotations will be sent to the buyer for review'}
               </p>
             </div>
-            <Button 
-              size="lg"
-              onClick={handleSendToBuyer}
-              disabled={selectedTop3.length !== 3}
-            >
-              <Send className="w-4 h-4 mr-2" />
-              Send to Buyer ({selectedTop3.length}/3)
-            </Button>
+            {onSendToAdmin ? (
+              <Button 
+                size="lg"
+                onClick={handleSendToAdmin}
+                disabled={selectedTop3.length === 0}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Send to Admin for Approval
+              </Button>
+            ) : (
+              <Button 
+                size="lg"
+                onClick={handleSendToBuyer}
+                disabled={selectedTop3.length !== 3}
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Send to Buyer ({selectedTop3.length}/3)
+              </Button>
+            )}
           </div>
         </Card>
       )}

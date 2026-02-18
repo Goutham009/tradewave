@@ -1,87 +1,547 @@
 'use client';
 
 import { useState } from 'react';
-import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import {
+  DollarSign,
+  TrendingUp,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Search,
+  RefreshCw,
+  MoreVertical,
+  ArrowUpRight,
+  ArrowDownRight,
+  Send,
+  Eye,
+  AlertTriangle,
+  Loader2,
+  Building2,
+  User,
+  FileText,
+} from 'lucide-react';
 
-const MOCK_PAYMENTS = [
-  { id: 'PAY001', orderId: 'ORD001', buyer: 'Acme Corp', amount: 15000, method: 'Bank Transfer', status: 'COMPLETED', date: '2024-01-15' },
-  { id: 'PAY002', orderId: 'ORD002', buyer: 'Global Inc', amount: 8500, method: 'Credit Card', status: 'PENDING', date: '2024-01-14' },
-  { id: 'PAY003', orderId: 'ORD003', buyer: 'StartupXYZ', amount: 25000, method: 'Escrow', status: 'PROCESSING', date: '2024-01-13' },
+interface Transaction {
+  id: string;
+  orderId: string;
+  requirementTitle: string;
+  buyer: { name: string; company: string; email: string };
+  supplier: { name: string; company: string; email: string };
+  amount: number;
+  adminMargin: number;
+  supplierAmount: number;
+  currency: string;
+  status: 'PAYMENT_PENDING' | 'BUYER_PAID' | 'IN_ESCROW' | 'SUPPLIER_PAID' | 'COMPLETED' | 'REFUNDED' | 'DISPUTED';
+  paymentMethod: string;
+  buyerPaidAt?: string;
+  supplierPaidAt?: string;
+  createdAt: string;
+  type: 'BUYER_PAYMENT' | 'SUPPLIER_PAYOUT';
+}
+
+const MOCK_TRANSACTIONS: Transaction[] = [
+  {
+    id: 'TXN-2024-001',
+    orderId: 'ORD-2024-001',
+    requirementTitle: 'Steel Coils - Grade A',
+    buyer: { name: 'John Smith', company: 'Acme Corporation', email: 'john@acmecorp.com' },
+    supplier: { name: 'Zhang Wei', company: 'Shanghai Steel Works', email: 'supplier1@steelworks.cn' },
+    amount: 25000,
+    adminMargin: 2500,
+    supplierAmount: 22500,
+    currency: 'USD',
+    status: 'PAYMENT_PENDING',
+    paymentMethod: 'Bank Transfer',
+    createdAt: '2024-02-15T10:00:00Z',
+    type: 'BUYER_PAYMENT',
+  },
+  {
+    id: 'TXN-2024-002',
+    orderId: 'ORD-2024-002',
+    requirementTitle: 'Cotton Fabric - Premium',
+    buyer: { name: 'Lisa Wang', company: 'Global Imports LLC', email: 'lisa@globalimports.com' },
+    supplier: { name: 'Rajesh Kumar', company: 'Premium Textiles India', email: 'supplier2@textiles.in' },
+    amount: 15000,
+    adminMargin: 1500,
+    supplierAmount: 13500,
+    currency: 'USD',
+    status: 'BUYER_PAID',
+    paymentMethod: 'Wire Transfer',
+    buyerPaidAt: '2024-02-14T14:30:00Z',
+    createdAt: '2024-02-12T09:00:00Z',
+    type: 'BUYER_PAYMENT',
+  },
+  {
+    id: 'TXN-2024-003',
+    orderId: 'ORD-2024-003',
+    requirementTitle: 'Electronic Components',
+    buyer: { name: 'Wei Lin', company: 'Asia Mart Pte Ltd', email: 'wei@asiamart.sg' },
+    supplier: { name: 'Chen Ming', company: 'Taiwan Electronics Co', email: 'supplier3@electronics.tw' },
+    amount: 8000,
+    adminMargin: 800,
+    supplierAmount: 7200,
+    currency: 'USD',
+    status: 'IN_ESCROW',
+    paymentMethod: 'Escrow',
+    buyerPaidAt: '2024-02-10T11:00:00Z',
+    createdAt: '2024-02-08T15:00:00Z',
+    type: 'BUYER_PAYMENT',
+  },
+  {
+    id: 'TXN-2024-004',
+    orderId: 'ORD-2024-003',
+    requirementTitle: 'Electronic Components',
+    buyer: { name: 'Wei Lin', company: 'Asia Mart Pte Ltd', email: 'wei@asiamart.sg' },
+    supplier: { name: 'Chen Ming', company: 'Taiwan Electronics Co', email: 'supplier3@electronics.tw' },
+    amount: 7200,
+    adminMargin: 0,
+    supplierAmount: 7200,
+    currency: 'USD',
+    status: 'SUPPLIER_PAID',
+    paymentMethod: 'Bank Transfer',
+    supplierPaidAt: '2024-02-12T16:00:00Z',
+    createdAt: '2024-02-08T15:00:00Z',
+    type: 'SUPPLIER_PAYOUT',
+  },
+  {
+    id: 'TXN-2024-005',
+    orderId: 'ORD-2024-004',
+    requirementTitle: 'Industrial Chemicals',
+    buyer: { name: 'Hans Mueller', company: 'Euro Traders GmbH', email: 'hans@eurotraders.eu' },
+    supplier: { name: 'Klaus Schmidt', company: 'Deutsche Chemicals AG', email: 'supplier4@chemicals.de' },
+    amount: 12000,
+    adminMargin: 1200,
+    supplierAmount: 10800,
+    currency: 'USD',
+    status: 'DISPUTED',
+    paymentMethod: 'Escrow',
+    buyerPaidAt: '2024-02-05T09:00:00Z',
+    createdAt: '2024-02-01T10:00:00Z',
+    type: 'BUYER_PAYMENT',
+  },
 ];
 
-export default function PaymentsPage() {
-  const [payments] = useState(MOCK_PAYMENTS);
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  PAYMENT_PENDING: { label: 'Awaiting Payment', color: 'bg-yellow-500/20 text-yellow-400' },
+  BUYER_PAID: { label: 'Buyer Paid', color: 'bg-blue-500/20 text-blue-400' },
+  IN_ESCROW: { label: 'In Escrow', color: 'bg-purple-500/20 text-purple-400' },
+  SUPPLIER_PAID: { label: 'Supplier Paid', color: 'bg-green-500/20 text-green-400' },
+  COMPLETED: { label: 'Completed', color: 'bg-emerald-500/20 text-emerald-400' },
+  REFUNDED: { label: 'Refunded', color: 'bg-orange-500/20 text-orange-400' },
+  DISPUTED: { label: 'Disputed', color: 'bg-red-500/20 text-red-400' },
+};
 
-  const stats = [
-    { label: 'Total Processed', value: '$1.2M', icon: DollarSign, color: 'text-green-400' },
-    { label: 'Pending', value: '$45K', icon: Clock, color: 'text-yellow-400' },
-    { label: 'Success Rate', value: '98.5%', icon: TrendingUp, color: 'text-blue-400' },
-  ];
+export default function PaymentsPage() {
+  const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState('all');
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [actionType, setActionType] = useState<string>('');
+  const [processing, setProcessing] = useState(false);
+
+  const stats = {
+    totalProcessed: transactions.filter(t => t.status === 'COMPLETED' || t.status === 'SUPPLIER_PAID').reduce((sum, t) => sum + t.amount, 0),
+    pendingPayments: transactions.filter(t => t.status === 'PAYMENT_PENDING').reduce((sum, t) => sum + t.amount, 0),
+    inEscrow: transactions.filter(t => t.status === 'IN_ESCROW' || t.status === 'BUYER_PAID').reduce((sum, t) => sum + t.amount, 0),
+    totalMargin: transactions.reduce((sum, t) => sum + t.adminMargin, 0),
+    disputed: transactions.filter(t => t.status === 'DISPUTED').length,
+  };
+
+  const filteredTransactions = transactions.filter(t => {
+    const matchesSearch = 
+      t.id.toLowerCase().includes(search.toLowerCase()) ||
+      t.orderId.toLowerCase().includes(search.toLowerCase()) ||
+      t.buyer.company.toLowerCase().includes(search.toLowerCase()) ||
+      t.supplier.company.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
+    const matchesTab = activeTab === 'all' || 
+      (activeTab === 'buyer' && t.type === 'BUYER_PAYMENT') ||
+      (activeTab === 'supplier' && t.type === 'SUPPLIER_PAYOUT');
+    return matchesSearch && matchesStatus && matchesTab;
+  });
+
+  const openActionModal = (transaction: Transaction, action: string) => {
+    setSelectedTransaction(transaction);
+    setActionType(action);
+    setShowActionModal(true);
+  };
+
+  const handleAction = async () => {
+    if (!selectedTransaction) return;
+    
+    setProcessing(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    let newStatus = selectedTransaction.status;
+    if (actionType === 'confirm_payment') newStatus = 'BUYER_PAID';
+    else if (actionType === 'release_to_escrow') newStatus = 'IN_ESCROW';
+    else if (actionType === 'pay_supplier') newStatus = 'SUPPLIER_PAID';
+    else if (actionType === 'complete') newStatus = 'COMPLETED';
+    else if (actionType === 'refund') newStatus = 'REFUNDED';
+    
+    setTransactions(prev => prev.map(t => 
+      t.id === selectedTransaction.id ? { ...t, status: newStatus } : t
+    ));
+    
+    setProcessing(false);
+    setShowActionModal(false);
+    setSelectedTransaction(null);
+  };
+
+  const formatCurrency = (amount: number, currency: string = 'USD') => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const getAvailableActions = (transaction: Transaction) => {
+    const actions = [];
+    switch (transaction.status) {
+      case 'PAYMENT_PENDING':
+        actions.push({ key: 'confirm_payment', label: 'Confirm Payment Received', icon: CheckCircle, color: 'text-green-400' });
+        actions.push({ key: 'send_reminder', label: 'Send Payment Reminder', icon: Send, color: 'text-blue-400' });
+        break;
+      case 'BUYER_PAID':
+        actions.push({ key: 'release_to_escrow', label: 'Release to Escrow', icon: ArrowUpRight, color: 'text-purple-400' });
+        actions.push({ key: 'refund', label: 'Refund Buyer', icon: ArrowDownRight, color: 'text-orange-400' });
+        break;
+      case 'IN_ESCROW':
+        actions.push({ key: 'pay_supplier', label: 'Pay Supplier', icon: Send, color: 'text-green-400' });
+        actions.push({ key: 'refund', label: 'Refund Buyer', icon: ArrowDownRight, color: 'text-orange-400' });
+        break;
+      case 'SUPPLIER_PAID':
+        actions.push({ key: 'complete', label: 'Mark as Completed', icon: CheckCircle, color: 'text-emerald-400' });
+        break;
+      case 'DISPUTED':
+        actions.push({ key: 'resolve_dispute', label: 'Resolve Dispute', icon: AlertTriangle, color: 'text-yellow-400' });
+        break;
+    }
+    return actions;
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Payment Management</h1>
-        <p className="text-slate-400">Monitor and manage platform payments</p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Payment Management</h1>
+          <p className="text-slate-400">Manage buyer payments, escrow, and supplier payouts</p>
+        </div>
+        <Button variant="outline" className="border-slate-600 text-slate-300" onClick={() => setLoading(true)}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-slate-900 rounded-xl border border-slate-800 p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-slate-800 rounded-lg">
-                <stat.icon className={`w-5 h-5 ${stat.color}`} />
-              </div>
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-5">
+        <Card className="bg-slate-800 border-slate-700">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-400 text-sm">{stat.label}</p>
-                <p className="text-white text-xl font-bold">{stat.value}</p>
+                <p className="text-xs text-slate-400">Total Processed</p>
+                <p className="text-xl font-bold text-green-400">{formatCurrency(stats.totalProcessed)}</p>
+              </div>
+              <CheckCircle className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-slate-800 border-slate-700">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-400">Pending Payments</p>
+                <p className="text-xl font-bold text-yellow-400">{formatCurrency(stats.pendingPayments)}</p>
+              </div>
+              <Clock className="h-8 w-8 text-yellow-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-slate-800 border-slate-700">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-400">In Escrow</p>
+                <p className="text-xl font-bold text-purple-400">{formatCurrency(stats.inEscrow)}</p>
+              </div>
+              <ArrowUpRight className="h-8 w-8 text-purple-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-slate-800 border-slate-700">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-400">Total Margin</p>
+                <p className="text-xl font-bold text-white">{formatCurrency(stats.totalMargin)}</p>
+              </div>
+              <TrendingUp className="h-8 w-8 text-blue-600" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-slate-800 border-slate-700">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-400">Disputed</p>
+                <p className="text-xl font-bold text-red-400">{stats.disputed}</p>
+              </div>
+              <AlertTriangle className="h-8 w-8 text-red-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="bg-slate-800 border-slate-700">
+          <TabsTrigger value="all" className="data-[state=active]:bg-red-600">All Transactions</TabsTrigger>
+          <TabsTrigger value="buyer" className="data-[state=active]:bg-red-600">Buyer Payments</TabsTrigger>
+          <TabsTrigger value="supplier" className="data-[state=active]:bg-red-600">Supplier Payouts</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {/* Filters */}
+      <Card className="bg-slate-800 border-slate-700">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Input
+                  placeholder="Search by ID, order, buyer, or supplier..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10 bg-slate-700 border-slate-600 text-white"
+                />
               </div>
             </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px] bg-slate-700 border-slate-600 text-white">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700">
+                <SelectItem value="all">All Statuses</SelectItem>
+                {Object.entries(STATUS_CONFIG).map(([key, { label }]) => (
+                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        ))}
-      </div>
+        </CardContent>
+      </Card>
 
-      <div className="bg-slate-900 rounded-xl border border-slate-800">
-        <div className="p-4 border-b border-slate-800">
-          <h2 className="text-white font-semibold">Recent Payments</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <th className="text-left p-4 text-slate-400 font-medium">Payment ID</th>
-                <th className="text-left p-4 text-slate-400 font-medium">Order</th>
-                <th className="text-left p-4 text-slate-400 font-medium">Buyer</th>
-                <th className="text-left p-4 text-slate-400 font-medium">Amount</th>
-                <th className="text-left p-4 text-slate-400 font-medium">Method</th>
-                <th className="text-left p-4 text-slate-400 font-medium">Status</th>
-                <th className="text-left p-4 text-slate-400 font-medium">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((payment) => (
-                <tr key={payment.id} className="border-b border-slate-800 hover:bg-slate-800/50">
-                  <td className="p-4 text-white font-medium">{payment.id}</td>
-                  <td className="p-4 text-slate-300">{payment.orderId}</td>
-                  <td className="p-4 text-slate-300">{payment.buyer}</td>
-                  <td className="p-4 text-white font-medium">${payment.amount.toLocaleString()}</td>
-                  <td className="p-4 text-slate-300">{payment.method}</td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      payment.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400' :
-                      payment.status === 'PENDING' ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-blue-500/20 text-blue-400'
-                    }`}>
-                      {payment.status}
-                    </span>
-                  </td>
-                  <td className="p-4 text-slate-400">{payment.date}</td>
+      {/* Transactions Table */}
+      <Card className="bg-slate-800 border-slate-700">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left p-4 text-sm font-medium text-slate-400">Transaction</th>
+                  <th className="text-left p-4 text-sm font-medium text-slate-400">Parties</th>
+                  <th className="text-left p-4 text-sm font-medium text-slate-400">Amount</th>
+                  <th className="text-left p-4 text-sm font-medium text-slate-400">Status</th>
+                  <th className="text-left p-4 text-sm font-medium text-slate-400">Date</th>
+                  <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              </thead>
+              <tbody>
+                {filteredTransactions.map((t) => {
+                  const actions = getAvailableActions(t);
+                  return (
+                    <tr key={t.id} className="border-b border-slate-700 hover:bg-slate-700/50">
+                      <td className="p-4">
+                        <div>
+                          <p className="font-mono text-xs text-slate-500">{t.id}</p>
+                          <p className="font-medium text-white">{t.requirementTitle}</p>
+                          <p className="text-xs text-slate-400">{t.orderId}</p>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <User className="h-3 w-3 text-blue-400" />
+                            <span className="text-sm text-slate-300">{t.buyer.company}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-3 w-3 text-purple-400" />
+                            <span className="text-sm text-slate-300">{t.supplier.company}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div>
+                          <p className="text-lg font-bold text-white">{formatCurrency(t.amount, t.currency)}</p>
+                          {t.adminMargin > 0 && (
+                            <p className="text-xs text-green-400">+{formatCurrency(t.adminMargin)} margin</p>
+                          )}
+                          <p className="text-xs text-slate-500">{t.paymentMethod}</p>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <Badge className={STATUS_CONFIG[t.status]?.color}>
+                          {STATUS_CONFIG[t.status]?.label}
+                        </Badge>
+                      </td>
+                      <td className="p-4">
+                        <p className="text-sm text-slate-300">{new Date(t.createdAt).toLocaleDateString()}</p>
+                        {t.buyerPaidAt && (
+                          <p className="text-xs text-slate-500">Paid: {new Date(t.buyerPaidAt).toLocaleDateString()}</p>
+                        )}
+                      </td>
+                      <td className="p-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="sm" className="text-slate-400">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {actions.length > 0 && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="border-slate-600 text-slate-300">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
+                                {actions.map((action) => (
+                                  <DropdownMenuItem
+                                    key={action.key}
+                                    className={`${action.color} hover:bg-slate-700`}
+                                    onClick={() => openActionModal(t, action.key)}
+                                  >
+                                    <action.icon className="mr-2 h-4 w-4" />
+                                    {action.label}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredTransactions.length === 0 && (
+            <div className="text-center py-12 text-slate-400">
+              <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No transactions found</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Action Confirmation Modal */}
+      <Dialog open={showActionModal} onOpenChange={setShowActionModal}>
+        <DialogContent className="bg-slate-800 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl">
+              {actionType === 'confirm_payment' && 'Confirm Payment Received'}
+              {actionType === 'release_to_escrow' && 'Release to Escrow'}
+              {actionType === 'pay_supplier' && 'Pay Supplier'}
+              {actionType === 'complete' && 'Mark as Completed'}
+              {actionType === 'refund' && 'Refund Buyer'}
+              {actionType === 'send_reminder' && 'Send Payment Reminder'}
+              {actionType === 'resolve_dispute' && 'Resolve Dispute'}
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {actionType === 'confirm_payment' && 'Confirm that payment has been received from the buyer.'}
+              {actionType === 'release_to_escrow' && 'Release the funds to escrow pending order completion.'}
+              {actionType === 'pay_supplier' && 'Release payment to the supplier.'}
+              {actionType === 'complete' && 'Mark this transaction as fully completed.'}
+              {actionType === 'refund' && 'Process a refund to the buyer.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedTransaction && (
+            <div className="space-y-4">
+              <div className="bg-slate-900 rounded-lg p-4">
+                <p className="font-mono text-xs text-slate-500">{selectedTransaction.id}</p>
+                <p className="font-medium text-white">{selectedTransaction.requirementTitle}</p>
+                <div className="mt-2 flex justify-between">
+                  <span className="text-slate-400">Amount:</span>
+                  <span className="text-white font-bold">{formatCurrency(selectedTransaction.amount)}</span>
+                </div>
+                {actionType === 'pay_supplier' && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Supplier Amount:</span>
+                    <span className="text-green-400 font-bold">{formatCurrency(selectedTransaction.supplierAmount)}</span>
+                  </div>
+                )}
+              </div>
+
+              {actionType === 'refund' && (
+                <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-5 w-5 text-orange-400 mt-0.5" />
+                    <p className="text-sm text-orange-200">
+                      This will initiate a refund to the buyer. This action cannot be undone.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowActionModal(false)} className="border-slate-600 text-slate-300">
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAction} 
+              disabled={processing}
+              className={
+                actionType === 'refund' ? 'bg-orange-600 hover:bg-orange-700' :
+                'bg-green-600 hover:bg-green-700'
+              }
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                'Confirm'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

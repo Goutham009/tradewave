@@ -131,6 +131,25 @@ export default function AdminSuppliersPage() {
     });
   };
 
+  const handleAction = async (supplierId: string, action: string) => {
+    if (action === 'view') {
+      window.location.href = `/admin/suppliers/analytics?id=${supplierId}`;
+    } else if (action === 'verify') {
+      setSuppliers(prev => prev.map(s => 
+        s.id === supplierId ? { ...s, verified: true } : s
+      ));
+    } else if (action === 'suspend') {
+      setSuppliers(prev => prev.map(s => 
+        s.id === supplierId ? { ...s, verified: false } : s
+      ));
+    } else if (action === 'contact') {
+      const supplier = suppliers.find(s => s.id === supplierId);
+      if (supplier) {
+        window.location.href = `mailto:${supplier.email}`;
+      }
+    }
+  };
+
   const filteredSuppliers = suppliers.filter(supplier =>
     supplier.companyName.toLowerCase().includes(search.toLowerCase()) ||
     supplier.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -305,19 +324,36 @@ export default function AdminSuppliersPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
-                            <DropdownMenuItem className="text-slate-300 hover:bg-slate-700">
+                            <DropdownMenuItem 
+                              className="text-slate-300 hover:bg-slate-700"
+                              onClick={() => handleAction(supplier.id, 'view')}
+                            >
                               <Eye className="mr-2 h-4 w-4" />
-                              View Details
+                              View Analytics
                             </DropdownMenuItem>
-                            {!supplier.verified && (
-                              <DropdownMenuItem className="text-green-400 hover:bg-slate-700">
+                            {!supplier.verified ? (
+                              <DropdownMenuItem 
+                                className="text-green-400 hover:bg-slate-700"
+                                onClick={() => handleAction(supplier.id, 'verify')}
+                              >
                                 <CheckCircle className="mr-2 h-4 w-4" />
                                 Verify Supplier
                               </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem 
+                                className="text-red-400 hover:bg-slate-700"
+                                onClick={() => handleAction(supplier.id, 'suspend')}
+                              >
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Suspend Supplier
+                              </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem className="text-slate-300 hover:bg-slate-700">
+                            <DropdownMenuItem 
+                              className="text-slate-300 hover:bg-slate-700"
+                              onClick={() => handleAction(supplier.id, 'contact')}
+                            >
                               <Mail className="mr-2 h-4 w-4" />
-                              Contact
+                              Send Email
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

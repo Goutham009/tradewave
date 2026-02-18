@@ -224,6 +224,7 @@ export async function POST(request: NextRequest) {
       const escrow = await tx.escrowTransaction.create({
         data: {
           transactionId: transaction.id,
+          totalAmount: quotation.total,
           amount: quotation.total,
           currency: quotation.currency,
           status: 'PENDING',

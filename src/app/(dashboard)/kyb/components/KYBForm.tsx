@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, FileText, MapPin, CreditCard, User, Globe, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Building2, FileText, MapPin, CreditCard, User, Globe, CheckCircle, AlertCircle, Loader2, Upload } from 'lucide-react';
+import { IDENTITY_DOCUMENT_TYPES, MANDATORY_DOCUMENT_TYPES, OPTIONAL_DOCUMENT_TYPES } from './KYBDocumentUpload';
 
 const BUSINESS_TYPES = [
   { value: 'SOLE_PROPRIETOR', label: 'Sole Proprietorship' },
@@ -25,7 +26,8 @@ const STEPS = [
   { id: 3, name: 'Tax Info', icon: FileText },
   { id: 4, name: 'Addresses', icon: MapPin },
   { id: 5, name: 'Bank Details', icon: CreditCard },
-  { id: 6, name: 'Contact', icon: User }
+  { id: 6, name: 'Contact', icon: User },
+  { id: 7, name: 'Documents', icon: Upload }
 ];
 
 interface CountryConfig {
@@ -565,6 +567,68 @@ export function KYBForm({ onSuccess, existingData }: KYBFormProps) {
           </div>
         )}
 
+        {/* Step 7: Documents */}
+        {step === 7 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold mb-4">Required Documents</h2>
+            
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-6">
+              <p className="text-sm text-blue-800">
+                <strong>Document Requirements:</strong><br />
+                • Upload at least <strong>1-2 identity documents</strong> from the list below<br />
+                • Upload <strong>all mandatory documents</strong>
+              </p>
+            </div>
+
+            {/* Identity Documents */}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <h3 className="font-medium mb-3 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Identity Documents <span className="text-sm text-gray-500">(Required: at least 1-2)</span>
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">Upload any of the following:</p>
+              <ul className="space-y-2">
+                {IDENTITY_DOCUMENT_TYPES.map(doc => (
+                  <li key={doc.value} className="flex items-start gap-3 p-3 bg-white rounded border">
+                    <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-sm">{doc.label}</p>
+                      <p className="text-xs text-gray-500">{doc.description}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Mandatory Documents */}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <h3 className="font-medium mb-3 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-orange-600" />
+                Mandatory Documents <span className="text-sm text-red-500">(All required)</span>
+              </h3>
+              <ul className="space-y-2">
+                {MANDATORY_DOCUMENT_TYPES.map(doc => (
+                  <li key={doc.value} className="flex items-start gap-3 p-3 bg-white rounded border">
+                    <div className="w-5 h-5 rounded-full border-2 border-orange-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-sm">{doc.label}</p>
+                      <p className="text-xs text-gray-500">{doc.description}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Info Notice */}
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                <strong>Note:</strong> You can upload documents after submitting this form. 
+                Documents will be reviewed by our compliance team. You'll be notified if additional documents are required.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Navigation Buttons */}
         <div className="flex justify-between mt-8 pt-6 border-t">
           {step > 1 ? (
@@ -574,7 +638,7 @@ export function KYBForm({ onSuccess, existingData }: KYBFormProps) {
             </button>
           ) : <div />}
           
-          {step < 6 ? (
+          {step < 7 ? (
             <button type="button" onClick={nextStep}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
               Continue

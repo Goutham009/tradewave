@@ -62,7 +62,7 @@ export default function FavoritesPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Favorite Suppliers</h1>
-          <p className="text-gray-500 mt-1">Suppliers you've marked as favorites</p>
+          <p className="text-gray-500 mt-1">Suppliers you&rsquo;ve marked as favorites</p>
         </div>
         <div className="flex gap-2">
           {['SUPPLIER', 'PRODUCT', 'CATEGORY'].map((type) => (
@@ -127,7 +127,7 @@ export default function FavoritesPage() {
                 </button>
               </div>
               {favorite.notes && (
-                <p className="text-gray-500 text-sm mb-4 italic">"{favorite.notes}"</p>
+                <p className="text-gray-500 text-sm mb-4 italic">&ldquo;{favorite.notes}&rdquo;</p>
               )}
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-400">

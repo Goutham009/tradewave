@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -48,23 +48,34 @@ const getStatusBadge = (status: string) => {
 export default function QuotationDetailPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const quotationId = params.id as string;
+  const context = searchParams.get('context');
+  const requirementId = searchParams.get('requirementId');
+  const isSubmittedContext = context === 'submitted';
   
   const [quotation, setQuotation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAccepting, setIsAccepting] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
-  const [isShortlisting, setIsShortlisting] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [negotiationNote, setNegotiationNote] = useState('');
+  const [negotiationEvents, setNegotiationEvents] = useState(() =>
+    isSubmittedContext
+      ? [
+          { id: 'n1', author: 'Buyer', message: 'Can you improve delivery timeline by 4 days?', at: '2026-02-15' },
+          { id: 'n2', author: 'You', message: 'Yes, we can ship 3 days earlier if quantity remains unchanged.', at: '2026-02-16' },
+        ]
+      : [
+          { id: 'n1', author: 'Account Manager', message: 'Supplier can offer a 3% reduction if dispatch stays at 21 days.', at: '2026-02-15' },
+          { id: 'n2', author: 'Supplier', message: 'Open to discussing payment terms between advance, LC, or credit arrangement.', at: '2026-02-16' },
+        ]
+  );
 
-  useEffect(() => {
-    fetchQuotation();
-  }, [quotationId]);
-
-  const fetchQuotation = async () => {
+  const fetchQuotation = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/quotations/${quotationId}`);
@@ -80,7 +91,11 @@ export default function QuotationDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [quotationId]);
+
+  useEffect(() => {
+    void fetchQuotation();
+  }, [fetchQuotation]);
 
   const handleAccept = async () => {
     setIsAccepting(true);
@@ -93,11 +108,8 @@ export default function QuotationDetailPage() {
       const data = await response.json();
       
       if (data.status === 'success') {
-        setActionSuccess('Quotation accepted! Redirecting to transaction...');
+        setActionSuccess(data.data?.message || 'Quotation accepted. Admin will create the transaction after verification checks.');
         setQuotation((prev: any) => ({ ...prev, status: 'ACCEPTED' }));
-        setTimeout(() => {
-          router.push(`/transactions/${data.data.transaction.id}`);
-        }, 2000);
       } else {
         setError(data.error || 'Failed to accept quotation');
       }
@@ -132,29 +144,6 @@ export default function QuotationDetailPage() {
     }
   };
 
-  const handleShortlist = async () => {
-    setIsShortlisting(true);
-    try {
-      const response = await fetch(`/api/quotations/${quotationId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'SHORTLIST' }),
-      });
-      const data = await response.json();
-      
-      if (data.status === 'success') {
-        setQuotation((prev: any) => ({ ...prev, status: 'SHORTLISTED' }));
-        setActionSuccess('Quotation shortlisted');
-      } else {
-        setError(data.error || 'Failed to shortlist quotation');
-      }
-    } catch (err) {
-      setError('Network error');
-    } finally {
-      setIsShortlisting(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -181,14 +170,38 @@ export default function QuotationDetailPage() {
   if (!quotation) return null;
 
   const q = quotation;
-  const canTakeAction = ['PENDING', 'SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED'].includes(q.status) && !q.isExpired;
+  const canTakeAction =
+    !isSubmittedContext && ['PENDING', 'SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED'].includes(q.status) && !q.isExpired;
+  const backHref = isSubmittedContext
+    ? '/quotations?view=submitted'
+    : requirementId
+      ? `/buyer/quotations/compare?requirementId=${requirementId}`
+      : '/quotations';
+
+  const handleAddNegotiationNote = () => {
+    const value = negotiationNote.trim();
+    if (!value) {
+      return;
+    }
+
+    setNegotiationEvents((prev) => [
+      ...prev,
+      {
+        id: `n-${Date.now()}`,
+        author: 'You',
+        message: value,
+        at: new Date().toISOString(),
+      },
+    ]);
+    setNegotiationNote('');
+  };
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/quotations">
+          <Link href={backHref}>
             <Button variant="ghost" size="sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Quotations
@@ -214,16 +227,6 @@ export default function QuotationDetailPage() {
               <XCircle className="mr-2 h-4 w-4" />
               Reject
             </Button>
-            {q.status !== 'SHORTLISTED' && (
-              <Button 
-                variant="outline"
-                onClick={handleShortlist}
-                disabled={isShortlisting}
-              >
-                <Star className="mr-2 h-4 w-4" />
-                {isShortlisting ? 'Shortlisting...' : 'Shortlist'}
-              </Button>
-            )}
             <Button 
               variant="gradient" 
               onClick={handleAccept}
@@ -253,6 +256,47 @@ export default function QuotationDetailPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Negotiation Panel
+              </CardTitle>
+              <CardDescription>
+                {isSubmittedContext
+                  ? 'Track buyer discussions and add your counter proposals from here.'
+                  : 'Discuss this quote with your account manager and supplier before taking a final decision.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                {negotiationEvents.map((event) => (
+                  <div key={event.id} className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">{event.author}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(event.at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <p className="text-sm mt-1">{event.message}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Add negotiation update</label>
+                <Textarea
+                  value={negotiationNote}
+                  onChange={(e) => setNegotiationNote(e.target.value)}
+                  placeholder="Share your counter offer or clarification..."
+                  rows={3}
+                />
+              </div>
+              <Button variant="outline" onClick={handleAddNegotiationNote}>
+                Send Negotiation Update
+              </Button>
+            </CardContent>
+          </Card>
+
           {/* Supplier Info */}
           <Card>
             <CardHeader>
@@ -603,10 +647,17 @@ export default function QuotationDetailPage() {
               )}
 
               <div className="pt-4 border-t">
-                <Button variant="outline" className="w-full">
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Contact Supplier
-                </Button>
+                {isSubmittedContext ? (
+                  <Button variant="outline" className="w-full" onClick={handleAddNegotiationNote}>
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Send Negotiation Update
+                  </Button>
+                ) : (
+                  <Button variant="outline" className="w-full" onClick={handleAddNegotiationNote}>
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Add Negotiation Message
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -647,7 +698,7 @@ export default function QuotationDetailPage() {
       </div>
 
       {/* Rejection Modal */}
-      {showRejectModal && (
+      {showRejectModal && !isSubmittedContext && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md">
             <CardHeader>

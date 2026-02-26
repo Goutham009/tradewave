@@ -5,6 +5,8 @@ export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
+    const role = token?.role as string | undefined;
+    const isInternalOpsRole = ['ACCOUNT_MANAGER', 'PROCUREMENT_OFFICER', 'PROCUREMENT_TEAM'].includes(role || '');
 
     // Protect buyer routes
     if (pathname.startsWith('/dashboard') || pathname.startsWith('/requirements') || 
@@ -14,8 +16,32 @@ export default withAuth(
       if (!token) {
         return NextResponse.redirect(new URL('/login', req.url));
       }
-      if (token.role !== 'BUYER' && token.role !== 'ADMIN') {
+
+      if (role === 'ADMIN') {
+        return NextResponse.redirect(new URL('/admin', req.url));
+      }
+
+      if (isInternalOpsRole) {
+        return NextResponse.redirect(new URL('/internal', req.url));
+      }
+
+      if (role !== 'BUYER' && role !== 'SUPPLIER') {
         return NextResponse.redirect(new URL('/login', req.url));
+      }
+    }
+
+    // Protect internal employee routes (AM + Procurement)
+    if (pathname.startsWith('/internal')) {
+      if (!token) {
+        return NextResponse.redirect(new URL('/login', req.url));
+      }
+
+      if (role === 'ADMIN') {
+        return NextResponse.redirect(new URL('/admin', req.url));
+      }
+
+      if (!isInternalOpsRole) {
+        return NextResponse.redirect(new URL('/dashboard', req.url));
       }
     }
 
@@ -24,7 +50,11 @@ export default withAuth(
       if (!token) {
         return NextResponse.redirect(new URL('/admin/login', req.url));
       }
-      if (token.role !== 'ADMIN') {
+      if (role !== 'ADMIN') {
+        if (isInternalOpsRole) {
+          return NextResponse.redirect(new URL('/internal', req.url));
+        }
+
         return NextResponse.redirect(new URL('/dashboard', req.url));
       }
     }
@@ -51,6 +81,7 @@ export default withAuth(
 export const config = {
   matcher: [
     '/dashboard/:path*',
+    '/internal/:path*',
     '/requirements/:path*',
     '/quotations/:path*',
     '/transactions/:path*',

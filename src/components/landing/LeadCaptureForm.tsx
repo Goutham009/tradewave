@@ -112,7 +112,7 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
               </li>
               <li className="flex items-start gap-2">
                 <Package className="h-4 w-4 mt-0.5 text-brand-success" />
-                <span>We'll find the best suppliers for <strong>{submittedData.requirement.productName}</strong></span>
+                <span>We&rsquo;ll find the best suppliers for <strong>{submittedData.requirement.productName}</strong></span>
               </li>
             </ul>
           </div>
@@ -147,7 +147,7 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
           Get Free Quotes - No Login Required
         </CardTitle>
         <p className="text-white/80 text-sm mt-1">
-          Tell us what you need and we'll connect you with verified suppliers
+          Tell us what you need and we&rsquo;ll connect you with verified suppliers
         </p>
       </CardHeader>
       <CardContent className="pt-6">
@@ -242,7 +242,7 @@ export function LeadCaptureForm({ onSuccess }: LeadCaptureFormProps) {
                   <p className="text-red-500 text-xs mt-1">{errors.phoneNumber.message}</p>
                 )}
                 <p className="text-xs text-brand-textMedium mt-1">
-                  We'll call you to discuss your requirements
+                  We&rsquo;ll call you to discuss your requirements
                 </p>
               </div>
             </div>

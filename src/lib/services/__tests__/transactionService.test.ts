@@ -43,7 +43,10 @@ describe('TransactionService', () => {
 
       const result = await prisma.transaction.create({
         data: {
+          requirementId: 'req-1',
+          quotationId: 'quote-1',
           buyerId: 'buyer-1',
+          supplierId: 'supplier-1',
           amount: 10000,
           currency: 'USD',
         },

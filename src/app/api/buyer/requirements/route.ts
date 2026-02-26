@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { formatRequirementReference } from '@/lib/flow-references';
 
 // POST /api/buyer/requirements - Buyer creates a new requirement directly
 export async function POST(request: NextRequest) {
@@ -23,6 +24,7 @@ export async function POST(request: NextRequest) {
       // Step 2: Quantity & Budget
       quantity,
       unit,
+      targetPrice,
       budgetMin,
       budgetMax,
       currency,
@@ -70,13 +72,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Buyer not found' }, { status: 404 });
     }
 
+    const accountManager = (buyer as any).accountManagerId
+      ? await prisma.user.findUnique({
+          where: { id: (buyer as any).accountManagerId },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            companyName: true,
+          },
+        })
+      : null;
+
     const totalOrders = await prisma.transaction.count({
       where: { buyerId: session.user.id },
     });
 
-    // Calculate total budget if per-unit budget given
-    const totalBudgetMin = budgetMin && quantity ? Number(budgetMin) * quantity : null;
-    const totalBudgetMax = budgetMax && quantity ? Number(budgetMax) * quantity : null;
+    const resolvedBudgetMin = targetPrice ?? budgetMin;
+    const resolvedBudgetMax = targetPrice ?? budgetMax;
+
+    // Calculate total budget if per-unit target price/budget given
+    const totalBudgetMin = resolvedBudgetMin && quantity ? Number(resolvedBudgetMin) * quantity : null;
+    const totalBudgetMax = resolvedBudgetMax && quantity ? Number(resolvedBudgetMax) * quantity : null;
 
     const requirement = await prisma.requirement.create({
       data: {
@@ -89,8 +106,9 @@ export async function POST(request: NextRequest) {
         technicalSpecs: technicalSpecs || null,
         quantity,
         unit,
-        budgetMin: budgetMin || null,
-        budgetMax: budgetMax || null,
+        targetPrice: resolvedBudgetMin || null,
+        budgetMin: resolvedBudgetMin || null,
+        budgetMax: resolvedBudgetMax || null,
         totalBudgetMin: totalBudgetMin || null,
         totalBudgetMax: totalBudgetMax || null,
         currency: currency || 'USD',
@@ -121,6 +139,7 @@ export async function POST(request: NextRequest) {
         priority: priority || 'MEDIUM',
       } as any,
     });
+    const requirementRef = formatRequirementReference(requirement.id);
 
     // Send notification to Account Manager
     if ((buyer as any).accountManagerId) {
@@ -129,7 +148,7 @@ export async function POST(request: NextRequest) {
           userId: (buyer as any).accountManagerId,
           type: 'REQUIREMENT_CREATED',
           title: 'New Requirement for Verification',
-          message: `${buyer.companyName || buyer.name} submitted a new requirement: "${requirement.title}". Please review and verify.`,
+          message: `${buyer.companyName || buyer.name} submitted requirement ${requirementRef}: "${requirement.title}". Please review and verify.`,
           resourceType: 'requirement',
           resourceId: requirement.id,
         },
@@ -145,7 +164,7 @@ export async function POST(request: NextRequest) {
             userId: admin.id,
             type: 'REQUIREMENT_CREATED',
             title: 'New Requirement - No AM Assigned',
-            message: `${buyer.companyName || buyer.name} submitted a new requirement: "${requirement.title}". No Account Manager is assigned.`,
+            message: `${buyer.companyName || buyer.name} submitted requirement ${requirementRef}: "${requirement.title}". No Account Manager is assigned.`,
             resourceType: 'requirement',
             resourceId: requirement.id,
           },
@@ -157,6 +176,7 @@ export async function POST(request: NextRequest) {
       status: 'success',
       requirement: {
         id: requirement.id,
+        referenceId: requirementRef,
         title: requirement.title,
         category: requirement.category,
         quantity: requirement.quantity,
@@ -165,6 +185,12 @@ export async function POST(request: NextRequest) {
         isExistingBuyer: totalOrders > 0,
         totalOrders,
       },
+      buyer: {
+        id: buyer.id,
+        name: buyer.name,
+        companyName: buyer.companyName,
+      },
+      accountManager,
       message: 'Requirement created. Your Account Manager will verify the details.',
     });
   } catch (error: any) {

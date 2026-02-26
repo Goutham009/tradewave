@@ -43,7 +43,7 @@ describe('Button Component', () => {
   test('applies ghost variant styles', () => {
     render(<Button variant="ghost">Ghost</Button>);
     const button = screen.getByRole('button');
-    expect(button).toHaveClass('text-brand-textDark');
+    expect(button).toHaveClass('text-foreground');
   });
 
   test('applies gradient variant styles', () => {

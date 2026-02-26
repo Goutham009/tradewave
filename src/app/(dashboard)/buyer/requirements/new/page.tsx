@@ -22,7 +22,7 @@ import {
 
 const STEPS = [
   { title: 'Basic Information', icon: Package },
-  { title: 'Quantity & Budget', icon: DollarSign },
+  { title: 'Quantity & Pricing', icon: DollarSign },
   { title: 'Delivery', icon: Truck },
   { title: 'Quality & Compliance', icon: Shield },
   { title: 'Payment & Preferences', icon: FileText },
@@ -55,8 +55,7 @@ export default function NewRequirementPage() {
     technicalSpecs: '',
     quantity: '',
     unit: 'MT',
-    budgetMin: '',
-    budgetMax: '',
+    targetPrice: '',
     currency: 'USD',
     deliveryLocation: '',
     deliveryAddress: '',
@@ -116,8 +115,9 @@ export default function NewRequirementPage() {
         body: JSON.stringify({
           ...form,
           quantity: parseInt(form.quantity),
-          budgetMin: form.budgetMin ? parseFloat(form.budgetMin) : undefined,
-          budgetMax: form.budgetMax ? parseFloat(form.budgetMax) : undefined,
+          targetPrice: form.targetPrice ? parseFloat(form.targetPrice) : undefined,
+          budgetMin: form.targetPrice ? parseFloat(form.targetPrice) : undefined,
+          budgetMax: form.targetPrice ? parseFloat(form.targetPrice) : undefined,
         }),
       });
       if (res.ok) {
@@ -158,7 +158,7 @@ export default function NewRequirementPage() {
                 setCurrentStep(0);
                 setForm({
                   title: '', category: '', subcategory: '', description: '', technicalSpecs: '',
-                  quantity: '', unit: 'MT', budgetMin: '', budgetMax: '', currency: 'USD',
+                  quantity: '', unit: 'MT', targetPrice: '', currency: 'USD',
                   deliveryLocation: '', deliveryAddress: '', deliveryDeadline: '',
                   incoterms: '', packagingRequirements: '', requiredCertifications: [],
                   qualityInspectionRequired: false, paymentTerms: '', paymentMethod: 'ESCROW',
@@ -280,7 +280,7 @@ export default function NewRequirementPage() {
             </>
           )}
 
-          {/* Step 2: Quantity & Budget */}
+          {/* Step 2: Quantity & Pricing */}
           {currentStep === 1 && (
             <>
               <div className="grid grid-cols-2 gap-4">
@@ -306,7 +306,7 @@ export default function NewRequirementPage() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium block mb-1">Currency</label>
                   <select
@@ -320,29 +320,21 @@ export default function NewRequirementPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium block mb-1">Min Budget (per unit)</label>
+                  <label className="text-sm font-medium block mb-1">Target Price (per {form.unit})</label>
                   <Input
                     type="number"
                     placeholder="e.g., 250"
-                    value={form.budgetMin}
-                    onChange={(e) => updateForm('budgetMin', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium block mb-1">Max Budget (per unit)</label>
-                  <Input
-                    type="number"
-                    placeholder="e.g., 300"
-                    value={form.budgetMax}
-                    onChange={(e) => updateForm('budgetMax', e.target.value)}
+                    value={form.targetPrice}
+                    onChange={(e) => updateForm('targetPrice', e.target.value)}
                   />
                 </div>
               </div>
-              {form.quantity && form.budgetMax && (
+              {form.quantity && form.targetPrice && (
                 <div className="bg-blue-50 rounded-lg p-3 text-sm flex items-start gap-2">
                   <Info className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
                   <p className="text-blue-800">
-                    Estimated total: {form.currency} {(parseInt(form.quantity) * parseFloat(form.budgetMin || '0')).toLocaleString()} - {(parseInt(form.quantity) * parseFloat(form.budgetMax)).toLocaleString()}
+                    Estimated total amount: {form.currency}{' '}
+                    {(parseInt(form.quantity || '0') * parseFloat(form.targetPrice || '0')).toLocaleString()}
                   </p>
                 </div>
               )}

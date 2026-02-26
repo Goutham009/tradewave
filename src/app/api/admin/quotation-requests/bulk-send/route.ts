@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || !['ADMIN', 'PROCUREMENT_TEAM'].includes(session.user?.role || '')) {
+    if (!session || !['ADMIN', 'PROCUREMENT_OFFICER'].includes(session.user?.role || '')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify requirement is in correct status for sending
-    if (!['PENDING_ADMIN_REVIEW', 'VERIFIED', 'OPEN'].includes(requirement.status)) {
+    if (!['SUBMITTED', 'PENDING_ADMIN_REVIEW', 'VERIFIED'].includes(requirement.status)) {
       return NextResponse.json(
         { error: `Cannot send quotation requests for requirement in ${requirement.status} status` },
         { status: 400 }

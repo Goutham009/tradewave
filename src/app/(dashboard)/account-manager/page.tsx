@@ -1,13 +1,23 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { 
   User, Phone, Mail, Calendar, MessageSquare, 
-  Clock, CheckCircle, Star, Send, Headphones
+  Clock, CheckCircle, Star, Send, Headphones, ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+
+type Interaction = {
+  id: string;
+  type: 'call' | 'message' | 'meeting';
+  subject: string;
+  date: string;
+  status: 'completed' | 'scheduled';
+  summary: string;
+};
 
 export default function AccountManagerPage() {
   const [message, setMessage] = useState('');
@@ -25,27 +35,30 @@ export default function AccountManagerPage() {
     totalClients: 45,
   };
 
-  const recentInteractions = [
+  const recentInteractions: Interaction[] = [
     {
-      id: 1,
+      id: 'INT-2026-001',
       type: 'call',
       subject: 'Quarterly Business Review',
-      date: '2 days ago',
+      date: '2026-02-21T10:30:00Z',
       status: 'completed',
+      summary: 'Reviewed purchase trends, margin targets, and next-quarter sourcing opportunities.',
     },
     {
-      id: 2,
+      id: 'INT-2026-002',
       type: 'message',
       subject: 'New supplier recommendations',
-      date: '1 week ago',
+      date: '2026-02-16T08:10:00Z',
       status: 'completed',
+      summary: 'Shared three audited suppliers aligned with your preferred lead-time and MOQ ranges.',
     },
     {
-      id: 3,
+      id: 'INT-2026-003',
       type: 'meeting',
       subject: 'Onboarding session',
-      date: '2 weeks ago',
+      date: '2026-02-09T14:00:00Z',
       status: 'completed',
+      summary: 'Completed workflow onboarding and reviewed requirement posting best practices.',
     },
   ];
 
@@ -173,12 +186,22 @@ export default function AccountManagerPage() {
                   </div>
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">{interaction.subject}</p>
-                    <p className="text-sm text-gray-500">{interaction.date}</p>
+                    <p className="text-sm text-gray-500">
+                      {new Date(interaction.date).toLocaleDateString()} • {interaction.summary}
+                    </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-green-600">
-                  <CheckCircle className="w-4 h-4" />
-                  <span className="text-sm capitalize">{interaction.status}</span>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 text-green-600">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm capitalize">{interaction.status}</span>
+                  </div>
+                  <Link href={`/account-manager/interactions/${interaction.id}`}>
+                    <Button variant="outline" size="sm">
+                      View details
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  </Link>
                 </div>
               </div>
             ))}

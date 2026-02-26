@@ -4,7 +4,7 @@ import { Star, Quote } from 'lucide-react';
 
 const testimonials = [
   {
-    quote: 'Tradewave transformed our procurement process. Escrow removes risk, and the real-time compliance monitoring makes approvals effortless.',
+    quote: 'Escrow removed payment anxiety and cut our procurement cycle by weeks.',
     author: 'Sarah Chen',
     role: 'Head of Procurement',
     company: 'TechFlow Industries',
@@ -12,7 +12,7 @@ const testimonials = [
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
   },
   {
-    quote: 'We cut sourcing time by 60%. The platform surfaces the right suppliers quickly and keeps every milestone transparent.',
+    quote: 'We reduced sourcing time by 60% with better match quality from day one.',
     author: 'Michael Rodriguez',
     role: 'Supply Chain Director',
     company: 'Global Manufacturing Co.',
@@ -20,7 +20,7 @@ const testimonials = [
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
   },
   {
-    quote: 'Smart automation and reliable payouts make Tradewave our preferred partner for high-value international trades.',
+    quote: 'Reliable payout automation made Tradewave our default cross-border channel.',
     author: 'Emma Thompson',
     role: 'Operations Manager',
     company: 'Atlantic Trade Partners',
@@ -45,17 +45,18 @@ export function TestimonialsSection() {
           <h2 className="mt-4 text-3xl font-bold text-brand-textDark sm:text-4xl lg:text-5xl">
             Trusted by global trade leaders
           </h2>
-          <p className="mt-6 text-lg text-brand-textMedium">
-            Hear from teams who rely on Tradewave to move millions in cross-border trade every month.
+          <p className="mt-5 text-base text-brand-textMedium sm:text-lg">
+            Real outcomes from teams scaling high-value transactions.
           </p>
         </div>
 
-        <div className="mx-auto mt-16 grid max-w-6xl gap-6 lg:grid-cols-3">
+        <div className="mx-auto mt-14 grid max-w-6xl gap-6 lg:grid-cols-3">
           {testimonials.map((testimonial) => (
             <div
               key={testimonial.author}
-              className="group relative rounded-2xl border border-slate-200/70 bg-slate-50 p-8 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+              className="group relative overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-b from-slate-50 to-white p-7 shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
             >
+              <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-brand-primary/30 via-brand-accent/30 to-brand-success/30" />
               <Quote className="absolute right-6 top-6 h-10 w-10 text-brand-primary/10 group-hover:text-brand-primary/20 transition-colors" />
 
               <div className="mb-5 flex gap-1">
@@ -64,11 +65,11 @@ export function TestimonialsSection() {
                 ))}
               </div>
 
-              <blockquote className="text-brand-textDark leading-relaxed text-base">
+              <blockquote className="text-brand-textDark leading-relaxed text-[15px]">
                 &ldquo;{testimonial.quote}&rdquo;
               </blockquote>
 
-              <div className="mt-8 flex items-center gap-4 pt-6 border-t border-slate-200/70">
+              <div className="mt-7 flex items-center gap-4 border-t border-slate-200/70 pt-5">
                 <div className="relative h-12 w-12 overflow-hidden rounded-full">
                   <Image src={testimonial.avatar} alt={testimonial.author} fill sizes="48px" className="object-cover" />
                 </div>

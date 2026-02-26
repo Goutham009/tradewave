@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
 
 // POST /api/buyer/transactions/[id]/review - Buyer submits post-transaction review
@@ -7,9 +9,17 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'BUYER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
-      buyerId,
       overallRating,
       communicationRating,
       reliabilityRating,
@@ -20,20 +30,24 @@ export async function POST(
       wouldRecommend,
     } = body;
 
-    if (!buyerId || !overallRating || !description) {
+    if (!overallRating || !description) {
       return NextResponse.json(
-        { error: 'buyerId, overallRating, and description are required' },
+        { error: 'overallRating and description are required' },
         { status: 400 }
       );
     }
 
     const transaction = await prisma.transaction.findUnique({
       where: { id: params.id },
-      select: { id: true, supplierId: true, buyerId: true, status: true },
+      select: { id: true, supplierId: true, buyerId: true, status: true, supplier: { select: { email: true } } },
     });
 
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    }
+
+    if (transaction.buyerId !== session.user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Check if review already exists
@@ -45,13 +59,22 @@ export async function POST(
       return NextResponse.json({ error: 'Review already submitted for this transaction' }, { status: 409 });
     }
 
-    // Find supplier's user record (if exists) for reviewedUserId
-    // For now, we use the buyer's own ID as reviewer and transaction data for the review
+    const supplierUser = transaction.supplier?.email
+      ? await prisma.user.findUnique({ where: { email: transaction.supplier.email }, select: { id: true } })
+      : null;
+
+    if (!supplierUser) {
+      return NextResponse.json(
+        { error: 'Supplier user account not linked. Unable to submit review at this time.' },
+        { status: 422 }
+      );
+    }
+
     const review = await prisma.review.create({
       data: {
         transactionId: params.id,
-        reviewerUserId: buyerId,
-        reviewedUserId: buyerId, // In a real setup, this would be the supplier's user ID
+        reviewerUserId: session.user.id,
+        reviewedUserId: supplierUser.id,
         reviewType: 'BUYER_REVIEW_SELLER',
         overallRating: parseInt(overallRating),
         communicationRating: communicationRating ? parseInt(communicationRating) : parseInt(overallRating),

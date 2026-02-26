@@ -295,7 +295,7 @@ export default function SecurityPage() {
                   <div>
                     <p className="font-medium text-green-800">2FA is enabled</p>
                     <p className="text-sm text-green-700">
-                      You'll be asked for a verification code when signing in on new devices.
+                      You&rsquo;ll be asked for a verification code when signing in on new devices.
                     </p>
                   </div>
                 </div>

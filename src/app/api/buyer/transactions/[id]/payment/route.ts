@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import {
+  buildOrderReferences,
+  formatQuotationReference,
+  formatRequirementReference,
+  formatTransactionReference,
+} from '@/lib/flow-references';
 
 // POST /api/buyer/transactions/[id]/payment - Process buyer payment (advance or balance)
 export async function POST(
@@ -7,25 +15,76 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'BUYER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
       paymentType, // 'advance' or 'balance'
       amount,
       paymentMethod, // 'STRIPE', 'BANK_TRANSFER', 'WIRE'
-      buyerId,
     } = body;
 
     const transaction = await prisma.transaction.findUnique({
       where: { id: params.id },
-      include: { escrow: true },
+      include: {
+        escrow: true,
+        supplier: {
+          select: {
+            email: true,
+          },
+        },
+        requirement: {
+          select: {
+            id: true,
+            assignedAccountManagerId: true,
+          },
+        },
+      },
     });
 
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
     }
 
+    if (transaction.buyerId !== session.user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     if (!transaction.escrow) {
       return NextResponse.json({ error: 'Escrow not set up for this transaction' }, { status: 400 });
+    }
+
+    const references = {
+      requirementReference: formatRequirementReference(transaction.requirementId),
+      quotationReference: formatQuotationReference(transaction.quotationId),
+      transactionReference: formatTransactionReference(transaction.id),
+      ...buildOrderReferences(transaction.id),
+    };
+
+    const buyerVisibleReferences = {
+      requirementReference: references.requirementReference,
+      quotationReference: references.quotationReference,
+      transactionReference: references.transactionReference,
+      buyerOrderId: references.buyerOrderId,
+    };
+
+    let supplierUserId: string | null = null;
+    if (transaction.supplier?.email) {
+      const supplierUser = await prisma.user.findFirst({
+        where: {
+          role: 'SUPPLIER',
+          email: transaction.supplier.email,
+        },
+        select: { id: true },
+      });
+      supplierUserId = supplierUser?.id || null;
     }
 
     // Create payment record
@@ -38,7 +97,7 @@ export async function POST(
         status: 'PROCESSING',
         metadata: {
           paymentType,
-          buyerId,
+          buyerId: session.user.id,
           escrowId: transaction.escrow.id,
         },
       },
@@ -73,9 +132,57 @@ export async function POST(
         data: { status: 'SUCCEEDED' },
       });
 
-      // TODO: Notify supplier to start production
-      // TODO: Notify admin
-      // TODO: Send payment confirmation email to buyer
+      const admins = await prisma.user.findMany({
+        where: { role: 'ADMIN' },
+        select: { id: true },
+      });
+
+      const notifications = [
+        {
+          userId: session.user.id,
+          type: 'PAYMENT_RECEIVED' as const,
+          title: 'Advance Payment Submitted',
+          message: `Advance payment for ${references.transactionReference} (${references.buyerOrderId}) was submitted successfully.`,
+          resourceType: 'transaction',
+          resourceId: transaction.id,
+        },
+        ...admins.map((admin) => ({
+          userId: admin.id,
+          type: 'PAYMENT_RECEIVED' as const,
+          title: 'Buyer Payment Submitted',
+          message: `Buyer submitted advance payment for ${references.transactionReference}. Please verify and confirm transaction progression.`,
+          resourceType: 'transaction',
+          resourceId: transaction.id,
+        })),
+        ...(supplierUserId
+          ? [
+              {
+                userId: supplierUserId,
+                type: 'PAYMENT_RECEIVED' as const,
+                title: 'Buyer Payment Received',
+                message: `Advance payment was recorded for ${references.supplierOrderId}. Prepare production kickoff.`,
+                resourceType: 'transaction',
+                resourceId: transaction.id,
+              },
+            ]
+          : []),
+        ...(transaction.requirement.assignedAccountManagerId
+          ? [
+              {
+                userId: transaction.requirement.assignedAccountManagerId,
+                type: 'PAYMENT_RECEIVED' as const,
+                title: 'Client Payment Completed',
+                message: `Your client paid advance for ${references.transactionReference}. Monitor next production milestones.`,
+                resourceType: 'transaction',
+                resourceId: transaction.id,
+              },
+            ]
+          : []),
+      ];
+
+      await prisma.notification.createMany({
+        data: notifications,
+      });
 
       return NextResponse.json({
         status: 'success',
@@ -90,6 +197,7 @@ export async function POST(
           status: 'PAYMENT_RECEIVED',
           nextStep: 'Supplier will begin production',
         },
+        references: buyerVisibleReferences,
       });
     } else if (paymentType === 'balance') {
       // Update escrow with balance payment
@@ -116,6 +224,7 @@ export async function POST(
           amount: parseFloat(amount),
           status: 'SUCCEEDED',
         },
+        references: buyerVisibleReferences,
       });
     } else {
       return NextResponse.json({ error: 'Invalid payment type. Use: advance or balance' }, { status: 400 });
@@ -132,6 +241,15 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'BUYER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const transaction = await prisma.transaction.findUnique({
       where: { id: params.id },
       include: {
@@ -154,6 +272,10 @@ export async function GET(
 
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    }
+
+    if (transaction.buyerId !== session.user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     return NextResponse.json({

@@ -7,31 +7,31 @@ import { cn } from '@/lib/utils';
 const faqs = [
   {
     question: 'How does the escrow payment system work?',
-    answer: 'When you accept a quotation, payment is transferred to our secure escrow account. The funds are held safely until you confirm receipt and satisfaction with the delivered goods. Only then is the payment released to the supplier. This protects both buyers and suppliers in every transaction.',
+    answer: 'After quote acceptance, funds move into escrow and release only when agreed delivery milestones are confirmed by both parties.',
   },
   {
     question: 'What is blockchain verification and why does it matter?',
-    answer: 'We use blockchain technology to create immutable records of all documents and transactions. Every contract, invoice, and milestone is hashed and stored on the blockchain, making it impossible to tamper with records. This provides complete transparency and serves as indisputable proof for compliance and dispute resolution.',
+    answer: 'Critical documents and milestones are hashed into tamper-evident logs for stronger compliance, audits, and dispute evidence.',
   },
   {
     question: 'How are suppliers verified on Tradewave?',
-    answer: 'All suppliers undergo a rigorous verification process including business registration checks, certification validation, site inspections (for major suppliers), and ongoing performance monitoring. We also collect and display verified ratings from previous transactions.',
+    answer: 'Suppliers pass KYB checks, certification review, and ongoing performance monitoring before they can participate in transactions.',
   },
   {
     question: 'What happens if there\'s a dispute with my order?',
-    answer: 'Our dispute resolution process is straightforward. If you have an issue, our dedicated account managers work with both parties to resolve it. The escrow funds remain protected during this process. If needed, we have a formal arbitration process, and all blockchain-recorded evidence is available for reference.',
+    answer: 'Escrow remains protected while account managers mediate. If needed, formal arbitration uses verified transaction evidence.',
   },
   {
     question: 'Can I integrate Tradewave with my existing systems?',
-    answer: 'Yes! Our Professional and Enterprise plans include API access for integration with your ERP, inventory management, and accounting systems. We provide comprehensive documentation and dedicated integration support.',
+    answer: 'Yes. API access is available for ERP, inventory, and finance integrations on supported plans.',
   },
   {
     question: 'What payment methods do you accept?',
-    answer: 'We accept bank transfers (wire transfers, ACH), credit/debit cards, and major payment platforms. All payments are processed through secure, PCI-compliant channels. Cryptocurrency support is coming soon.',
+    answer: 'Bank transfer, cards, and supported rails. Payments are processed through secure, compliant channels.',
   },
   {
     question: 'How long does it take to get quotations?',
-    answer: 'Typically, you\'ll receive initial quotations within 24-48 hours of submitting your requirement. For complex or custom orders, it may take up to 5 business days. Our team actively works with suppliers to ensure you get competitive quotes quickly.',
+    answer: 'Most requirements receive initial quotes in 24-48 hours. Complex sourcing may take up to 5 business days.',
   },
 ];
 
@@ -52,8 +52,8 @@ export function FAQSection() {
           <h2 className="mt-4 text-3xl font-bold tracking-tight text-brand-textDark sm:text-4xl">
             Frequently asked questions
           </h2>
-          <p className="mt-4 text-lg text-brand-textMedium">
-            Everything you need to know about Tradewave. Can&apos;t find the answer you&apos;re looking for?{' '}
+          <p className="mt-4 text-base text-brand-textMedium sm:text-lg">
+            Quick answers before you start trading. Need more details?{' '}
             <a href="/contact" className="text-brand-primary hover:underline">
               Contact our support team
             </a>
@@ -61,12 +61,12 @@ export function FAQSection() {
           </p>
         </div>
 
-        <div className="mx-auto mt-16 max-w-3xl">
+        <div className="mx-auto mt-14 max-w-3xl">
           <div className="space-y-4">
             {faqs.map((faq, index) => (
               <div
                 key={index}
-                className="rounded-2xl border border-slate-200/70 bg-white shadow-sm transition-all duration-300 hover:shadow-md"
+                className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm transition-all duration-300 hover:shadow-md"
               >
                 <button
                   className="flex w-full items-center justify-between px-6 py-5 text-left"

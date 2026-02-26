@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
+import { getSession, signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,11 +33,14 @@ export default function LoginPage() {
       if (result?.error) {
         setError('Invalid email or password. Please try again.');
       } else {
-        // Redirect based on user role (check email patterns for demo mode)
-        const isAdmin = email === 'admin@tradewave.io' || email === 'admin@tradewave.com';
-        
-        if (isAdmin) {
+        const session = await getSession();
+        const role = session?.user?.role;
+
+        if (role === 'ADMIN') {
           router.push('/admin');
+        } else if (role === 'ACCOUNT_MANAGER' || role === 'PROCUREMENT_OFFICER' || role === 'PROCUREMENT_TEAM') {
+          // Internal users (AM and Procurement) go to internal panel
+          router.push('/internal');
         } else {
           // All users (buyers and suppliers) go to unified dashboard
           router.push('/dashboard');

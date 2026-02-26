@@ -15,6 +15,14 @@ export default async function DashboardLayout({
     redirect('/login');
   }
 
+  if (session.user.role === 'ADMIN') {
+    redirect('/admin');
+  }
+
+  if (['ACCOUNT_MANAGER', 'PROCUREMENT_OFFICER', 'PROCUREMENT_TEAM'].includes(session.user.role || '')) {
+    redirect('/internal');
+  }
+
   // Unified dashboard for all users (buyers and sellers)
   return (
     <UserSidebarWrapper>

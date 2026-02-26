@@ -77,7 +77,7 @@ export default function AccountManagersPage() {
 
   const handleAction = async (managerId: number, action: string) => {
     if (action === 'view') {
-      window.location.href = `/admin/account-managers/analytics?id=${managerId}`;
+      window.location.href = `/admin/account-managers/${managerId}`;
     } else if (action === 'deactivate') {
       setManagers(prev => prev.map(m => 
         m.id === managerId ? { ...m, status: 'inactive' as const } : m

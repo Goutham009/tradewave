@@ -329,7 +329,7 @@ export default function CreateRFQPage() {
               <label className="block text-sm font-medium mb-1">RFQ Expiration Date *</label>
               <input type="date" value={formData.expiresAt} onChange={(e) => updateField('expiresAt', e.target.value)}
                 className="w-full px-4 py-2 border rounded-lg" min={new Date().toISOString().split('T')[0]} />
-              <p className="text-sm text-gray-500 mt-1">Suppliers won't be able to submit quotes after this date</p>
+              <p className="text-sm text-gray-500 mt-1">Suppliers won&rsquo;t be able to submit quotes after this date</p>
             </div>
           </div>
         )}

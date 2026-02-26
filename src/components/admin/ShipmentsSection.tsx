@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,12 +22,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   RefreshCw,
   Search,
   ChevronLeft,
@@ -35,8 +30,7 @@ import {
   AlertCircle,
   Truck,
   MapPin,
-  MoreVertical,
-  Eye,
+  ArrowRight,
 } from 'lucide-react';
 
 interface Shipment {
@@ -87,7 +81,6 @@ export function ShipmentsSection() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [updating, setUpdating] = useState<string | null>(null);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
     limit: 10,
@@ -153,39 +146,6 @@ export function ShipmentsSection() {
   useEffect(() => {
     fetchShipments();
   }, [fetchShipments]);
-
-  const handleStatusUpdate = async (shipmentId: string, newStatus: string) => {
-    setUpdating(shipmentId);
-    
-    try {
-      const response = await fetch('/api/admin/shipments', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: shipmentId,
-          status: newStatus,
-          updateNote: `Status changed to ${newStatus}`,
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to update shipment');
-      }
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        // Update local state
-        setShipments(prev => 
-          prev.map(s => s.id === shipmentId ? { ...s, status: newStatus } : s)
-        );
-      }
-    } catch (err) {
-      console.error('Error updating shipment:', err);
-    } finally {
-      setUpdating(null);
-    }
-  };
 
   const handlePageChange = (newPage: number) => {
     setPagination(prev => ({ ...prev, page: newPage }));
@@ -303,7 +263,7 @@ export function ShipmentsSection() {
                   <TableHead className="text-slate-400">Current</TableHead>
                   <TableHead className="text-slate-400">Destination</TableHead>
                   <TableHead className="text-slate-400">Est. Delivery</TableHead>
-                  <TableHead className="text-slate-400">Actions</TableHead>
+                  <TableHead className="text-slate-400 text-right">Open</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -341,39 +301,13 @@ export function ShipmentsSection() {
                     <TableCell className="text-slate-400">
                       {formatDate(shipment.estimatedDelivery)}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <Eye className="h-4 w-4 text-slate-400" />
+                    <TableCell className="text-right">
+                      <Link href={`/admin/shipments/${shipment.id}`}>
+                        <Button variant="outline" size="sm" className="border-slate-600 text-slate-300">
+                          Open
+                          <ArrowRight className="ml-2 h-4 w-4" />
                         </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 w-8 p-0"
-                              disabled={updating === shipment.id}
-                            >
-                              {updating === shipment.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <MoreVertical className="h-4 w-4 text-slate-400" />
-                              )}
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="bg-slate-800 border-slate-700">
-                            {STATUSES.map(status => (
-                              <DropdownMenuItem
-                                key={status}
-                                onClick={() => handleStatusUpdate(shipment.id, status)}
-                                className="text-slate-300 hover:bg-slate-700 cursor-pointer"
-                              >
-                                Update to {status.replace('_', ' ')}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                      </Link>
                     </TableCell>
                   </TableRow>
                 ))}

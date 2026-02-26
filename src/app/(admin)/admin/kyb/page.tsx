@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, Filter, RefreshCw, Eye, CheckCircle, XCircle, Clock, AlertTriangle, Globe } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { Search, Filter, RefreshCw, Eye, Clock, Globe } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 const STATUS_CONFIG: Record<string, { color: string; bgColor: string; label: string }> = {
   DRAFT: { color: 'text-gray-600', bgColor: 'bg-gray-100', label: 'Draft' },
@@ -37,11 +40,7 @@ export default function AdminKYBDashboard() {
   });
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
 
-  useEffect(() => {
-    fetchKYBs();
-  }, [filters, pagination.page]);
-
-  const fetchKYBs = async () => {
+  const fetchKYBs = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -77,7 +76,11 @@ export default function AdminKYBDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, pagination.page, pagination.limit]);
+
+  useEffect(() => {
+    void fetchKYBs();
+  }, [fetchKYBs]);
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -164,112 +167,84 @@ export default function AdminKYBDashboard() {
         </div>
       </div>
 
-      {/* KYB List */}
-      <div className="bg-slate-800 rounded-lg overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-slate-700">
-            <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Business</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Country</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Status</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Risk</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Docs</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Compliance</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Submitted</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-300">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-700">
-            {loading ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-                  Loading...
-                </td>
-              </tr>
-            ) : kybs.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
-                  No KYB applications found
-                </td>
-              </tr>
-            ) : (
-              kybs.map((kyb: any) => {
-                const statusConfig = STATUS_CONFIG[kyb.status] || STATUS_CONFIG.PENDING;
-                const riskConfig = RISK_CONFIG[kyb.riskAssessment?.riskLevel] || RISK_CONFIG.MEDIUM;
+      {/* KYB Queue */}
+      <div className="grid gap-4">
+        {loading ? (
+          <Card className="bg-slate-900 border-slate-800">
+            <CardContent className="py-12 text-center">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-slate-400" />
+              <p className="text-slate-400">Loading...</p>
+            </CardContent>
+          </Card>
+        ) : kybs.length === 0 ? (
+          <Card className="bg-slate-900 border-slate-800">
+            <CardContent className="py-12 text-center">
+              <p className="text-slate-400">No KYB applications found</p>
+            </CardContent>
+          </Card>
+        ) : (
+          kybs.map((kyb: any) => {
+            const statusConfig = STATUS_CONFIG[kyb.status] || STATUS_CONFIG.PENDING;
+            const riskConfig = RISK_CONFIG[kyb.riskAssessment?.riskLevel] || RISK_CONFIG.MEDIUM;
 
-                return (
-                  <tr key={kyb.id} className="hover:bg-slate-700/50">
-                    <td className="px-4 py-3">
+            return (
+              <Card key={kyb.id} className="bg-slate-900 border-slate-800">
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between gap-6">
+                    <div className="flex items-start gap-4">
+                      <div className="h-12 w-12 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <Globe className="h-6 w-6 text-blue-400" />
+                      </div>
                       <div>
-                        <p className="font-medium text-white">{kyb.businessName}</p>
-                        <p className="text-sm text-slate-400">{kyb.user?.email}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-semibold text-white">{kyb.businessName}</h3>
+                          <Badge className={`${statusConfig.bgColor} ${statusConfig.color}`}>{statusConfig.label}</Badge>
+                          {kyb.riskAssessment && (
+                            <Badge className={`${riskConfig.bgColor} ${riskConfig.color}`}>{kyb.riskAssessment.riskLevel} Risk</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-400 mt-1">{kyb.user?.email} • {kyb.registrationCountry}</p>
+                        <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-500">
+                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Submitted {new Date(kyb.createdAt).toLocaleDateString()}</span>
+                          <span>Docs {kyb.verifiedDocuments}/{kyb.documentsCount}</span>
+                          <span>Compliance {kyb.completedMandatory}/{kyb.mandatoryCompliance}</span>
+                        </div>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2 text-slate-300">
-                        <Globe className="w-4 h-4" />
-                        {kyb.registrationCountry}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
-                        {statusConfig.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {kyb.riskAssessment ? (
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${riskConfig.bgColor} ${riskConfig.color}`}>
-                          {kyb.riskAssessment.riskLevel}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      {kyb.verifiedDocuments}/{kyb.documentsCount}
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      {kyb.completedMandatory}/{kyb.mandatoryCompliance}
-                    </td>
-                    <td className="px-4 py-3 text-slate-400 text-sm">
-                      {new Date(kyb.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link href={`/admin/kyb/${kyb.id}`}
-                        className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
-                        <Eye className="w-4 h-4" />
-                        Review
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Link href={`/admin/kyb/${kyb.id}`}>
+                        <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                          <Eye className="w-4 h-4 mr-2" />Review
+                        </Button>
                       </Link>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-
-        {/* Pagination */}
-        {pagination.pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-700">
-            <p className="text-sm text-slate-400">
-              Showing {(pagination.page - 1) * pagination.limit + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
-            </p>
-            <div className="flex gap-2">
-              <button onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
-                disabled={pagination.page === 1}
-                className="px-3 py-1 bg-slate-600 text-white rounded disabled:opacity-50">
-                Previous
-              </button>
-              <button onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
-                disabled={pagination.page >= pagination.pages}
-                className="px-3 py-1 bg-slate-600 text-white rounded disabled:opacity-50">
-                Next
-              </button>
-            </div>
-          </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
+
+      {pagination.pages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 bg-slate-800 rounded-lg">
+          <p className="text-sm text-slate-400">
+            Showing {(pagination.page - 1) * pagination.limit + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
+              disabled={pagination.page === 1}
+              className="px-3 py-1 bg-slate-600 text-white rounded disabled:opacity-50">
+              Previous
+            </button>
+            <button onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+              disabled={pagination.page >= pagination.pages}
+              className="px-3 py-1 bg-slate-600 text-white rounded disabled:opacity-50">
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

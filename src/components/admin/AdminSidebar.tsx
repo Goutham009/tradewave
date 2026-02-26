@@ -65,9 +65,16 @@ const adminNavSections: NavSection[] = [
     title: 'Account Managers',
     items: [
       { name: 'All Managers', href: '/admin/account-managers', icon: Briefcase },
+      { name: 'Create AM Login', href: '/admin/account-managers/create', icon: Users },
       { name: 'Manager Analytics', href: '/admin/account-managers/analytics', icon: BarChart3 },
       { name: 'Top Performers', href: '/admin/account-managers/top-performers', icon: Star },
-      { name: 'Manager Payout', href: '/admin/account-managers/payout', icon: DollarSign },
+    ],
+  },
+  {
+    title: 'Procurement Team',
+    items: [
+      { name: 'Create Procurement Login', href: '/admin/procurement/create', icon: Users },
+      { name: 'Procurement Analytics', href: '/admin/procurement/analytics', icon: BarChart3 },
     ],
   },
   {

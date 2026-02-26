@@ -10,9 +10,9 @@ const buttonVariants = cva(
       variant: {
         default: 'bg-brand-primary text-white shadow-sm hover:bg-brand-primaryHover hover:shadow-md hover:-translate-y-0.5',
         destructive: 'bg-brand-error text-white shadow-sm hover:bg-brand-error/90 hover:shadow-md',
-        outline: 'border-2 border-brand-border bg-transparent text-brand-textDark hover:border-brand-primary/30 hover:bg-brand-primaryLight',
+        outline: 'border-2 border-brand-border bg-transparent text-foreground hover:border-brand-primary/30 hover:bg-accent',
         secondary: 'bg-brand-accent text-white shadow-sm hover:bg-brand-accent/90 hover:shadow-md hover:-translate-y-0.5',
-        ghost: 'text-brand-textDark hover:bg-brand-primaryLight',
+        ghost: 'text-foreground hover:bg-accent hover:text-accent-foreground',
         link: 'text-brand-primary underline-offset-4 hover:text-brand-primaryHover hover:underline',
         gradient: 'bg-gradient-to-r from-brand-primary via-brand-primaryHover to-brand-accent text-white shadow-md hover:shadow-lg hover:-translate-y-0.5',
       },

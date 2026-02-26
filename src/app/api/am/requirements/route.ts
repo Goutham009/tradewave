@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { formatRequirementReference } from '@/lib/flow-references';
 
 // POST /api/am/requirements - AM creates requirement on behalf of buyer
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!['ACCOUNT_MANAGER', 'ADMIN'].includes(session.user.role || '')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
       buyerId,
-      createdByUserId,
       // Product details
       title,
       description,
@@ -42,6 +53,8 @@ export async function POST(req: NextRequest) {
       specialInstructions,
       internalNotes,
     } = body;
+
+    const createdByUserId = session.user.id;
 
     if (!buyerId || !title || !description || !category || !quantity || !unit || !deliveryLocation || !deliveryDeadline) {
       return NextResponse.json(
@@ -90,23 +103,50 @@ export async function POST(req: NextRequest) {
         preferredGeographies: preferredGeographies || [],
         maxSuppliersToMatch: maxSuppliersToMatch || 10,
         communicationPreference: communicationPreference || 'THROUGH_AM',
-        createdByUserId: createdByUserId || null,
+        createdByUserId,
         createdByRole: 'ACCOUNT_MANAGER',
-        assignedAccountManagerId: createdByUserId || null,
+        assignedAccountManagerId: createdByUserId,
         internalNotes: internalNotes || null,
         status: 'PENDING_ADMIN_REVIEW',
         amVerified: true,
         amVerifiedAt: new Date(),
       },
     });
+    const requirementRef = formatRequirementReference(requirement.id);
 
-    // TODO: Send notification email to buyer
-    // TODO: Send notification to admin dashboard
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      select: { id: true },
+    });
+
+    const notifications = [
+      {
+        userId: buyerId,
+        type: 'REQUIREMENT_CREATED' as const,
+        title: 'Requirement Submitted by Account Manager',
+        message: `Your Account Manager submitted ${requirementRef} for admin review.`,
+        resourceType: 'requirement',
+        resourceId: requirement.id,
+      },
+      ...admins.map((admin) => ({
+        userId: admin.id,
+        type: 'REQUIREMENT_CREATED' as const,
+        title: 'AM Requirement Awaiting Admin Review',
+        message: `${requirementRef} was created by AM and is ready for admin review.`,
+        resourceType: 'requirement',
+        resourceId: requirement.id,
+      })),
+    ];
+
+    await prisma.notification.createMany({
+      data: notifications,
+    });
 
     return NextResponse.json({
       status: 'success',
       requirement: {
         id: requirement.id,
+        referenceId: requirementRef,
         title: requirement.title,
         status: requirement.status,
         buyerId: requirement.buyerId,

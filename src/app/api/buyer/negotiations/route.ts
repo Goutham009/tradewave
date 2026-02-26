@@ -1,22 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
 
 // POST /api/buyer/negotiations - Start a negotiation thread
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'BUYER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
       requirementId,
-      buyerId,
       quotationIds, // Array of quotation IDs buyer wants to negotiate on
       negotiationPoints, // PRICE, PAYMENT_TERMS, DELIVERY_TIMELINE, WARRANTY, etc.
       buyerTargets, // { desiredPrice, budget, paymentTerms, deliveryTimeline }
       buyerComments,
     } = body;
 
-    if (!requirementId || !buyerId || !quotationIds?.length) {
+    if (!requirementId || !quotationIds?.length) {
       return NextResponse.json(
-        { error: 'requirementId, buyerId, and at least one quotationId are required' },
+        { error: 'requirementId and at least one quotationId are required' },
         { status: 400 }
       );
     }
@@ -24,13 +34,21 @@ export async function POST(req: NextRequest) {
     // Get requirement to find AM
     const requirement = await prisma.requirement.findUnique({
       where: { id: requirementId },
-      select: { assignedAccountManagerId: true },
+      select: { assignedAccountManagerId: true, buyerId: true },
     });
+
+    if (!requirement) {
+      return NextResponse.json({ error: 'Requirement not found' }, { status: 404 });
+    }
+
+    if (requirement.buyerId !== session.user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const thread = await prisma.negotiationThread.create({
       data: {
         requirementId,
-        buyerId,
+        buyerId: session.user.id,
         accountManagerId: requirement?.assignedAccountManagerId || null,
         status: 'ACTIVE',
         quotationsInNegotiation: quotationIds,
@@ -45,7 +63,7 @@ export async function POST(req: NextRequest) {
     await prisma.negotiationMessage.create({
       data: {
         threadId: thread.id,
-        senderId: buyerId,
+        senderId: session.user.id,
         senderRole: 'BUYER',
         messageType: 'TEXT',
         content: buyerComments || `Negotiation started on ${quotationIds.length} quotation(s).`,
@@ -90,12 +108,19 @@ export async function POST(req: NextRequest) {
 // GET /api/buyer/negotiations?buyerId=xxx - List buyer's negotiation threads
 export async function GET(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'BUYER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
-    const buyerId = searchParams.get('buyerId');
     const status = searchParams.get('status');
 
-    const where: any = {};
-    if (buyerId) where.buyerId = buyerId;
+    const where: any = { buyerId: session.user.id };
     if (status) where.status = status;
 
     const threads = await prisma.negotiationThread.findMany({

@@ -18,14 +18,20 @@ export default async function AdminLayout({
 
   // Only allow ADMIN role
   if (session.user.role !== 'ADMIN') {
+    if (['ACCOUNT_MANAGER', 'PROCUREMENT_OFFICER', 'PROCUREMENT_TEAM'].includes(session.user.role || '')) {
+      redirect('/internal');
+    }
+
     redirect('/dashboard');
   }
 
   return (
-    <AdminSidebarWrapper>
-      <div className="p-6">
-        {children}
-      </div>
-    </AdminSidebarWrapper>
+    <div className="dark">
+      <AdminSidebarWrapper>
+        <div className="p-6">
+          {children}
+        </div>
+      </AdminSidebarWrapper>
+    </div>
   );
 }

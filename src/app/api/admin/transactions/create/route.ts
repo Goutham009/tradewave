@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
 import { checkBuyerGoodStanding } from '@/lib/services/goodStandingService';
+import {
+  buildOrderReferences,
+  formatQuotationReference,
+  formatRequirementReference,
+  formatTransactionReference,
+} from '@/lib/flow-references';
 
 // POST /api/admin/transactions/create - Admin creates transaction after quote acceptance
 // Process flow: Accept Quote → KYB/Good Standing Check → Admin Creates Transaction
@@ -8,15 +16,25 @@ import { checkBuyerGoodStanding } from '@/lib/services/goodStandingService';
 // Existing buyer: Good standing check
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
       quotationId,
-      adminCreatedBy,
       adminNotes,
       // Escrow setup (optional, can be done in separate review step)
       advancePercentage,
       paymentTerms,
     } = body;
+
+    const adminCreatedBy = session.user.id;
 
     if (!quotationId) {
       return NextResponse.json({ error: 'quotationId is required' }, { status: 400 });
@@ -27,7 +45,7 @@ export async function POST(req: NextRequest) {
       where: { id: quotationId },
       include: {
         requirement: true,
-        supplier: { select: { id: true, name: true, companyName: true } },
+        supplier: { select: { id: true, name: true, companyName: true, email: true } },
       },
     });
 
@@ -119,11 +137,18 @@ export async function POST(req: NextRequest) {
         pricePerUnit: quotation.unitPrice,
         paymentTerms: quotation.paymentTerms || paymentTerms || null,
         adminReviewed: true,
-        adminReviewedBy: adminCreatedBy || null,
+        adminReviewedBy: adminCreatedBy,
         adminReviewedAt: new Date(),
         adminNotes: adminNotes || null,
       } as any,
     });
+
+    const references = {
+      requirementReference: formatRequirementReference(requirement.id),
+      quotationReference: formatQuotationReference(quotation.id),
+      transactionReference: formatTransactionReference(transaction.id),
+      ...buildOrderReferences(transaction.id),
+    };
 
     // If escrow parameters provided, set up escrow immediately
     let escrow = null;
@@ -157,7 +182,7 @@ export async function POST(req: NextRequest) {
           currency: quotation.currency,
           status: 'PENDING_PAYMENT',
           releaseConditionsText: 'Funds released after delivery confirmation and quality approval.',
-          createdBy: adminCreatedBy || null,
+          createdBy: adminCreatedBy,
         } as any,
       });
 
@@ -177,14 +202,81 @@ export async function POST(req: NextRequest) {
       data: { totalOrderCount: buyerOrderCount + 1 } as any,
     });
 
-    // TODO: Notify buyer about transaction creation + payment instructions
-    // TODO: Notify supplier about confirmed order
-    // TODO: Notify AM
+    // Generate invoice record once transaction structure is approved by admin
+    const existingInvoice = await prisma.transactionDocument.findFirst({
+      where: {
+        transactionId: transaction.id,
+        type: 'INVOICE',
+      },
+      select: { id: true },
+    });
+
+    if (!existingInvoice) {
+      await prisma.transactionDocument.create({
+        data: {
+          transactionId: transaction.id,
+          type: 'INVOICE',
+          name: `Invoice-${references.buyerOrderId}.pdf`,
+          url: `/api/transactions/${transaction.id}/documents/invoice`,
+          verified: false,
+        },
+      });
+    }
+
+    let supplierUserId: string | null = null;
+    if (quotation.supplier.email) {
+      const supplierUser = await prisma.user.findFirst({
+        where: {
+          role: 'SUPPLIER',
+          email: quotation.supplier.email,
+        },
+        select: { id: true },
+      });
+      supplierUserId = supplierUser?.id || null;
+    }
+
+    const notifications = [
+      {
+        userId: buyerId,
+        type: 'SYSTEM' as const,
+        title: 'Transaction Created - Payment Action Required',
+        message: `${references.transactionReference} (${references.buyerOrderId}) was created for ${references.requirementReference}. Complete advance payment to proceed.`,
+        resourceType: 'transaction',
+        resourceId: transaction.id,
+      },
+      {
+        userId: supplierUserId || '',
+        type: 'SYSTEM' as const,
+        title: 'Transaction Created for Accepted Quotation',
+        message: `${references.transactionReference} (${references.supplierOrderId}) was generated after buyer acceptance of ${references.quotationReference}.`,
+        resourceType: 'transaction',
+        resourceId: transaction.id,
+      },
+      ...(requirement.assignedAccountManagerId
+        ? [
+            {
+              userId: requirement.assignedAccountManagerId,
+              type: 'SYSTEM' as const,
+              title: 'Client Transaction Created',
+              message: `Transaction ${references.transactionReference} is created for ${references.requirementReference}. Internal order ${references.internalOrderId}.`,
+              resourceType: 'transaction',
+              resourceId: transaction.id,
+            },
+          ]
+        : []),
+    ].filter((item) => item.userId);
+
+    if (notifications.length > 0) {
+      await prisma.notification.createMany({
+        data: notifications,
+      });
+    }
 
     return NextResponse.json({
       status: 'success',
       transaction: {
         id: transaction.id,
+        reference: references.transactionReference,
         status: escrow ? 'ESCROW_CREATED' : 'PENDING_ADMIN_REVIEW',
         amount: Number(transaction.amount),
         currency: transaction.currency,
@@ -194,6 +286,7 @@ export async function POST(req: NextRequest) {
         requirementId: requirement.id,
         isFirstTimeBuyer,
       },
+      references,
       escrow: escrow ? {
         id: (escrow as any).id,
         status: (escrow as any).status,

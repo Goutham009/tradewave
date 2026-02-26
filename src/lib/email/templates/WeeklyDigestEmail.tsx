@@ -27,7 +27,7 @@ export const WeeklyDigestEmail: React.FC<WeeklyDigestEmailProps> = ({
       <Text style={heading}>Your Weekly Digest 📊</Text>
       <Text style={paragraph}>Hi {userName},</Text>
       <Text style={paragraph}>
-        Here's your weekly summary from Tradewave. Stay on top of your trading activity!
+        Here&rsquo;s your weekly summary from Tradewave. Stay on top of your trading activity!
       </Text>
       
       <Section style={statsGrid}>

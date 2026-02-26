@@ -65,7 +65,7 @@ export default function SellerRiskyBuyersDashboard() {
           <Shield className="w-8 h-8" />
           Buyer Risk Dashboard
         </h1>
-        <p className="text-gray-600 mt-1">Monitor and manage risky buyers you've transacted with</p>
+        <p className="text-gray-600 mt-1">Monitor and manage risky buyers you&rsquo;ve transacted with</p>
       </div>
 
       {/* Stats Cards */}

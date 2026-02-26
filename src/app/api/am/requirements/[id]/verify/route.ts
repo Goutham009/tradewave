@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { formatRequirementReference } from '@/lib/flow-references';
 
 // GET /api/am/requirements/[id]/verify - Get requirement details for AM verification
 export async function GET(
@@ -12,6 +13,10 @@ export async function GET(
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!['ACCOUNT_MANAGER', 'ADMIN'].includes(session.user.role || '')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const requirement = await prisma.requirement.findUnique({
@@ -36,6 +41,13 @@ export async function GET(
 
     if (!requirement) {
       return NextResponse.json({ error: 'Requirement not found' }, { status: 404 });
+    }
+
+    if (
+      session.user.role === 'ACCOUNT_MANAGER' &&
+      requirement.assignedAccountManagerId !== session.user.id
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Fetch buyer history
@@ -103,6 +115,10 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    if (!['ACCOUNT_MANAGER', 'ADMIN'].includes(session.user.role || '')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await request.json();
     const { action, amNotes, checklist } = body;
     // action: 'approve' | 'reject' | 'request_changes'
@@ -120,6 +136,13 @@ export async function POST(
 
     if (!requirement) {
       return NextResponse.json({ error: 'Requirement not found' }, { status: 404 });
+    }
+
+    if (
+      session.user.role === 'ACCOUNT_MANAGER' &&
+      requirement.assignedAccountManagerId !== session.user.id
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     if (requirement.status !== 'PENDING_AM_VERIFICATION' && requirement.status !== 'SUBMITTED') {
@@ -162,6 +185,7 @@ export async function POST(
       where: { id: params.id },
       data: updateData,
     });
+    const requirementRef = formatRequirementReference(updated.id);
 
     // Send notifications based on action
     if (action === 'approve') {
@@ -173,7 +197,7 @@ export async function POST(
             userId: admin.id,
             type: 'REQUIREMENT_CREATED',
             title: 'Requirement Ready for Review',
-            message: `Requirement "${requirement.title}" has been verified by AM and is ready for admin review.`,
+            message: `Requirement ${requirementRef} ("${requirement.title}") has been verified by AM and is ready for admin review.`,
             resourceType: 'requirement',
             resourceId: params.id
           }
@@ -186,7 +210,7 @@ export async function POST(
           userId: requirement.buyerId,
           type: 'REQUIREMENT_CREATED',
           title: 'Requirement Rejected',
-          message: `Your requirement "${requirement.title}" has been rejected. ${amNotes ? `Reason: ${amNotes}` : ''}`,
+          message: `Your requirement ${requirementRef} ("${requirement.title}") has been rejected. ${amNotes ? `Reason: ${amNotes}` : ''}`,
           resourceType: 'requirement',
           resourceId: params.id
         }
@@ -198,7 +222,7 @@ export async function POST(
           userId: requirement.buyerId,
           type: 'REQUIREMENT_CREATED',
           title: 'Changes Requested',
-          message: `Changes have been requested for your requirement "${requirement.title}". ${amNotes ? `Details: ${amNotes}` : ''}`,
+          message: `Changes have been requested for your requirement ${requirementRef} ("${requirement.title}"). ${amNotes ? `Details: ${amNotes}` : ''}`,
           resourceType: 'requirement',
           resourceId: params.id
         }
@@ -210,6 +234,7 @@ export async function POST(
       action,
       requirement: {
         id: updated.id,
+        referenceId: requirementRef,
         title: updated.title,
         status: updated.status,
         amVerified: updated.amVerified,

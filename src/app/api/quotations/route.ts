@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
+import { formatQuotationReference, formatRequirementReference } from '@/lib/flow-references';
 
 // Standard response helpers
 function successResponse(data: any, status = 200) {
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
     // Role-based filtering
     if (session.user.role === 'BUYER') {
       where.requirement = { buyerId: session.user.id };
+      where.visibleToBuyer = true;
     } else if (session.user.role === 'SUPPLIER') {
       // Suppliers see quotations they submitted
       where.userId = session.user.id;
@@ -204,7 +206,7 @@ export async function POST(request: NextRequest) {
       return errorResponse('Requirement not found', 404);
     }
 
-    if (!['SUBMITTED', 'SOURCING', 'QUOTATIONS_READY', 'NEGOTIATING'].includes(requirement.status)) {
+    if (!['SUBMITTED', 'SOURCING', 'QUOTES_PENDING', 'QUOTATIONS_READY', 'NEGOTIATING'].includes(requirement.status)) {
       return errorResponse('Requirement is not accepting quotations', 400);
     }
 
@@ -287,22 +289,48 @@ export async function POST(request: NextRequest) {
     if (quotationCount === 1) {
       await prisma.requirement.update({
         where: { id: requirementId },
-        data: { status: 'QUOTATIONS_READY' },
+        data: { status: 'QUOTES_PENDING' },
       });
     }
 
-    // Create notification for buyer
+    const quotationRef = formatQuotationReference(quotation.id);
+    const requirementRef = formatRequirementReference(requirement.id);
+
+    // Notify admins and AM for quotation review (before buyer visibility)
     try {
-      await prisma.notification.create({
-        data: {
-          userId: requirement.buyerId,
-          type: 'QUOTATION_RECEIVED',
-          title: 'New Quotation Received',
-          message: `${supplier.companyName} submitted a quotation for "${requirement.title}"`,
+      const admins = await prisma.user.findMany({
+        where: { role: 'ADMIN' },
+        select: { id: true },
+      });
+
+      const notifications = [
+        ...admins.map((admin) => ({
+          userId: admin.id,
+          type: 'QUOTATION_RECEIVED' as const,
+          title: 'Quotation Submitted for Review',
+          message: `${quotationRef} for ${requirementRef} was submitted by ${supplier.companyName} and is awaiting admin review.`,
           resourceType: 'quotation',
           resourceId: quotation.id,
-        },
-      });
+        })),
+        ...((requirement as any).assignedAccountManagerId
+          ? [
+              {
+                userId: (requirement as any).assignedAccountManagerId,
+                type: 'QUOTATION_RECEIVED' as const,
+                title: 'Client Requirement Received Quotation',
+                message: `${quotationRef} was submitted for ${requirementRef}. Buyer will see it after admin review.`,
+                resourceType: 'quotation',
+                resourceId: quotation.id,
+              },
+            ]
+          : []),
+      ];
+
+      if (notifications.length > 0) {
+        await prisma.notification.createMany({
+          data: notifications,
+        });
+      }
     } catch (e) {
       // Non-critical
     }
@@ -325,6 +353,10 @@ export async function POST(request: NextRequest) {
 
     return successResponse({
       quotation,
+      references: {
+        quotationReference: quotationRef,
+        requirementReference: requirementRef,
+      },
       expiresIn: validDays,
       expiresAt: expiryDate,
     }, 201);

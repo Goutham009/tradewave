@@ -266,7 +266,7 @@ export default function AccountPage() {
               <div>
                 <p className="font-medium">Active Sessions</p>
                 <p className="text-sm text-muted-foreground">
-                  Manage devices where you're logged in
+                  Manage devices where you&rsquo;re logged in
                 </p>
               </div>
               <Button variant="outline">View Sessions</Button>

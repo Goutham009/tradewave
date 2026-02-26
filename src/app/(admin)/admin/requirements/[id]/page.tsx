@@ -1,11 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { ReferenceChainCard, type FlowReferences } from '@/components/flow/ReferenceChainCard';
+import {
+  buildOrderReferences,
+  formatQuotationReference,
+  formatRequirementReference,
+  formatTransactionReference,
+} from '@/lib/flow-references';
 import {
   Dialog,
   DialogContent,
@@ -54,6 +61,9 @@ interface Requirement {
   createdAt: string;
   specifications?: string;
   additionalNotes?: string;
+  acceptedQuotationId?: string;
+  transactionId?: string;
+  references?: FlowReferences;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -101,11 +111,7 @@ export default function RequirementDetailPage() {
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'send'>('approve');
   const [notes, setNotes] = useState('');
 
-  useEffect(() => {
-    fetchRequirement();
-  }, [params.id]);
-
-  const fetchRequirement = async () => {
+  const fetchRequirement = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`/api/admin/requirements/${params.id}`);
@@ -121,7 +127,11 @@ export default function RequirementDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id]);
+
+  useEffect(() => {
+    void fetchRequirement();
+  }, [fetchRequirement]);
 
   const handleAction = (type: 'approve' | 'reject' | 'send') => {
     setActionType(type);
@@ -152,6 +162,39 @@ export default function RequirementDetailPage() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 0 }).format(amount);
   };
 
+  const toCanonicalReference = (
+    value: string | undefined,
+    prefix: 'REQ' | 'QUO' | 'TXN',
+    formatter: (id: string) => string
+  ): string | undefined => {
+    if (!value) {
+      return undefined;
+    }
+
+    return new RegExp(`^${prefix}-`, 'i').test(value) ? value.toUpperCase() : formatter(value);
+  };
+
+  const buildRequirementReferences = (req: Requirement): FlowReferences => {
+    if (req.references) {
+      return req.references;
+    }
+
+    const references: FlowReferences = {
+      requirementReference: toCanonicalReference(req.id, 'REQ', formatRequirementReference),
+    };
+
+    if (req.acceptedQuotationId) {
+      references.quotationReference = toCanonicalReference(req.acceptedQuotationId, 'QUO', formatQuotationReference);
+    }
+
+    if (req.transactionId) {
+      references.transactionReference = toCanonicalReference(req.transactionId, 'TXN', formatTransactionReference);
+      Object.assign(references, buildOrderReferences(req.transactionId));
+    }
+
+    return references;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -170,6 +213,8 @@ export default function RequirementDetailPage() {
     );
   }
 
+  const flowReferences = buildRequirementReferences(requirement);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -181,7 +226,7 @@ export default function RequirementDetailPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-white">{requirement.title}</h1>
-            <p className="text-slate-400">{requirement.id}</p>
+            <p className="text-slate-400">{flowReferences.requirementReference || requirement.id}</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -211,6 +256,12 @@ export default function RequirementDetailPage() {
           )}
         </div>
       </div>
+
+      <ReferenceChainCard
+        references={flowReferences}
+        className="bg-slate-800 border-slate-700"
+        pendingLabel="Awaiting next stage"
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Details */}

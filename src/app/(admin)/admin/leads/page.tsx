@@ -1,27 +1,21 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Users,
   Phone,
   Mail,
-  Building2,
   Package,
   MapPin,
   Clock,
-  UserPlus,
   Search,
-  Filter,
   ChevronRight,
-  AlertCircle,
-  CheckCircle2,
   Loader2,
   Star,
-  Calendar,
-  MessageSquare,
 } from 'lucide-react';
 
 interface Lead {
@@ -68,28 +62,15 @@ const LEAD_SCORE_COLORS: Record<string, string> = {
   LOW: 'text-red-400',
 };
 
-// Mock AM list - in production, fetch from API
-const ACCOUNT_MANAGERS = [
-  { id: 'am_sarah_001', name: 'Sarah Johnson', email: 'sarah@tradewave.io' },
-  { id: 'am_raj_001', name: 'Raj Patel', email: 'raj@tradewave.io' },
-  { id: 'am_lisa_001', name: 'Lisa Chen', email: 'lisa@tradewave.io' },
-];
-
 export default function AdminLeadsPage() {
+  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [assigningLead, setAssigningLead] = useState<string | null>(null);
-  const [selectedAM, setSelectedAM] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
 
-  useEffect(() => {
-    fetchLeads();
-  }, [statusFilter, pagination.page]);
-
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams({ page: pagination.page.toString(), limit: pagination.limit.toString() });
@@ -158,54 +139,30 @@ export default function AdminLeadsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page, pagination.limit, statusFilter]);
 
-  const handleAssignAM = async (leadId: string) => {
-    if (!selectedAM) return;
-    try {
-      const res = await fetch(`/api/admin/leads/${leadId}/assign`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assignedTo: selectedAM }),
-      });
+  useEffect(() => {
+    void fetchLeads();
+  }, [fetchLeads]);
 
-      if (res.ok) {
-        setAssigningLead(null);
-        setSelectedAM('');
-        fetchLeads();
-      }
-    } catch (error) {
-      console.error('Error assigning AM:', error);
-      // Update locally for demo
-      setLeads(prev =>
-        prev.map(l =>
-          l.id === leadId
-            ? { ...l, assignedTo: selectedAM, status: 'ASSIGNED_TO_AM', assignedAt: new Date().toISOString() }
-            : l
-        )
-      );
-      setAssigningLead(null);
-      setSelectedAM('');
-    }
-  };
+  const filteredLeads = useMemo(() => {
+    if (!searchTerm) return leads;
 
-  const filteredLeads = leads.filter(lead => {
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      return (
-        lead.fullName.toLowerCase().includes(term) ||
-        lead.companyName.toLowerCase().includes(term) ||
-        lead.productName.toLowerCase().includes(term) ||
-        lead.email.toLowerCase().includes(term)
-      );
-    }
-    return true;
-  });
+    const term = searchTerm.toLowerCase();
+    return leads.filter((lead) =>
+      lead.fullName.toLowerCase().includes(term) ||
+      lead.companyName.toLowerCase().includes(term) ||
+      lead.productName.toLowerCase().includes(term) ||
+      lead.email.toLowerCase().includes(term)
+    );
+  }, [leads, searchTerm]);
 
-  const statusCounts = leads.reduce((acc, lead) => {
-    acc[lead.status] = (acc[lead.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const statusCounts = useMemo(() => {
+    return leads.reduce((acc, lead) => {
+      acc[lead.status] = (acc[lead.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [leads]);
 
   return (
     <div className="space-y-6">
@@ -213,7 +170,7 @@ export default function AdminLeadsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Lead Management</h1>
-          <p className="text-slate-400">Manage enquiries and assign Account Managers</p>
+          <p className="text-slate-400">Click any lead to open complete details and actions</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
@@ -273,12 +230,15 @@ export default function AdminLeadsPage() {
       ) : (
         <div className="grid gap-4">
           {filteredLeads.map((lead) => (
-            <Card key={lead.id} className="bg-slate-800 border-slate-700 hover:border-slate-600 transition-colors">
+            <Card
+              key={lead.id}
+              className="cursor-pointer border-slate-700 bg-slate-800 transition-colors hover:border-slate-500"
+              onClick={() => router.push(`/admin/leads/${lead.id}`)}
+            >
               <CardContent className="p-6">
                 <div className="flex items-start justify-between gap-4">
-                  {/* Lead Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex items-center gap-3">
                       <h3 className="text-lg font-semibold text-white">{lead.companyName}</h3>
                       <Badge className={STATUS_COLORS[lead.status] || 'bg-gray-500/20 text-gray-400'}>
                         {lead.status.replace(/_/g, ' ')}
@@ -291,7 +251,7 @@ export default function AdminLeadsPage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+                    <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2 lg:grid-cols-3">
                       <div className="flex items-center gap-2 text-slate-300">
                         <Users className="h-4 w-4 text-slate-500" />
                         <span>{lead.fullName}</span>
@@ -319,145 +279,60 @@ export default function AdminLeadsPage() {
                     </div>
 
                     {lead.targetPrice && (
-                      <p className="text-sm text-green-400 mt-2">Target Price: {lead.targetPrice}</p>
+                      <p className="mt-2 text-sm text-green-400">Target Price: {lead.targetPrice}</p>
                     )}
                     {lead.additionalReqs && (
-                      <p className="text-sm text-slate-400 mt-1 line-clamp-1">{lead.additionalReqs}</p>
+                      <p className="mt-1 line-clamp-1 text-sm text-slate-400">{lead.additionalReqs}</p>
                     )}
 
                     {lead.assignedTo && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <UserPlus className="h-4 w-4 text-blue-400" />
-                        <span className="text-sm text-blue-400">
-                          Assigned to: {ACCOUNT_MANAGERS.find(am => am.id === lead.assignedTo)?.name || lead.assignedTo}
-                        </span>
-                        {lead.callScheduledAt && (
-                          <span className="text-sm text-orange-400 ml-4 flex items-center gap-1">
-                            <Calendar className="h-3.5 w-3.5" />
-                            Call: {new Date(lead.callScheduledAt).toLocaleDateString()}
-                          </span>
-                        )}
+                      <div className="mt-3 text-sm text-blue-400">
+                        Assigned to: {lead.assignedTo}
                       </div>
                     )}
 
-                    <p className="text-xs text-slate-500 mt-2">
-                      Created: {new Date(lead.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex flex-col gap-2 shrink-0">
-                    {lead.status === 'NEW_LEAD' && (
-                      <>
-                        {assigningLead === lead.id ? (
-                          <div className="flex flex-col gap-2">
-                            <select
-                              value={selectedAM}
-                              onChange={(e) => setSelectedAM(e.target.value)}
-                              className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-red-500"
-                            >
-                              <option value="">Select AM...</option>
-                              {ACCOUNT_MANAGERS.map(am => (
-                                <option key={am.id} value={am.id}>{am.name}</option>
-                              ))}
-                            </select>
-                            <div className="flex gap-1">
-                              <Button
-                                size="sm"
-                                className="bg-green-600 hover:bg-green-700 text-white"
-                                onClick={() => handleAssignAM(lead.id)}
-                                disabled={!selectedAM}
-                              >
-                                Assign
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-slate-600 text-slate-300"
-                                onClick={() => { setAssigningLead(null); setSelectedAM(''); }}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <Button
-                            size="sm"
-                            className="bg-red-600 hover:bg-red-700 text-white"
-                            onClick={() => setAssigningLead(lead.id)}
-                          >
-                            <UserPlus className="h-4 w-4 mr-1" />
-                            Assign AM
-                          </Button>
-                        )}
-                      </>
-                    )}
-                    {lead.status === 'ASSIGNED_TO_AM' && (
-                      <div className="flex flex-col gap-1">
-                        <Button size="sm" variant="outline" className="border-slate-600 text-slate-300">
-                          <MessageSquare className="h-4 w-4 mr-1" />
-                          Send Email
-                        </Button>
-                        <Button size="sm" variant="outline" className="border-slate-600 text-slate-300">
-                          <Calendar className="h-4 w-4 mr-1" />
-                          Schedule Call
-                        </Button>
-                      </div>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-slate-400 hover:text-white"
-                      onClick={() => setSelectedLead(selectedLead?.id === lead.id ? null : lead)}
-                    >
-                      Details <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
+                    <div className="mt-3 flex items-center justify-between">
+                      <p className="text-xs text-slate-500">
+                        Created: {new Date(lead.createdAt).toLocaleString()}
+                      </p>
+                      <span className="inline-flex items-center gap-1 text-sm text-slate-300">
+                        Open details
+                        <ChevronRight className="h-4 w-4" />
+                      </span>
+                    </div>
                   </div>
                 </div>
-
-                {/* Expanded Details */}
-                {selectedLead?.id === lead.id && (
-                  <div className="mt-4 pt-4 border-t border-slate-700">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <h4 className="text-sm font-medium text-slate-300 mb-2">Product Details</h4>
-                        <div className="space-y-1 text-sm text-slate-400">
-                          <p><span className="text-slate-500">Category:</span> {lead.category}</p>
-                          <p><span className="text-slate-500">Product:</span> {lead.productName}</p>
-                          <p><span className="text-slate-500">Quantity:</span> {lead.quantity} {lead.unit}</p>
-                          <p><span className="text-slate-500">Location:</span> {lead.location}</p>
-                          <p><span className="text-slate-500">Timeline:</span> {lead.timeline}</p>
-                          {lead.targetPrice && <p><span className="text-slate-500">Target Price:</span> {lead.targetPrice}</p>}
-                        </div>
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-medium text-slate-300 mb-2">Contact & Status</h4>
-                        <div className="space-y-1 text-sm text-slate-400">
-                          <p><span className="text-slate-500">Email:</span> {lead.email}</p>
-                          <p><span className="text-slate-500">Phone:</span> {lead.phoneNumber}</p>
-                          <p><span className="text-slate-500">Company:</span> {lead.companyName}</p>
-                          <p><span className="text-slate-500">Source:</span> {lead.source}</p>
-                          <p><span className="text-slate-500">Lead Score:</span> {lead.leadScore || 'N/A'}</p>
-                        </div>
-                      </div>
-                    </div>
-                    {lead.additionalReqs && (
-                      <div className="mt-3">
-                        <h4 className="text-sm font-medium text-slate-300 mb-1">Additional Requirements</h4>
-                        <p className="text-sm text-slate-400">{lead.additionalReqs}</p>
-                      </div>
-                    )}
-                    {lead.callNotes && (
-                      <div className="mt-3">
-                        <h4 className="text-sm font-medium text-slate-300 mb-1">Call Notes</h4>
-                        <p className="text-sm text-slate-400">{lead.callNotes}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {pagination.pages > 1 && (
+        <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-800 px-4 py-3">
+          <p className="text-sm text-slate-400">
+            Showing {(pagination.page - 1) * pagination.limit + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setPagination((prev) => ({ ...prev, page: Math.max(prev.page - 1, 1) }))}
+              disabled={pagination.page === 1}
+              className="border-slate-600 text-slate-300"
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setPagination((prev) => ({ ...prev, page: Math.min(prev.page + 1, prev.pages || 1) }))}
+              disabled={pagination.page >= pagination.pages}
+              className="border-slate-600 text-slate-300"
+            >
+              Next
+            </Button>
+          </div>
         </div>
       )}
     </div>

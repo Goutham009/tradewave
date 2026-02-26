@@ -7,9 +7,9 @@ import { Menu, X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navigation = [
+  { name: 'Market Data', href: '#get-quotes' },
+  { name: 'Why Tradewave', href: '#why-tradewave' },
   { name: 'How It Works', href: '#how-it-works' },
-  { name: 'Trust', href: '#trust' },
-  { name: 'Features', href: '#features' },
   { name: 'Testimonials', href: '#testimonials' },
 ];
 

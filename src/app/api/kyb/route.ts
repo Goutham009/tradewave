@@ -350,9 +350,7 @@ export async function POST(req: NextRequest) {
     await prisma.user.update({
       where: { id: session.user.id },
       data: {
-        kybStatus: 'SUBMITTED',
-        kybApplicationId: kyb.id,
-        kybSubmittedAt: new Date()
+        kybStatus: 'SUBMITTED'
       }
     });
 

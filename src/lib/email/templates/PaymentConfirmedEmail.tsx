@@ -57,7 +57,7 @@ export const PaymentConfirmedEmail: React.FC<PaymentConfirmedEmailProps> = ({
       {isBuyer ? (
         <>
           <Text style={listItem}>1. Supplier prepares your order</Text>
-          <Text style={listItem}>2. You'll receive shipping notification</Text>
+          <Text style={listItem}>2. You&rsquo;ll receive shipping notification</Text>
           <Text style={listItem}>3. Confirm delivery when received</Text>
           <Text style={listItem}>4. Approve quality to release funds</Text>
         </>

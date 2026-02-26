@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
   Plus, Search, FileText, Calendar, MapPin, DollarSign,
+  Package,
   MoreHorizontal, Eye, Edit, Trash2, Clock, Star, Shield,
   Send, CheckCircle2, ArrowDownLeft, ArrowUpRight,
 } from 'lucide-react';
@@ -19,25 +20,25 @@ import {
 const mockPostedRequirements = [
   {
     id: 'REQ-2024-001', title: 'Steel Components for Manufacturing', category: 'Raw Materials',
-    status: 'SOURCING', priority: 'HIGH', quantity: 5000, unit: 'kg', targetPrice: 25000,
+    status: 'SOURCING', priority: 'HIGH', quantity: 5000, unit: 'kg', targetPrice: 4.8,
     currency: 'USD', deliveryLocation: 'Mumbai, India', deliveryDeadline: '2024-02-15',
     quotationsCount: 3, createdAt: '2024-01-10', type: 'posted' as const,
   },
   {
     id: 'REQ-2024-002', title: 'Electronic Circuit Boards', category: 'Electronics',
-    status: 'QUOTATIONS_READY', priority: 'MEDIUM', quantity: 1000, unit: 'pcs', targetPrice: 15000,
+    status: 'QUOTATIONS_READY', priority: 'MEDIUM', quantity: 1000, unit: 'pcs', targetPrice: 13,
     currency: 'USD', deliveryLocation: 'Bangalore, India', deliveryDeadline: '2024-02-28',
     quotationsCount: 5, createdAt: '2024-01-08', type: 'posted' as const,
   },
   {
     id: 'REQ-2024-003', title: 'Industrial Packaging Materials', category: 'Packaging',
-    status: 'DRAFT', priority: 'LOW', quantity: 10000, unit: 'units', targetPrice: 8000,
+    status: 'DRAFT', priority: 'LOW', quantity: 10000, unit: 'units', targetPrice: 0.8,
     currency: 'USD', deliveryLocation: 'Delhi, India', deliveryDeadline: '2024-03-15',
     quotationsCount: 0, createdAt: '2024-01-12', type: 'posted' as const,
   },
   {
     id: 'REQ-2024-004', title: 'Textile Fabric Rolls', category: 'Textiles',
-    status: 'UNDER_REVIEW', priority: 'URGENT', quantity: 2000, unit: 'meters', targetPrice: 12000,
+    status: 'UNDER_REVIEW', priority: 'URGENT', quantity: 2000, unit: 'meters', targetPrice: 6,
     currency: 'USD', deliveryLocation: 'Chennai, India', deliveryDeadline: '2024-01-30',
     quotationsCount: 2, createdAt: '2024-01-05', type: 'posted' as const,
   },
@@ -51,7 +52,7 @@ const mockReceivedRequirements = [
     responseDeadline: new Date(Date.now() + 3 * 86400000).toISOString(),
     daysLeft: 3, isDirect: false,
     title: 'Industrial Steel Pipes - Grade 304', category: 'Industrial Materials',
-    quantity: 500, unit: 'MT', budgetRange: '$1,100 - $1,300 / MT',
+    quantity: 500, unit: 'MT', targetPrice: 1200,
     currency: 'USD', deliveryLocation: 'Mumbai Port (JNPT), India',
     deliveryDeadline: '2026-05-15',
     certifications: ['ISO 9001', 'CE Marking', 'MTC'],
@@ -63,7 +64,7 @@ const mockReceivedRequirements = [
     responseDeadline: new Date(Date.now() + 5 * 86400000).toISOString(),
     daysLeft: 5, isDirect: true,
     title: 'Copper Wire - Industrial Grade', category: 'Metals & Alloys',
-    quantity: 200, unit: 'MT', budgetRange: '$8,000 - $9,500 / MT',
+    quantity: 200, unit: 'MT', targetPrice: 9000,
     currency: 'USD', deliveryLocation: 'Shanghai, China',
     deliveryDeadline: '2026-06-01',
     certifications: ['ISO 9001'],
@@ -75,7 +76,7 @@ const mockReceivedRequirements = [
     responseDeadline: new Date(Date.now() - 2 * 86400000).toISOString(),
     daysLeft: 0, isDirect: false,
     title: 'Aluminum Sheets - 5mm', category: 'Metals & Alloys',
-    quantity: 150, unit: 'MT', budgetRange: '$2,200 - $2,600 / MT',
+    quantity: 150, unit: 'MT', targetPrice: 2400,
     currency: 'USD', deliveryLocation: 'Rotterdam, Netherlands',
     deliveryDeadline: '2026-04-20',
     certifications: ['ISO 9001', 'CE Marking'],
@@ -225,7 +226,14 @@ export default function RequirementsPage() {
                       </div>
                       <p className="text-sm text-muted-foreground">{req.id} &middot; {req.category}</p>
                       <div className="flex flex-wrap gap-4 pt-2 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1"><DollarSign className="h-4 w-4" />{req.currency} {req.targetPrice?.toLocaleString()}</span>
+                        <span className="flex items-center gap-1">
+                          <DollarSign className="h-4 w-4" />
+                          Target Price: {req.currency} {req.targetPrice?.toLocaleString()} / {req.unit}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Package className="h-4 w-4" />
+                          Est. Total: {req.currency} {(req.quantity * req.targetPrice).toLocaleString()}
+                        </span>
                         <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{req.deliveryLocation}</span>
                         <span className="flex items-center gap-1"><Calendar className="h-4 w-4" />Due: {new Date(req.deliveryDeadline).toLocaleDateString()}</span>
                       </div>
@@ -282,7 +290,14 @@ export default function RequirementsPage() {
                     <h3 className="font-semibold text-base">{card.title}</h3>
                     <p className="text-sm text-muted-foreground">{card.category}</p>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1"><DollarSign className="h-3.5 w-3.5" />{card.budgetRange}</span>
+                      <span className="flex items-center gap-1">
+                        <DollarSign className="h-3.5 w-3.5" />
+                        Target Price: {card.currency} {card.targetPrice.toLocaleString()} / {card.unit}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Package className="h-3.5 w-3.5" />
+                        Est. Total: {card.currency} {(card.quantity * card.targetPrice).toLocaleString()}
+                      </span>
                       <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{card.deliveryLocation}</span>
                       <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />Due: {new Date(card.deliveryDeadline).toLocaleDateString()}</span>
                     </div>

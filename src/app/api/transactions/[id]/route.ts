@@ -3,6 +3,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
 import * as escrowService from '@/lib/services/escrowService';
+import {
+  buildOrderReferences,
+  formatQuotationReference,
+  formatRequirementReference,
+  formatTransactionReference,
+} from '@/lib/flow-references';
 
 // Standard response helpers
 function successResponse(data: any, status = 200) {
@@ -78,6 +84,13 @@ async function checkAndReleaseFunds(transactionId: string, escrowId: string) {
 
 // Mock transaction data for demo/fallback
 function getMockTransaction(id: string) {
+  const references = {
+    requirementReference: 'REQ-DEMO0001',
+    quotationReference: 'QUO-DEMO0001',
+    transactionReference: formatTransactionReference(id),
+    ...buildOrderReferences(id),
+  };
+
   return {
     id,
     status: 'IN_TRANSIT',
@@ -171,6 +184,7 @@ function getMockTransaction(id: string) {
       status: 'IN_TRANSIT',
       estimatedArrival: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
     },
+    references,
   };
 }
 
@@ -263,11 +277,37 @@ export async function GET(
     }
 
     // Authorization check
-    if (session.user.role === 'BUYER' && transaction.buyerId !== session.user.id) {
-      return errorResponse('Forbidden: You can only view your own transactions', 403);
+    const isAdminOrAM = ['ADMIN', 'ACCOUNT_MANAGER'].includes(session.user.role || '');
+    const isBuyerOwner = transaction.buyerId === session.user.id;
+    const isSupplierOwner = !!session.user.email && transaction.supplier?.email === session.user.email;
+
+    if (!isAdminOrAM && !isBuyerOwner && !isSupplierOwner) {
+      return errorResponse('Forbidden: You can only view transactions linked to your account', 403);
     }
 
-    return successResponse({ transaction });
+    const references = {
+      requirementReference: formatRequirementReference(transaction.requirementId),
+      quotationReference: formatQuotationReference(transaction.quotationId),
+      transactionReference: formatTransactionReference(transaction.id),
+      ...buildOrderReferences(transaction.id),
+    };
+
+    const roleVisibleReferences = isAdminOrAM
+      ? references
+      : {
+          requirementReference: references.requirementReference,
+          quotationReference: references.quotationReference,
+          transactionReference: references.transactionReference,
+          ...(isBuyerOwner ? { buyerOrderId: references.buyerOrderId } : {}),
+          ...(isSupplierOwner ? { supplierOrderId: references.supplierOrderId } : {}),
+        };
+
+    return successResponse({
+      transaction: {
+        ...transaction,
+        references: roleVisibleReferences,
+      },
+    });
   } catch (error) {
     console.error('Failed to fetch transaction:', error);
     // Return mock data on error

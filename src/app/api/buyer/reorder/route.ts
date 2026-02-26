@@ -126,8 +126,37 @@ export async function POST(request: NextRequest) {
       } as any,
     });
 
-    // TODO: Send notification to Account Manager
-    // TODO: Send confirmation email to buyer
+    // Send notification to Account Manager
+    const accountManagerId = (transaction.buyer as any)?.accountManagerId;
+    if (accountManagerId) {
+      await prisma.notification.create({
+        data: {
+          userId: accountManagerId,
+          type: 'REQUIREMENT_CREATED',
+          title: 'Reorder Requirement Created',
+          message: `${transaction.buyer?.name || 'A buyer'} from ${transaction.buyer?.companyName || 'their company'} has created a reorder for "${origReq.title}". Please verify the details.`,
+          resourceType: 'requirement',
+          resourceId: requirement.id,
+        },
+      });
+    }
+
+    // Notify admins if no AM assigned
+    if (!accountManagerId) {
+      const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+      for (const admin of admins) {
+        await prisma.notification.create({
+          data: {
+            userId: admin.id,
+            type: 'REQUIREMENT_CREATED',
+            title: 'Reorder Requirement (No AM)',
+            message: `Reorder created by ${transaction.buyer?.name || 'a buyer'} for "${origReq.title}" but no Account Manager is assigned.`,
+            resourceType: 'requirement',
+            resourceId: requirement.id,
+          },
+        });
+      }
+    }
 
     return NextResponse.json({
       status: 'success',

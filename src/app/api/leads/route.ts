@@ -1,81 +1,83 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { leadCaptureFormSchema } from '@/lib/validations/leadSchema';
 
-// POST /api/leads - Create a new lead from enquiry form
+// POST /api/leads - Create a new lead from enquiry form (single consolidated endpoint)
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const {
-      email,
-      fullName,
-      companyName,
-      phoneNumber,
-      category,
-      productName,
-      quantity,
-      unit,
-      location,
-      timeline,
-      targetPrice,
-      additionalReqs,
-    } = body;
 
-    // Validate required fields
-    if (!email || !fullName || !companyName || !phoneNumber || !category || !productName || !quantity || !unit || !location || !timeline) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
-    }
+    // Validate with Zod schema
+    const validatedData = leadCaptureFormSchema.parse(body);
 
     // Check if lead with this email already exists
     const existingLead = await prisma.lead.findUnique({
-      where: { email },
+      where: { email: validatedData.email },
     });
 
     if (existingLead) {
       return NextResponse.json(
-        { error: 'An enquiry with this email already exists. Our team will contact you soon.' },
+        {
+          status: 'error',
+          message: 'A requirement with this email already exists. Our team will contact you shortly.',
+          type: 'EMAIL_EXISTS',
+        },
         { status: 409 }
+      );
+    }
+
+    // Check if user account already exists (redirect to login)
+    const existingUser = await prisma.user.findUnique({
+      where: { email: validatedData.email },
+    });
+
+    if (existingUser) {
+      return NextResponse.json(
+        {
+          status: 'error',
+          message: 'An account with this email already exists. Please login to create a requirement.',
+          type: 'USER_EXISTS',
+          redirectTo: '/login',
+        },
+        { status: 400 }
       );
     }
 
     // Calculate lead score based on completeness
     let leadScore = 'MEDIUM';
-    const hasPhone = !!phoneNumber;
-    const hasCompany = !!companyName;
-    const hasTargetPrice = !!targetPrice;
-    const hasAdditionalReqs = !!additionalReqs;
-    const completenessCount = [hasPhone, hasCompany, hasTargetPrice, hasAdditionalReqs].filter(Boolean).length;
+    const hasPhone = !!validatedData.phoneNumber;
+    const hasCompany = !!validatedData.companyName;
+    const hasAdditionalReqs = !!validatedData.additionalReqs;
+    const completenessCount = [hasPhone, hasCompany, hasAdditionalReqs].filter(Boolean).length;
     if (completenessCount >= 3) leadScore = 'HIGH';
     else if (completenessCount <= 1) leadScore = 'LOW';
 
     const lead = await prisma.lead.create({
       data: {
-        email,
-        fullName,
-        companyName,
-        phoneNumber,
-        category,
-        productName,
-        quantity: parseInt(quantity),
-        unit,
-        location,
-        timeline,
-        targetPrice: targetPrice || null,
-        additionalReqs: additionalReqs || null,
+        email: validatedData.email,
+        fullName: validatedData.fullName,
+        companyName: validatedData.companyName,
+        phoneNumber: validatedData.phoneNumber,
+        category: validatedData.category,
+        productName: validatedData.productName,
+        quantity: validatedData.quantity,
+        unit: validatedData.unit,
+        location: validatedData.location,
+        timeline: validatedData.timeline,
+        additionalReqs: validatedData.additionalReqs || null,
         source: 'LANDING_PAGE_FORM',
         leadScore,
         status: 'NEW_LEAD',
       },
     });
 
-    // TODO: Send confirmation email to buyer
-    // TODO: Send notification to admin dashboard
-
     return NextResponse.json(
       {
         status: 'success',
+        message: 'Requirement created! Our team will contact you within 24 hours.',
+        leadId: lead.id,
+        nextSteps: 'Please keep your phone nearby. Our sales representative will call you shortly.',
         data: {
           id: lead.id,
           email: lead.email,
@@ -96,9 +98,20 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        {
+          status: 'error',
+          message: 'Please check the form for errors',
+          errors: error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
+
     console.error('Error creating lead:', error);
     return NextResponse.json(
-      { error: 'Failed to create enquiry. Please try again.' },
+      { status: 'error', message: 'Failed to create enquiry. Please try again.' },
       { status: 500 }
     );
   }

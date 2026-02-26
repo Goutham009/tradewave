@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { formatRequirementReference } from '@/lib/flow-references';
 
 // POST /api/admin/requirements/[id]/review - Admin reviews and approves requirement
 export async function POST(
@@ -7,11 +10,19 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
       action, // 'approve', 'reject', 'request_changes'
       adminNotes,
-      adminReviewedBy,
       // Procurement assignment (when approving)
       assignedProcurementOfficerId,
       procurementPriority,
@@ -20,6 +31,7 @@ export async function POST(
       sentDirectlyToSupplier,
       sendTo, // 'direct' | 'procurement'
     } = body;
+    const adminReviewedBy = session.user.id;
 
     const requirement = await prisma.requirement.findUnique({
       where: { id: params.id },
@@ -31,6 +43,7 @@ export async function POST(
 
     if (action === 'approve') {
       const isDirectSend = sentDirectlyToSupplier || sendTo === 'direct';
+      const requirementRef = formatRequirementReference(requirement.id);
 
       // Update requirement
       const updatedRequirement = await prisma.requirement.update({
@@ -38,7 +51,7 @@ export async function POST(
         data: {
           status: 'VERIFIED',
           adminReviewed: true,
-          adminReviewedBy: adminReviewedBy || null,
+          adminReviewedBy,
           adminReviewedAt: new Date(),
           adminNotes: adminNotes || null,
           sentDirectlyToSupplier: isDirectSend,
@@ -57,7 +70,7 @@ export async function POST(
             requirementId: params.id,
             supplierId: (requirement as any).preferredSupplierId,
             status: 'SENT',
-            sentBy: adminReviewedBy || 'admin',
+            sentBy: adminReviewedBy,
             sentAt: new Date(),
             isDirect: true,
             visibleInfo: {
@@ -102,36 +115,119 @@ export async function POST(
               geographies: requirement.preferredGeographies,
             },
             dueDate: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48 hours
-            createdBy: adminReviewedBy || null,
+            createdBy: adminReviewedBy,
           },
         });
       }
 
-      // TODO: Send notification to buyer ("Requirement Approved")
-      // TODO: Send notification to procurement officer / supplier
-      // TODO: Send notification to AM
+      // Notify buyer and assigned AM after admin approval
+      await prisma.notification.createMany({
+        data: [
+          {
+            userId: requirement.buyerId,
+            type: 'REQUIREMENT_CREATED',
+            title: 'Requirement Approved',
+            message: `Requirement ${requirementRef} has been approved by admin and moved to ${isDirectSend ? 'direct supplier outreach' : 'procurement matching'}.`,
+            resourceType: 'requirement',
+            resourceId: requirement.id,
+          },
+          ...(requirement.assignedAccountManagerId
+            ? [
+                {
+                  userId: requirement.assignedAccountManagerId,
+                  type: 'REQUIREMENT_CREATED' as const,
+                  title: 'Client Requirement Approved',
+                  message: `Requirement ${requirementRef} for your client has been approved by admin.`,
+                  resourceType: 'requirement',
+                  resourceId: requirement.id,
+                },
+              ]
+            : []),
+        ],
+      });
+
+      if (!isDirectSend) {
+        if (assignedProcurementOfficerId) {
+          await prisma.notification.create({
+            data: {
+              userId: assignedProcurementOfficerId,
+              type: 'REQUIREMENT_CREATED',
+              title: 'New Requirement Assigned',
+              message: `Requirement ${requirementRef} is ready for supplier matching.`,
+              resourceType: 'requirement',
+              resourceId: requirement.id,
+            },
+          });
+        } else {
+          const procurementUsers = await prisma.user.findMany({
+            where: { role: 'PROCUREMENT_OFFICER' },
+            select: { id: true },
+          });
+
+          if (procurementUsers.length > 0) {
+            await prisma.notification.createMany({
+              data: procurementUsers.map((user) => ({
+                userId: user.id,
+                type: 'REQUIREMENT_CREATED',
+                title: 'Requirement Ready for Procurement',
+                message: `Requirement ${requirementRef} is approved and waiting for supplier matching.`,
+                resourceType: 'requirement',
+                resourceId: requirement.id,
+              })),
+            });
+          }
+        }
+      }
 
       return NextResponse.json({
         status: 'success',
         requirement: updatedRequirement,
+        requirementReference: requirementRef,
         procurementTask,
         supplierCard,
         sentDirectly: isDirectSend,
       });
     } else if (action === 'reject') {
+      const requirementRef = formatRequirementReference(requirement.id);
       const updatedRequirement = await prisma.requirement.update({
         where: { id: params.id },
         data: {
           status: 'CANCELLED',
           adminReviewed: true,
-          adminReviewedBy: adminReviewedBy || null,
+          adminReviewedBy,
           adminReviewedAt: new Date(),
           adminNotes: adminNotes || null,
         },
       });
 
-      return NextResponse.json({ status: 'success', requirement: updatedRequirement });
+      await prisma.notification.createMany({
+        data: [
+          {
+            userId: requirement.buyerId,
+            type: 'REQUIREMENT_CREATED',
+            title: 'Requirement Rejected by Admin',
+            message: `Requirement ${requirementRef} was rejected by admin.${adminNotes ? ` Notes: ${adminNotes}` : ''}`,
+            resourceType: 'requirement',
+            resourceId: requirement.id,
+          },
+          ...(requirement.assignedAccountManagerId
+            ? [
+                {
+                  userId: requirement.assignedAccountManagerId,
+                  type: 'REQUIREMENT_CREATED' as const,
+                  title: 'Requirement Rejected',
+                  message: `Requirement ${requirementRef} was rejected by admin.${adminNotes ? ` Notes: ${adminNotes}` : ''}`,
+                  resourceType: 'requirement',
+                  resourceId: requirement.id,
+                },
+              ]
+            : []),
+        ],
+      });
+
+      return NextResponse.json({ status: 'success', requirement: updatedRequirement, requirementReference: requirementRef });
     } else if (action === 'request_changes') {
+      const requirementRef = formatRequirementReference(requirement.id);
       const updatedRequirement = await prisma.requirement.update({
         where: { id: params.id },
         data: {
@@ -140,9 +236,32 @@ export async function POST(
         },
       });
 
-      // TODO: Send notification to AM to update requirement
+      await prisma.notification.createMany({
+        data: [
+          {
+            userId: requirement.buyerId,
+            type: 'REQUIREMENT_CREATED',
+            title: 'Admin Requested Requirement Changes',
+            message: `Admin requested changes for requirement ${requirementRef}.${adminNotes ? ` Details: ${adminNotes}` : ''}`,
+            resourceType: 'requirement',
+            resourceId: requirement.id,
+          },
+          ...(requirement.assignedAccountManagerId
+            ? [
+                {
+                  userId: requirement.assignedAccountManagerId,
+                  type: 'REQUIREMENT_CREATED' as const,
+                  title: 'Requirement Update Needed',
+                  message: `Requirement ${requirementRef} needs updates before approval.${adminNotes ? ` Details: ${adminNotes}` : ''}`,
+                  resourceType: 'requirement',
+                  resourceId: requirement.id,
+                },
+              ]
+            : []),
+        ],
+      });
 
-      return NextResponse.json({ status: 'success', requirement: updatedRequirement });
+      return NextResponse.json({ status: 'success', requirement: updatedRequirement, requirementReference: requirementRef });
     } else {
       return NextResponse.json({ error: 'Invalid action. Use: approve, reject, or request_changes' }, { status: 400 });
     }

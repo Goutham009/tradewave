@@ -51,7 +51,7 @@ export const QualityApprovedEmail: React.FC<QualityApprovedEmailProps> = ({
       </Text>
       <InfoBox variant="info">
         <Text style={infoText}>
-          💰 The funds will be transferred to your registered bank account. You'll receive a confirmation email once the transfer is complete.
+          💰 The funds will be transferred to your registered bank account. You&rsquo;ll receive a confirmation email once the transfer is complete.
         </Text>
       </InfoBox>
       <Section style={buttonContainer}>

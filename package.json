@@ -12,7 +12,7 @@
     "test:watch": "jest --watch",
     "test:ci": "jest --ci --coverage",
     "test:unit": "jest --testPathPattern=__tests__",
-    "test:integration": "jest --testPathPattern=integration",
+    "test:integration": "jest --testPathPatterns=integration",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",

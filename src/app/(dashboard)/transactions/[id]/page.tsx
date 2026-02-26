@@ -989,7 +989,7 @@ export default function TransactionDetailPage() {
                 Raise a Dispute
               </CardTitle>
               <CardDescription>
-                If there's an issue with this transaction, you can raise a dispute. Our team will review it.
+                If there&rsquo;s an issue with this transaction, you can raise a dispute. Our team will review it.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1079,7 +1079,7 @@ export default function TransactionDetailPage() {
                 <div className="flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-blue-600 mt-0.5" />
                   <p className="text-sm text-blue-800">
-                    After confirming delivery, you'll need to assess the quality of goods.
+                    After confirming delivery, you&rsquo;ll need to assess the quality of goods.
                   </p>
                 </div>
               </div>

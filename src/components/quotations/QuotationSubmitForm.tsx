@@ -160,7 +160,7 @@ export default function QuotationSubmitForm({
           </div>
           <h3 className="text-xl font-semibold text-green-600">Quotation Submitted!</h3>
           <p className="text-muted-foreground mt-2 text-center">
-            Your quotation has been sent to the buyer. You'll be notified when they respond.
+            Your quotation has been sent to the buyer. You&rsquo;ll be notified when they respond.
           </p>
           <Button className="mt-6" onClick={() => router.push('/quotations')}>
             View My Quotations

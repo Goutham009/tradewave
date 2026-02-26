@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -223,6 +224,238 @@ const shipmentDetail = {
   lastUpdated: '2024-01-25T08:30:00Z',
 };
 
+type ShipmentDetail = typeof shipmentDetail;
+type ShipmentEvent = ShipmentDetail['events'][number];
+
+const SHIPMENT_OVERRIDES: Record<string, any> = {
+  'SHP-2024-002': {
+    trackingNumber: 'DHL9876543210',
+    orderId: 'TXN-2024-002',
+    orderTitle: 'Electronic Circuit Boards',
+    status: 'OUT_FOR_DELIVERY',
+    progress: 90,
+    carrier: {
+      name: 'DHL Express',
+      type: 'air',
+      phone: '+1 800 225 5345',
+      email: 'support@dhl.com',
+      website: 'https://www.dhl.com',
+      trackingUrl: 'https://www.dhl.com/global-en/home/tracking.html?tracking-id=DHL9876543210',
+    },
+    service: {
+      type: 'Air Freight Priority',
+      containerNumber: 'AIR-DEL-2202',
+      vesselName: 'Cargo Flight',
+      voyageNumber: 'AIR-DHL-2202',
+    },
+    package: {
+      weight: '150 kg',
+      dimensions: '20 cartons',
+      pieces: 20,
+      description: 'Electronic circuit board packs',
+      signatureRequired: true,
+    },
+    origin: {
+      address: 'Shenzhen, China',
+      fullAddress: 'Baoan District, Shenzhen, China',
+      departedAt: '2024-01-24T06:30:00Z',
+    },
+    destination: {
+      address: 'Delhi, India',
+      fullAddress: 'IGI Cargo Terminal, Delhi, India',
+      estimatedArrival: '2024-01-25T18:00:00Z',
+    },
+    currentLocation: {
+      address: 'Delhi Distribution Center',
+      timestamp: '2024-01-25T06:00:00Z',
+      speed: 'N/A',
+      heading: 'N/A',
+    },
+    timeline: {
+      daysElapsed: 1,
+      daysRemaining: 0,
+      totalDays: 1,
+    },
+  },
+  'SHP-2024-003': {
+    trackingNumber: 'FEDEX1122334455',
+    orderId: 'TXN-2024-003',
+    orderTitle: 'Textile Fabric Rolls',
+    status: 'DELIVERED',
+    progress: 100,
+    carrier: {
+      name: 'FedEx',
+      type: 'ground',
+      phone: '+1 800 463 3339',
+      email: 'support@fedex.com',
+      website: 'https://www.fedex.com',
+      trackingUrl: 'https://www.fedex.com/fedextrack/?tracknumbers=FEDEX1122334455',
+    },
+    service: {
+      type: 'Ground Freight',
+      containerNumber: 'FDX-CHE-778',
+      vesselName: 'Ground Carrier',
+      voyageNumber: 'FDX-GROUND-778',
+    },
+    package: {
+      weight: '800 kg',
+      dimensions: '40 fabric rolls',
+      pieces: 40,
+      description: 'Textile fabric rolls',
+      signatureRequired: false,
+    },
+    origin: {
+      address: 'Mumbai, India',
+      fullAddress: 'Textile Hub Warehouse, Mumbai, India',
+      departedAt: '2024-01-17T10:00:00Z',
+    },
+    destination: {
+      address: 'Chennai, India',
+      fullAddress: 'Buyer Warehouse, Chennai, India',
+      estimatedArrival: '2024-01-20T12:00:00Z',
+    },
+    currentLocation: {
+      address: 'Delivered - Chennai, India',
+      timestamp: '2024-01-19T14:30:00Z',
+      speed: 'N/A',
+      heading: 'N/A',
+    },
+    timeline: {
+      daysElapsed: 3,
+      daysRemaining: 0,
+      totalDays: 3,
+    },
+  },
+  'SHP-2024-004': {
+    trackingNumber: 'UPS7788990011',
+    orderId: 'TXN-2024-004',
+    orderTitle: 'Chemical Raw Materials',
+    status: 'EXCEPTION',
+    progress: 40,
+    carrier: {
+      name: 'UPS',
+      type: 'sea',
+      phone: '+1 800 742 5877',
+      email: 'support@ups.com',
+      website: 'https://www.ups.com',
+      trackingUrl: 'https://www.ups.com/track?tracknum=UPS7788990011',
+    },
+    service: {
+      type: 'Sea Freight',
+      containerNumber: 'UPS-SEA-041',
+      vesselName: 'UPS Ocean Cargo',
+      voyageNumber: 'UPS-SEA-041',
+    },
+    package: {
+      weight: '2000 kg',
+      dimensions: 'Bulk drums',
+      pieces: 16,
+      description: 'Chemical raw material drums',
+      signatureRequired: true,
+    },
+    origin: {
+      address: 'Singapore',
+      fullAddress: 'Singapore Export Terminal',
+      departedAt: '2024-01-21T08:00:00Z',
+    },
+    destination: {
+      address: 'Kolkata, India',
+      fullAddress: 'Kolkata Port, India',
+      estimatedArrival: '2024-02-05T11:00:00Z',
+    },
+    currentLocation: {
+      address: 'Singapore Customs',
+      timestamp: '2024-01-23T16:00:00Z',
+      speed: '0 knots',
+      heading: 'Docked',
+    },
+    timeline: {
+      daysElapsed: 2,
+      daysRemaining: 13,
+      totalDays: 15,
+    },
+  },
+  'SHP-S-001': {
+    trackingNumber: 'MAEU9999001',
+    orderId: 'TXN-S-001',
+    orderTitle: 'Industrial Steel Pipes - Grade 304',
+    status: 'IN_TRANSIT',
+    progress: 30,
+    destination: {
+      address: 'Rotterdam, Netherlands',
+      fullAddress: 'Rotterdam Port, Netherlands',
+      estimatedArrival: '2026-04-01T09:00:00Z',
+    },
+  },
+  'SHP-S-002': {
+    trackingNumber: 'DHL5555002',
+    orderId: 'TXN-S-003',
+    orderTitle: 'Aluminum Sheets - 5mm',
+    status: 'DELIVERED',
+    progress: 100,
+    carrier: {
+      name: 'DHL',
+      type: 'air',
+      phone: '+1 800 225 5345',
+      email: 'support@dhl.com',
+      website: 'https://www.dhl.com',
+      trackingUrl: 'https://www.dhl.com/global-en/home/tracking.html?tracking-id=DHL5555002',
+    },
+    destination: {
+      address: 'Amsterdam, Netherlands',
+      fullAddress: 'Amsterdam Cargo Hub',
+      estimatedArrival: '2026-02-28T12:00:00Z',
+    },
+    currentLocation: {
+      address: 'Delivered - Amsterdam, Netherlands',
+      timestamp: '2026-02-28T12:00:00Z',
+      speed: 'N/A',
+      heading: 'N/A',
+    },
+  },
+};
+
+function getShipmentById(shipmentId: string): ShipmentDetail {
+  const override = SHIPMENT_OVERRIDES[shipmentId];
+  if (!override) {
+    return shipmentDetail;
+  }
+
+  return {
+    ...shipmentDetail,
+    ...override,
+    id: shipmentId,
+    carrier: {
+      ...shipmentDetail.carrier,
+      ...(override.carrier || {}),
+    },
+    service: {
+      ...shipmentDetail.service,
+      ...(override.service || {}),
+    },
+    package: {
+      ...shipmentDetail.package,
+      ...(override.package || {}),
+    },
+    origin: {
+      ...shipmentDetail.origin,
+      ...(override.origin || {}),
+    },
+    destination: {
+      ...shipmentDetail.destination,
+      ...(override.destination || {}),
+    },
+    currentLocation: {
+      ...shipmentDetail.currentLocation,
+      ...(override.currentLocation || {}),
+    },
+    timeline: {
+      ...shipmentDetail.timeline,
+      ...(override.timeline || {}),
+    },
+  } as ShipmentDetail;
+}
+
 const getStatusBadge = (status: string) => {
   const config: Record<string, { variant: any; label: string }> = {
     PICKED_UP: { variant: 'info', label: 'Picked Up' },
@@ -247,11 +480,13 @@ const getCarrierIcon = (type: string) => {
 };
 
 export default function ShipmentDetailPage() {
+  const params = useParams();
+  const shipmentId = params.id as string;
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedEvents, setExpandedEvents] = useState<string[]>(['6']);
 
-  const s = shipmentDetail;
+  const s = getShipmentById(shipmentId);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -453,7 +688,7 @@ export default function ShipmentDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {s.events.map((event, idx) => (
+                {s.events.map((event: ShipmentEvent, idx: number) => (
                   <div key={event.id} className="relative">
                     {/* Connector Line */}
                     {idx < s.events.length - 1 && (
@@ -530,12 +765,12 @@ export default function ShipmentDetailPage() {
                               
                               {event.details && (
                                 <div className="grid gap-2 sm:grid-cols-2 mt-2">
-                                  {Object.entries(event.details).map(([key, value]) => (
+                                  {Object.entries(event.details).map(([key, value]: [string, unknown]) => (
                                     <div key={key} className="text-sm">
                                       <span className="text-muted-foreground capitalize">
                                         {key.replace(/([A-Z])/g, ' $1').trim()}:
                                       </span>{' '}
-                                      <span className="font-medium">{value}</span>
+                                      <span className="font-medium">{String(value)}</span>
                                     </div>
                                   ))}
                                 </div>

@@ -28,14 +28,14 @@ export const QuoteExpiringEmail: React.FC<QuoteExpiringEmailProps> = ({
       <Text style={heading}>⚠️ Quote Expiring Soon</Text>
       <Text style={paragraph}>Hi {buyerName},</Text>
       <Text style={paragraph}>
-        A quote for your requirement <strong>"{requirementTitle}"</strong> is about to expire.
+        A quote for your requirement <strong>&ldquo;{requirementTitle}&rdquo;</strong> is about to expire.
       </Text>
       <InfoBox variant="warning">
         <Text style={urgentText}>
           <strong>⏰ Expires in {expiresIn}</strong>
         </Text>
         <Text style={infoText}>
-          Don't miss out on this opportunity. Review and respond before the quote expires.
+          Don&rsquo;t miss out on this opportunity. Review and respond before the quote expires.
         </Text>
       </InfoBox>
       <Section style={detailsBox}>

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { formatQuotationReference, formatRequirementReference } from '@/lib/flow-references';
 
 // POST /api/buyer/quotations/[id]/accept - Buyer accepts a quotation
 // Per process flow: Accept Quote → KYB/Good Standing Check → Admin Creates Transaction
@@ -10,18 +13,34 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const body = await req.json();
-    const { buyerId, acceptedBy } = body;
-
-    if (!buyerId) {
-      return NextResponse.json({ error: 'buyerId is required' }, { status: 400 });
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    if (session.user.role !== 'BUYER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const { acceptedBy } = body;
 
     const quotation = await prisma.quotation.findUnique({
       where: { id: params.id },
       include: {
-        requirement: { select: { id: true, title: true, buyerId: true, quantity: true, unit: true, category: true, deliveryLocation: true } },
-        supplier: { select: { id: true, companyName: true } },
+        requirement: {
+          select: {
+            id: true,
+            title: true,
+            buyerId: true,
+            quantity: true,
+            unit: true,
+            category: true,
+            deliveryLocation: true,
+            assignedAccountManagerId: true,
+          },
+        },
+        supplier: { select: { id: true, companyName: true, email: true } },
       },
     });
 
@@ -33,9 +52,13 @@ export async function POST(
       return NextResponse.json({ error: 'This quotation is not available' }, { status: 403 });
     }
 
+    if (quotation.requirement.buyerId !== session.user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     // KYB check: user cannot accept quotes until KYB is completed
     const buyer = await prisma.user.findUnique({
-      where: { id: buyerId },
+      where: { id: session.user.id },
       select: { kybStatus: true },
     });
 
@@ -53,7 +76,7 @@ export async function POST(
       data: {
         status: 'ACCEPTED',
         acceptedAt: new Date(),
-        acceptedBy: acceptedBy || buyerId,
+        acceptedBy: acceptedBy || session.user.id,
       },
     });
 
@@ -77,9 +100,67 @@ export async function POST(
       data: { status: 'ACCEPTED' },
     });
 
-    // TODO: Notify admin that quote was accepted, ready for transaction creation
-    // TODO: Notify supplier that quote was accepted
-    // TODO: Notify AM
+    const quotationRef = formatQuotationReference(quotation.id);
+    const requirementRef = formatRequirementReference(quotation.requirementId);
+
+    // Resolve supplier user account for notifications
+    let supplierUserId = quotation.userId;
+    if (!supplierUserId && quotation.supplier.email) {
+      const supplierUser = await prisma.user.findFirst({
+        where: {
+          role: 'SUPPLIER',
+          email: quotation.supplier.email,
+        },
+        select: { id: true },
+      });
+      supplierUserId = supplierUser?.id || null;
+    }
+
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      select: { id: true },
+    });
+
+    const notifications = [
+      ...admins.map((admin) => ({
+        userId: admin.id,
+        type: 'QUOTATION_ACCEPTED' as const,
+        title: 'Buyer Accepted Quotation',
+        message: `${quotationRef} for ${requirementRef} was accepted by buyer and is ready for transaction creation.`,
+        resourceType: 'quotation',
+        resourceId: quotation.id,
+      })),
+      ...(supplierUserId
+        ? [
+            {
+              userId: supplierUserId,
+              type: 'QUOTATION_ACCEPTED' as const,
+              title: 'Your Quotation Was Accepted',
+              message: `Buyer accepted ${quotationRef} for ${requirementRef}. Admin review for transaction setup is next.`,
+              resourceType: 'quotation',
+              resourceId: quotation.id,
+            },
+          ]
+        : []),
+      ...(quotation.requirement.assignedAccountManagerId
+        ? [
+            {
+              userId: quotation.requirement.assignedAccountManagerId,
+              type: 'QUOTATION_ACCEPTED' as const,
+              title: 'Client Selected a Quotation',
+              message: `Your client accepted ${quotationRef} for ${requirementRef}.`,
+              resourceType: 'quotation',
+              resourceId: quotation.id,
+            },
+          ]
+        : []),
+    ];
+
+    if (notifications.length > 0) {
+      await prisma.notification.createMany({
+        data: notifications,
+      });
+    }
 
     return NextResponse.json({
       status: 'success',
@@ -90,6 +171,10 @@ export async function POST(
         currency: quotation.currency,
         supplier: quotation.supplier.companyName,
         requirementId: quotation.requirementId,
+      },
+      references: {
+        quotationReference: quotationRef,
+        requirementReference: requirementRef,
       },
       message: 'Quotation accepted. Admin will now create the transaction after verification checks.',
     });

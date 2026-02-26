@@ -78,7 +78,7 @@ export default function SavedQuotesPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Saved Quotes</h1>
-          <p className="text-gray-500 mt-1">Quotes you've bookmarked for later</p>
+          <p className="text-gray-500 mt-1">Quotes you&rsquo;ve bookmarked for later</p>
         </div>
       </div>
 
@@ -109,7 +109,7 @@ export default function SavedQuotesPage() {
                     From: {saved.quote.seller.companyName || saved.quote.seller.name}
                   </p>
                   {saved.notes && (
-                    <p className="text-gray-500 text-sm italic mb-3">"{saved.notes}"</p>
+                    <p className="text-gray-500 text-sm italic mb-3">&ldquo;{saved.notes}&rdquo;</p>
                   )}
                   <div className="flex items-center gap-6 text-sm">
                     <div className="flex items-center gap-1 text-gray-600">

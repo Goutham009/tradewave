@@ -144,7 +144,6 @@ export function AdminSidebar({
           isCollapsed={isCollapsed}
         >
           <NavItem icon={ClipboardList} label="Verification Queue" href="/admin/account-manager" badge={3} badgeVariant="warning" onClick={handleNavClick} />
-          <NavItem icon={Star} label="Enhanced Dashboard" href="/admin/account-manager/enhanced" onClick={handleNavClick} />
           <NavItem icon={Users} label="All Managers" href="/admin/account-managers" onClick={handleNavClick} />
           <NavItem icon={BarChart3} label="Manager Analytics" href="/admin/account-managers/analytics" onClick={handleNavClick} />
         </SidebarSection>
@@ -157,9 +156,7 @@ export function AdminSidebar({
           defaultExpanded={true}
           isCollapsed={isCollapsed}
         >
-          <NavItem icon={Building2} label="Supplier Selection" href="/admin/procurement" badge={2} badgeVariant="warning" onClick={handleNavClick} />
-          <NavItem icon={Star} label="Enhanced Dashboard" href="/admin/procurement/enhanced" onClick={handleNavClick} />
-          <NavItem icon={FileText} label="Quotation Curation" href="/admin/procurement/curation" badge={3} onClick={handleNavClick} />
+          <NavItem icon={ClipboardList} label="Matching Queue" href="/admin/procurement" badge={2} badgeVariant="warning" onClick={handleNavClick} />
           <NavItem icon={BarChart3} label="Procurement Analytics" href="/admin/procurement/analytics" onClick={handleNavClick} />
         </SidebarSection>
 
@@ -174,7 +171,6 @@ export function AdminSidebar({
           <NavItem icon={BarChart3} label="Buyer Analytics" href="/admin/buyers/analytics" onClick={handleNavClick} />
           <NavItem icon={Star} label="Top Performers" href="/admin/buyers/top-performers" onClick={handleNavClick} />
           <NavItem icon={AlertTriangle} label="At Risk Buyers" href="/admin/buyers/at-risk" badge={2} badgeVariant="warning" onClick={handleNavClick} />
-          <NavItem icon={Wallet} label="Buyer Payout" href="/admin/buyers/payout" onClick={handleNavClick} />
         </SidebarSection>
 
         {/* Supplier Management */}
@@ -189,7 +185,6 @@ export function AdminSidebar({
           <NavItem icon={BarChart3} label="Supplier Analytics" href="/admin/suppliers/analytics" onClick={handleNavClick} />
           <NavItem icon={Star} label="Top Performers" href="/admin/suppliers/top-performers" onClick={handleNavClick} />
           <NavItem icon={AlertTriangle} label="At Risk Suppliers" href="/admin/suppliers/at-risk" badge={2} badgeVariant="warning" onClick={handleNavClick} />
-          <NavItem icon={Wallet} label="Supplier Payout" href="/admin/suppliers/payout" onClick={handleNavClick} />
         </SidebarSection>
 
         {/* Platform Content */}

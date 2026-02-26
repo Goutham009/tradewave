@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { formatRequirementReference } from '@/lib/flow-references';
 
 // POST /api/procurement/requirements/[id]/match-suppliers - Send requirement to matched suppliers
 export async function POST(
@@ -7,8 +10,18 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!['PROCUREMENT_OFFICER', 'ADMIN'].includes(session.user.role || '')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
-    const { supplierIds, sentBy, responseDeadlineDays } = body;
+    const { supplierIds, responseDeadlineDays } = body;
+    const sentBy = session.user.id;
 
     if (!supplierIds || !Array.isArray(supplierIds) || supplierIds.length === 0) {
       return NextResponse.json({ error: 'At least one supplier ID is required' }, { status: 400 });
@@ -16,13 +29,37 @@ export async function POST(
 
     const requirement = await prisma.requirement.findUnique({
       where: { id: params.id },
-      include: { buyer: { select: { companyName: true, accountManagerId: true } } },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        description: true,
+        technicalSpecs: true,
+        quantity: true,
+        unit: true,
+        budgetMin: true,
+        budgetMax: true,
+        targetPrice: true,
+        currency: true,
+        deliveryLocation: true,
+        deliveryDeadline: true,
+        incoterms: true,
+        requiredCertifications: true,
+        qualityInspectionRequired: true,
+        paymentTerms: true,
+        specialInstructions: true,
+        preferredSupplierTiers: true,
+        preferredGeographies: true,
+        buyerId: true,
+        assignedAccountManagerId: true,
+      },
     });
 
     if (!requirement) {
       return NextResponse.json({ error: 'Requirement not found' }, { status: 404 });
     }
 
+    const requirementRef = formatRequirementReference(requirement.id);
     const responseDeadline = new Date(Date.now() + (responseDeadlineDays || 3) * 24 * 60 * 60 * 1000);
 
     // Create SupplierRequirementCard for each supplier
@@ -34,8 +71,9 @@ export async function POST(
             requirementId: params.id,
             supplierId,
             status: 'SENT',
-            sentBy: sentBy || null,
+            sentBy,
             visibleInfo: {
+              requirementReference: requirementRef,
               productName: requirement.title,
               productCategory: requirement.category,
               description: requirement.description,
@@ -55,8 +93,8 @@ export async function POST(
             },
             internalInfo: {
               buyerExpectedPrice: requirement.targetPrice ? Number(requirement.targetPrice) : null,
-              buyerCompany: requirement.buyer?.companyName,
-              accountManager: requirement.assignedAccountManagerId,
+              anonymized: true,
+              visibility: 'PROCUREMENT_AND_ADMIN_ONLY',
               procurementOfficer: sentBy,
             },
             responseDeadline,
@@ -91,11 +129,69 @@ export async function POST(
       },
     });
 
-    // TODO: Send email notifications to all matched suppliers
-    // TODO: Notify supplier AMs to follow up
+    // Notify buyer and AM that sourcing has started
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: requirement.buyerId,
+          type: 'REQUIREMENT_CREATED',
+          title: 'Requirement Sent to Suppliers',
+          message: `${requirementRef} has been sent to ${cards.length} matched supplier${cards.length === 1 ? '' : 's'} for quotations.`,
+          resourceType: 'requirement',
+          resourceId: requirement.id,
+        },
+        ...(requirement.assignedAccountManagerId
+          ? [
+              {
+                userId: requirement.assignedAccountManagerId,
+                type: 'REQUIREMENT_CREATED' as const,
+                title: 'Client Requirement in Sourcing',
+                message: `${requirementRef} was dispatched to ${cards.length} suppliers by procurement.`,
+                resourceType: 'requirement',
+                resourceId: requirement.id,
+              },
+            ]
+          : []),
+      ],
+    });
+
+    // Notify mapped supplier users (if user account email matches supplier profile email)
+    const supplierProfiles = await prisma.supplier.findMany({
+      where: { id: { in: supplierIds } },
+      select: { id: true, email: true, companyName: true },
+    });
+
+    const supplierEmails = supplierProfiles.map((supplier) => supplier.email).filter(Boolean);
+    const supplierUsers = supplierEmails.length
+      ? await prisma.user.findMany({
+          where: {
+            role: 'SUPPLIER',
+            email: { in: supplierEmails },
+          },
+          select: { id: true, email: true },
+        })
+      : [];
+
+    if (supplierUsers.length > 0) {
+      const supplierCompanyByEmail = new Map(
+        supplierProfiles.map((supplier) => [supplier.email, supplier.companyName])
+      );
+
+      await prisma.notification.createMany({
+        data: supplierUsers.map((user) => ({
+          userId: user.id,
+          type: 'REQUIREMENT_CREATED',
+          title: 'New Requirement to Quote',
+          message: `You have received ${requirementRef} for quotation submission${supplierCompanyByEmail.get(user.email || '') ? ` via ${supplierCompanyByEmail.get(user.email || '')}` : ''}.`,
+          resourceType: 'requirement',
+          resourceId: requirement.id,
+        })),
+      });
+    }
 
     return NextResponse.json({
       status: 'success',
+      requirementReference: requirementRef,
       cardsSent: cards.length,
       responseDeadline,
       cards: cards.map(c => ({ id: c.id, supplierId: c.supplierId, status: c.status })),
@@ -112,6 +208,15 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!['PROCUREMENT_OFFICER', 'ADMIN'].includes(session.user.role || '')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const requirement = await prisma.requirement.findUnique({
       where: { id: params.id },
     });

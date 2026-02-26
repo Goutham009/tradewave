@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useSocket } from '@/hooks/useSocket';
 import { Button } from '@/components/ui/button';
@@ -10,25 +11,15 @@ import {
   Users,
   Search,
   Filter,
-  MoreVertical,
   Check,
   X,
-  Mail,
   Shield,
-  UserCheck,
-  UserX,
-  Eye,
   Loader2,
   ChevronLeft,
   ChevronRight,
   Download,
+  ArrowUpRight,
 } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 interface User {
   id: string;
@@ -55,6 +46,7 @@ const getMockUsers = (): User[] => [
 ];
 
 export default function AdminUsersPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -107,32 +99,6 @@ export default function AdminUsersPage() {
     };
   }, [subscribe]);
 
-  const handleVerifyUser = async (userId: string, verify: boolean) => {
-    try {
-      await fetch(`/api/admin/users/${userId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ verified: verify }),
-      });
-      fetchUsers();
-    } catch (error) {
-      console.error('Failed to update user:', error);
-    }
-  };
-
-  const handleUpdateKYC = async (userId: string, status: string) => {
-    try {
-      await fetch(`/api/admin/users/${userId}/kyc`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kycStatus: status }),
-      });
-      fetchUsers();
-    } catch (error) {
-      console.error('Failed to update KYC:', error);
-    }
-  };
-
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(search.toLowerCase()) ||
     user.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -171,7 +137,7 @@ export default function AdminUsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">User Management</h1>
-          <p className="text-slate-400">Manage users, verification, and KYC</p>
+          <p className="text-slate-400">Click a user to open complete details and actions</p>
         </div>
         <Button className="bg-red-600 hover:bg-red-700">
           <Download className="mr-2 h-4 w-4" />
@@ -262,12 +228,16 @@ export default function AdminUsersPage() {
                     <th className="text-left p-4 text-sm font-medium text-slate-400">Verified</th>
                     <th className="text-left p-4 text-sm font-medium text-slate-400">Transactions</th>
                     <th className="text-left p-4 text-sm font-medium text-slate-400">Joined</th>
-                    <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
+                    <th className="text-right p-4 text-sm font-medium text-slate-400">Open</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredUsers.map((user) => (
-                    <tr key={user.id} className="border-b border-slate-700 hover:bg-slate-700/50">
+                    <tr
+                      key={user.id}
+                      className="cursor-pointer border-b border-slate-700 hover:bg-slate-700/50"
+                      onClick={() => router.push(`/admin/users/${user.id}`)}
+                    >
                       <td className="p-4">
                         <div>
                           <p className="font-medium text-white">{user.name}</p>
@@ -291,60 +261,10 @@ export default function AdminUsersPage() {
                         {new Date(user.createdAt).toLocaleDateString()}
                       </td>
                       <td className="p-4 text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="text-slate-400">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
-                            <DropdownMenuItem 
-                              className="text-slate-300 hover:bg-slate-700"
-                              onClick={() => window.location.href = `/admin/users/${user.id}`}
-                            >
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="text-slate-300 hover:bg-slate-700"
-                              onClick={() => handleVerifyUser(user.id, !user.verified)}
-                            >
-                              {user.verified ? (
-                                <>
-                                  <UserX className="mr-2 h-4 w-4" />
-                                  Unverify User
-                                </>
-                              ) : (
-                                <>
-                                  <UserCheck className="mr-2 h-4 w-4" />
-                                  Verify User
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                            {user.kycStatus === 'PENDING' && (
-                              <>
-                                <DropdownMenuItem 
-                                  className="text-green-400 hover:bg-slate-700"
-                                  onClick={() => handleUpdateKYC(user.id, 'VERIFIED')}
-                                >
-                                  <Check className="mr-2 h-4 w-4" />
-                                  Approve KYC
-                                </DropdownMenuItem>
-                                <DropdownMenuItem 
-                                  className="text-red-400 hover:bg-slate-700"
-                                  onClick={() => handleUpdateKYC(user.id, 'REJECTED')}
-                                >
-                                  <X className="mr-2 h-4 w-4" />
-                                  Reject KYC
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                            <DropdownMenuItem className="text-slate-300 hover:bg-slate-700">
-                              <Mail className="mr-2 h-4 w-4" />
-                              Send Email
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <span className="inline-flex items-center gap-1 text-sm text-slate-300">
+                          Details
+                          <ArrowUpRight className="h-4 w-4" />
+                        </span>
                       </td>
                     </tr>
                   ))}

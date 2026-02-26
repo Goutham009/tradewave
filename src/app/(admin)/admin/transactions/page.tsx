@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSocket, SOCKET_EVENTS } from '@/hooks/useSocket';
 import { Button } from '@/components/ui/button';
@@ -83,7 +84,7 @@ export default function AdminTransactionsPage() {
       if (data.status === 'success') {
         setTransactions(data.data.transactions);
         setTotalPages(data.data.pagination?.pages || 1);
-        setStats(data.data.stats || stats);
+        setStats((prev) => data.data.stats || prev);
       }
     } catch (error) {
       console.error('Failed to fetch transactions:', error);
@@ -333,9 +334,11 @@ export default function AdminTransactionsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
-                            <DropdownMenuItem className="text-slate-300 hover:bg-slate-700">
-                              <Eye className="mr-2 h-4 w-4" />
-                              View Details
+                            <DropdownMenuItem asChild className="text-slate-300 hover:bg-slate-700">
+                              <Link href={`/admin/transactions/${txn.id}`}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </Link>
                             </DropdownMenuItem>
                             {txn.status === 'DISPUTED' && (
                               <DropdownMenuItem className="text-yellow-400 hover:bg-slate-700">

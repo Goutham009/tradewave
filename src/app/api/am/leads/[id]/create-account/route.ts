@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
@@ -8,6 +10,15 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!['ACCOUNT_MANAGER', 'ADMIN'].includes(session.user.role || '')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
       name,
@@ -19,13 +30,13 @@ export async function POST(
       role, // BUYER, SUPPLIER, BOTH
       notes,
       sendWelcomeEmail,
-      accountManagerId,
     } = body;
+    const accountManagerId = session.user.id;
 
     // Validate required fields
-    if (!name || !email || !companyName || !accountManagerId) {
+    if (!name || !email || !companyName) {
       return NextResponse.json(
-        { error: 'Name, email, company name, and account manager ID are required' },
+        { error: 'Name, email, and company name are required' },
         { status: 400 }
       );
     }
@@ -37,6 +48,14 @@ export async function POST(
 
     if (!lead) {
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+    }
+
+    if (
+      session.user.role === 'ACCOUNT_MANAGER' &&
+      lead.assignedTo &&
+      lead.assignedTo !== session.user.id
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Check if user with this email already exists

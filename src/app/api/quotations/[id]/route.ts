@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
-import * as paymentService from '@/lib/services/paymentService';
+import { formatQuotationReference, formatRequirementReference } from '@/lib/flow-references';
 
 // Standard response helpers
 function successResponse(data: any, status = 200) {
@@ -208,7 +208,7 @@ export async function GET(
     // Add computed fields
     const isExpired = quotation.validUntil < new Date();
     const daysUntilExpiry = Math.ceil((quotation.validUntil.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-    const canAccept = !isExpired && ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED'].includes(quotation.status);
+    const canAccept = !isExpired && ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'APPROVED_BY_ADMIN', 'VISIBLE_TO_BUYER'].includes(quotation.status);
     const hasTransaction = quotation.transactions.length > 0;
 
     return successResponse({
@@ -271,6 +271,20 @@ export async function PATCH(
           return errorResponse('Forbidden: Only the buyer can accept quotations', 403);
         }
 
+        // KYB check: buyer must have completed KYB before accepting
+        if (isBuyer) {
+          const buyer = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { kybStatus: true },
+          });
+          if (!buyer || buyer.kybStatus !== 'COMPLETED') {
+            return errorResponse(
+              'KYB verification required. Complete KYB verification before accepting quotes.',
+              403
+            );
+          }
+        }
+
         // Check if already accepted
         if (quotation.status === 'ACCEPTED') {
           return errorResponse('Quotation has already been accepted', 409);
@@ -282,16 +296,20 @@ export async function PATCH(
         }
 
         // Check if requirement can accept quotations
-        if (!['SUBMITTED', 'SOURCING', 'QUOTATIONS_READY', 'NEGOTIATING'].includes(quotation.requirement.status)) {
+        if (!['SUBMITTED', 'SOURCING', 'VERIFIED', 'QUOTATIONS_READY', 'NEGOTIATING'].includes(quotation.requirement.status)) {
           return errorResponse('Requirement is not in a state to accept quotations', 400);
         }
 
-        // Accept quotation and create transaction
+        // Accept quotation; transaction creation is handled in admin flow after acceptance
         const result = await prisma.$transaction(async (tx) => {
           // Update quotation status
           const accepted = await tx.quotation.update({
             where: { id: params.id },
-            data: { status: 'ACCEPTED' },
+            data: {
+              status: 'ACCEPTED',
+              acceptedAt: new Date(),
+              acceptedBy: session.user.id,
+            },
           });
 
           // Reject other quotations
@@ -299,9 +317,23 @@ export async function PATCH(
             where: {
               requirementId: quotation.requirementId,
               id: { not: params.id },
-              status: { in: ['PENDING', 'SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED'] },
+              status: {
+                in: [
+                  'PENDING',
+                  'SUBMITTED',
+                  'UNDER_REVIEW',
+                  'SHORTLISTED',
+                  'APPROVED_BY_ADMIN',
+                  'VISIBLE_TO_BUYER',
+                  'IN_NEGOTIATION',
+                ],
+              },
             },
-            data: { status: 'REJECTED' },
+            data: {
+              status: 'DECLINED',
+              rejectedAt: new Date(),
+              declinedReason: 'Another quotation was accepted',
+            },
           });
 
           // Update requirement status
@@ -310,124 +342,77 @@ export async function PATCH(
             data: { status: 'ACCEPTED' },
           });
 
-          // Create transaction
-          const autoReleaseDate = new Date();
-          autoReleaseDate.setDate(autoReleaseDate.getDate() + 30);
-
-          const transaction = await tx.transaction.create({
-            data: {
-              requirementId: quotation.requirementId,
-              quotationId: quotation.id,
-              buyerId: quotation.requirement.buyerId,
-              supplierId: quotation.supplierId,
-              status: 'PAYMENT_PENDING',
-              amount: quotation.total,
-              currency: quotation.currency,
-              destination: quotation.requirement.deliveryLocation,
-              estimatedDelivery: new Date(Date.now() + quotation.leadTime * 24 * 60 * 60 * 1000),
-            },
-          });
-
-          // Create escrow
-          const escrow = await tx.escrowTransaction.create({
-            data: {
-              transactionId: transaction.id,
-              totalAmount: quotation.total,
-              amount: quotation.total,
-              currency: quotation.currency,
-              status: 'PENDING',
-              deliveryConfirmed: false,
-              qualityApproved: false,
-              documentsVerified: false,
-            },
-          });
-
-          // Create release conditions
-          await tx.releaseCondition.createMany({
-            data: [
-              { escrowId: escrow.id, type: 'DELIVERY_CONFIRMED', description: 'Delivery confirmed by buyer' },
-              { escrowId: escrow.id, type: 'QUALITY_APPROVED', description: 'Quality approved by buyer' },
-              { escrowId: escrow.id, type: 'DOCUMENTS_VERIFIED', description: 'Documents verified' },
-            ],
-          });
-
-          // Create milestone
-          await tx.transactionMilestone.create({
-            data: {
-              transactionId: transaction.id,
-              status: 'PAYMENT_PENDING',
-              description: 'Quotation accepted, awaiting payment',
-              actor: session.user.id,
-            },
-          });
-
-          return { accepted, transaction, escrow };
+          return { accepted };
         });
 
-        // Create payment intent
-        let paymentIntent = null;
-        try {
-          const paymentResult = await paymentService.createPaymentIntent({
-            amount: Number(quotation.total),
-            currency: quotation.currency,
-            transactionId: result.transaction.id,
-            buyerId: session.user.id,
-            metadata: {
-              quotationId: quotation.id,
-              requirementId: quotation.requirementId,
-              supplierId: quotation.supplierId,
+        const quotationRef = formatQuotationReference(quotation.id);
+        const requirementRef = formatRequirementReference(quotation.requirementId);
+
+        let supplierUserId = quotation.userId;
+        if (!supplierUserId && quotation.supplier?.email) {
+          const supplierUser = await prisma.user.findFirst({
+            where: {
+              role: 'SUPPLIER',
+              email: quotation.supplier.email,
             },
+            select: { id: true },
           });
-
-          if (paymentResult.success) {
-            await prisma.payment.create({
-              data: {
-                transactionId: result.transaction.id,
-                amount: quotation.total,
-                currency: quotation.currency,
-                method: 'STRIPE',
-                status: 'PENDING',
-                providerPaymentId: paymentResult.paymentIntentId,
-                clientSecret: paymentResult.clientSecret,
-              },
-            });
-
-            paymentIntent = {
-              clientSecret: paymentResult.clientSecret,
-              paymentIntentId: paymentResult.paymentIntentId,
-            };
-          }
-        } catch (e) {
-          console.error('Payment intent creation failed:', e);
+          supplierUserId = supplierUser?.id || null;
         }
 
-        // Notify supplier
-        try {
-          await prisma.notification.create({
-            data: {
-              userId: quotation.userId || '',
-              type: 'QUOTATION_ACCEPTED',
-              title: 'Quotation Accepted!',
-              message: `Your quotation for "${quotation.requirement.title}" has been accepted`,
-              resourceType: 'transaction',
-              resourceId: result.transaction.id,
-            },
+        const admins = await prisma.user.findMany({
+          where: { role: 'ADMIN' },
+          select: { id: true },
+        });
+
+        const notifications = [
+          ...admins.map((admin) => ({
+            userId: admin.id,
+            type: 'QUOTATION_ACCEPTED' as const,
+            title: 'Buyer Accepted Quotation',
+            message: `${quotationRef} for ${requirementRef} was accepted and is ready for transaction creation.`,
+            resourceType: 'quotation',
+            resourceId: quotation.id,
+          })),
+          ...(supplierUserId
+            ? [
+                {
+                  userId: supplierUserId,
+                  type: 'QUOTATION_ACCEPTED' as const,
+                  title: 'Quotation Accepted by Buyer',
+                  message: `Your quotation ${quotationRef} for ${requirementRef} was accepted. Admin transaction review is next.`,
+                  resourceType: 'quotation',
+                  resourceId: quotation.id,
+                },
+              ]
+            : []),
+          ...(quotation.requirement.assignedAccountManagerId
+            ? [
+                {
+                  userId: quotation.requirement.assignedAccountManagerId,
+                  type: 'QUOTATION_ACCEPTED' as const,
+                  title: 'Client Accepted Quotation',
+                  message: `Client selected ${quotationRef} for ${requirementRef}.`,
+                  resourceType: 'quotation',
+                  resourceId: quotation.id,
+                },
+              ]
+            : []),
+        ];
+
+        if (notifications.length > 0) {
+          await prisma.notification.createMany({
+            data: notifications,
           });
-        } catch (e) {}
+        }
 
         return successResponse({
           quotation: result.accepted,
-          transaction: {
-            id: result.transaction.id,
-            status: result.transaction.status,
-            amount: result.transaction.amount,
+          references: {
+            quotationReference: quotationRef,
+            requirementReference: requirementRef,
           },
-          escrow: {
-            id: result.escrow.id,
-            status: result.escrow.status,
-          },
-          paymentIntent,
-          message: 'Quotation accepted and transaction created',
+          message: 'Quotation accepted. Admin will create and approve the transaction next.',
         });
       }
 

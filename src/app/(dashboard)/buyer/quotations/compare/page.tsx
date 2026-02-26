@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useCallback } from 'react';
+import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,12 +13,10 @@ import {
   Clock,
   Package,
   DollarSign,
-  CheckCircle2,
   ArrowLeft,
   Loader2,
   Award,
   TrendingDown,
-  MessageSquare,
   ThumbsUp,
   MapPin,
   Truck,
@@ -71,33 +71,8 @@ export default function BuyerQuotationComparePage() {
   const [quotations, setQuotations] = useState<QuoteForComparison[]>([]);
   const [requirement, setRequirement] = useState<RequirementInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [accepting, setAccepting] = useState<string | null>(null);
-  const [accepted, setAccepted] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (requirementId) fetchQuotations();
-    else loadDemoData();
-  }, [requirementId]);
-
-  const fetchQuotations = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/buyer/quotations/compare?requirementId=${requirementId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setQuotations(data.quotations);
-        setRequirement(data.requirement);
-      } else {
-        loadDemoData();
-      }
-    } catch {
-      loadDemoData();
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadDemoData = () => {
+  const loadDemoData = useCallback(() => {
     setRequirement({
       id: 'req_demo_001',
       title: 'Industrial Steel Pipes',
@@ -143,27 +118,38 @@ export default function BuyerQuotationComparePage() {
       },
     ]);
     setLoading(false);
-  };
+  }, []);
 
-  const handleAcceptQuote = async (quoteId: string) => {
-    setAccepting(quoteId);
+  const fetchQuotations = useCallback(async () => {
+    if (!requirementId) {
+      loadDemoData();
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/buyer/quotations/${quoteId}/accept`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ buyerId: 'current_user', acceptedBy: 'current_user' }),
-      });
+      setLoading(true);
+      const res = await fetch(`/api/buyer/quotations/compare?requirementId=${requirementId}`);
       if (res.ok) {
-        setAccepted(quoteId);
+        const data = await res.json();
+        setQuotations(data.quotations);
+        setRequirement(data.requirement);
       } else {
-        setAccepted(quoteId); // Demo fallback
+        loadDemoData();
       }
     } catch {
-      setAccepted(quoteId); // Demo fallback
+      loadDemoData();
     } finally {
-      setAccepting(null);
+      setLoading(false);
     }
-  };
+  }, [loadDemoData, requirementId]);
+
+  useEffect(() => {
+    if (requirementId) {
+      void fetchQuotations();
+    } else {
+      loadDemoData();
+    }
+  }, [fetchQuotations, loadDemoData, requirementId]);
 
   const lowestPrice = Math.min(...quotations.map(q => q.total));
   const fastestDelivery = Math.min(...quotations.map(q => q.deliveryTimeline || q.leadTime));
@@ -172,36 +158,6 @@ export default function BuyerQuotationComparePage() {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
-      </div>
-    );
-  }
-
-  if (accepted) {
-    const acceptedQuote = quotations.find(q => q.id === accepted);
-    return (
-      <div className="container mx-auto p-6 max-w-2xl">
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="py-12 text-center">
-            <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Quotation Accepted!</h2>
-            <p className="text-gray-600 mb-6">
-              You selected <strong>{acceptedQuote?.supplierName}</strong> at{' '}
-              <strong>${acceptedQuote?.total.toLocaleString()}</strong>
-            </p>
-            <div className="bg-white rounded-lg p-4 mb-6 text-left max-w-sm mx-auto">
-              <h4 className="font-medium text-gray-900 mb-2">What happens next?</h4>
-              <ul className="text-sm text-gray-600 space-y-2">
-                <li className="flex gap-2"><CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" /> Admin will review the transaction</li>
-                <li className="flex gap-2"><Shield className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" /> Escrow account will be set up</li>
-                <li className="flex gap-2"><DollarSign className="h-4 w-4 text-green-500 mt-0.5 shrink-0" /> You'll be asked to make payment</li>
-                <li className="flex gap-2"><Truck className="h-4 w-4 text-purple-500 mt-0.5 shrink-0" /> Order will be produced & shipped</li>
-              </ul>
-            </div>
-            <Button onClick={() => router.push('/buyer/dashboard')} className="bg-brand-primary">
-              Go to Dashboard
-            </Button>
-          </CardContent>
-        </Card>
       </div>
     );
   }
@@ -242,6 +198,12 @@ export default function BuyerQuotationComparePage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mb-6">
+        <CardContent className="py-4 text-sm text-gray-600">
+          Compare pricing and terms here, then open any quote for full details, negotiation with AM and supplier, and final accept/reject action.
+        </CardContent>
+      </Card>
 
       {/* Quotation Cards */}
       <div className="space-y-6">
@@ -369,17 +331,11 @@ export default function BuyerQuotationComparePage() {
 
                 {/* Actions */}
                 <div className="lg:w-1/6 flex flex-col gap-2 justify-center">
-                  <Button
-                    className="bg-green-600 hover:bg-green-700 text-white w-full"
-                    onClick={() => handleAcceptQuote(q.id)}
-                    disabled={accepting === q.id}
-                  >
-                    {accepting === q.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1" />}
-                    Accept
-                  </Button>
-                  <Button variant="outline" className="w-full text-sm">
-                    <MessageSquare className="h-4 w-4 mr-1" /> Negotiate
-                  </Button>
+                  <Link href={`/quotations/${q.id}?context=received&requirementId=${requirementId || requirement?.id || ''}`}>
+                    <Button className="w-full" variant="outline">
+                      Open Full Quote
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </CardContent>

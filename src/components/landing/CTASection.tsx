@@ -19,10 +19,10 @@ export function CTASection() {
             Ready to trade smarter?
           </span>
           <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
-            Ready to transform your B2B trading?
+            Launch your next deal with more confidence
           </h2>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-white/90">
-            Join thousands of successful traders using Tradewave to move faster, safer, and with total transparency.
+          <p className="mx-auto mt-5 max-w-2xl text-base text-white/90 sm:text-lg">
+            Go live in minutes, connect with verified businesses, and move money through protected escrow rails.
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -39,16 +39,16 @@ export function CTASection() {
             </Link>
           </div>
 
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-8 text-white/85">
-            <div className="flex items-center gap-2">
+          <div className="mt-12 grid gap-3 text-white/85 sm:grid-cols-3">
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2">
               <ShieldCheck className="h-5 w-5" />
               <span>No credit card required</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2">
               <Users className="h-5 w-5" />
               <span>Dedicated onboarding team</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2">
               <Sparkles className="h-5 w-5" />
               <span>Launch in under 24 hours</span>
             </div>

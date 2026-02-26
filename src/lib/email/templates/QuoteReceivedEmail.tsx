@@ -28,7 +28,7 @@ export const QuoteReceivedEmail: React.FC<QuoteReceivedEmailProps> = ({
       <Text style={heading}>New Quote Received 📋</Text>
       <Text style={paragraph}>Hi {buyerName},</Text>
       <Text style={paragraph}>
-        You've received a new quote for your requirement <strong>"{requirementTitle}"</strong>.
+        You&rsquo;ve received a new quote for your requirement <strong>&ldquo;{requirementTitle}&rdquo;</strong>.
       </Text>
       <Section style={detailsBox}>
         <table style={table}>

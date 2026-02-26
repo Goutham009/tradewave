@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { formatQuotationReference, formatRequirementReference } from '@/lib/flow-references';
 
 // POST /api/supplier/quotations - Supplier submits a quote for a requirement
 export async function POST(req: NextRequest) {
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
       where: { id: supplierRequirementCardId },
       include: {
         requirement: {
-          select: { id: true, title: true, unit: true, deliveryDeadline: true },
+          select: { id: true, title: true, unit: true, deliveryDeadline: true, assignedAccountManagerId: true },
         },
       },
     });
@@ -147,14 +148,64 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // TODO: Notify admin for quote review
-    // TODO: Send confirmation to supplier
+    const quotationRef = formatQuotationReference(quotation.id);
+    const requirementRef = formatRequirementReference(card.requirementId);
+
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      select: { id: true },
+    });
+
+    const amId = (card as any).requirement?.assignedAccountManagerId || null;
+
+    const notifications = [
+      ...admins.map((admin) => ({
+        userId: admin.id,
+        type: 'QUOTATION_RECEIVED' as const,
+        title: 'New Supplier Quotation Submitted',
+        message: `${quotationRef} was submitted for ${requirementRef} and awaits admin review.`,
+        resourceType: 'quotation',
+        resourceId: quotation.id,
+      })),
+      ...(amId
+        ? [
+            {
+              userId: amId,
+              type: 'QUOTATION_RECEIVED' as const,
+              title: 'Quotation Submitted for Client Requirement',
+              message: `A new quotation ${quotationRef} was received for ${requirementRef}.`,
+              resourceType: 'quotation',
+              resourceId: quotation.id,
+            },
+          ]
+        : []),
+      ...(userId
+        ? [
+            {
+              userId,
+              type: 'QUOTATION_RECEIVED' as const,
+              title: 'Quotation Submitted Successfully',
+              message: `Your quotation ${quotationRef} for ${requirementRef} was submitted and is pending admin review.`,
+              resourceType: 'quotation',
+              resourceId: quotation.id,
+            },
+          ]
+        : []),
+    ];
+
+    if (notifications.length > 0) {
+      await prisma.notification.createMany({
+        data: notifications,
+      });
+    }
 
     return NextResponse.json({
       status: 'success',
       quotation: {
         id: quotation.id,
+        referenceId: quotationRef,
         requirementId: card.requirementId,
+        requirementReference: requirementRef,
         requirementTitle: card.requirement.title,
         status: 'SUBMITTED',
         pricePerUnit: unitPriceNum,

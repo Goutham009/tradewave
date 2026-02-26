@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -183,6 +184,376 @@ const orderDetail = {
   ],
 };
 
+type OrderDetail = typeof orderDetail;
+type TimelineItem = OrderDetail['timeline'][number];
+type EscrowCondition = OrderDetail['escrow']['conditions'][number];
+type BuyerDocument = OrderDetail['documents']['buyer'][number];
+type SupplierDocument = OrderDetail['documents']['supplier'][number];
+
+const ORDER_OVERRIDES: Record<string, any> = {
+  'TXN-2024-001': {
+    orderNumber: 'PO-2024-001',
+    status: 'IN_TRANSIT',
+    progress: 65,
+  },
+  'TXN-2024-002': {
+    orderNumber: 'PO-2024-002',
+    status: 'PRODUCTION',
+    progress: 35,
+    createdAt: '2024-01-14T10:20:00Z',
+    requirement: {
+      id: 'REQ-2024-002',
+      title: 'Electronic Circuit Boards',
+      category: 'Electronics',
+      quantity: 500,
+      unit: 'units',
+      description: 'Industrial-grade PCBs for harsh manufacturing environments.',
+      deliveryLocation: 'Bangalore, India',
+      deadline: '2024-02-04',
+    },
+    quotation: {
+      id: 'QUO-2024-003',
+      unitPrice: 25,
+      quantity: 500,
+    },
+    supplier: {
+      id: 'SUP-002',
+      name: 'Shenzhen Electronics',
+      companyName: 'Shenzhen Electronics Manufacturing Ltd',
+      location: 'Shenzhen, China',
+      email: 'sales@sz-electronics.com',
+      phone: '+86 755 8899 0022',
+      rating: 4.7,
+      onTimeDelivery: 93,
+    },
+    payment: {
+      status: 'COMPLETED',
+      method: 'Credit Card',
+      transactionId: 'PAY-2024-002-CARD',
+      breakdown: {
+        unitPrice: 25,
+        quantity: 500,
+        subtotal: 12500,
+        shipping: 0,
+        insurance: 0,
+        platformFee: 0,
+        taxes: 0,
+        total: 12500,
+      },
+    },
+    shipment: {
+      id: 'SHP-2024-002',
+      trackingNumber: 'DHL9876543210',
+      carrier: {
+        name: 'DHL Express',
+        type: 'air',
+        trackingUrl: 'https://www.dhl.com/global-en/home/tracking.html?tracking-id=DHL9876543210',
+      },
+      status: 'OUT_FOR_DELIVERY',
+      origin: 'Shenzhen, China',
+      destination: 'Delhi, India',
+      currentLocation: {
+        address: 'Delhi Distribution Center',
+        timestamp: '2024-01-25T06:00:00Z',
+      },
+      estimatedDelivery: '2024-01-25',
+      shippedAt: '2024-01-22T10:00:00Z',
+      vessel: 'Air Cargo',
+      containerNumber: 'AIR-DEL-2202',
+    },
+  },
+  'TXN-2024-003': {
+    orderNumber: 'PO-2024-003',
+    status: 'COMPLETED',
+    progress: 100,
+    createdAt: '2024-01-05T11:40:00Z',
+    requirement: {
+      id: 'REQ-2024-003',
+      title: 'Textile Fabric Rolls',
+      category: 'Textiles',
+      quantity: 2000,
+      unit: 'meters',
+      description: 'Cotton blend rolls with export-grade finishing.',
+      deliveryLocation: 'Chennai, India',
+      deadline: '2024-01-20',
+    },
+    quotation: {
+      id: 'QUO-2024-010',
+      unitPrice: 5.5,
+      quantity: 2000,
+    },
+    supplier: {
+      id: 'SUP-003',
+      name: 'Mumbai Textiles Ltd',
+      companyName: 'Mumbai Textiles Export House',
+      location: 'Mumbai, India',
+      email: 'exports@mumbai-textiles.com',
+      phone: '+91 22 4000 7788',
+      rating: 4.4,
+      onTimeDelivery: 96,
+    },
+    payment: {
+      status: 'COMPLETED',
+      method: 'Bank Transfer',
+      transactionId: 'PAY-2024-003-WIRE',
+      breakdown: {
+        unitPrice: 5.5,
+        quantity: 2000,
+        subtotal: 11000,
+        shipping: 0,
+        insurance: 0,
+        platformFee: 0,
+        taxes: 0,
+        total: 11000,
+      },
+    },
+    shipment: {
+      id: 'SHP-2024-003',
+      trackingNumber: 'FEDEX1122334455',
+      carrier: {
+        name: 'FedEx',
+        type: 'ground',
+        trackingUrl: 'https://www.fedex.com/fedextrack/?tracknumbers=FEDEX1122334455',
+      },
+      status: 'DELIVERED',
+      origin: 'Mumbai, India',
+      destination: 'Chennai, India',
+      currentLocation: {
+        address: 'Delivered - Chennai, India',
+        timestamp: '2024-01-19T14:30:00Z',
+      },
+      estimatedDelivery: '2024-01-20',
+      shippedAt: '2024-01-17T08:00:00Z',
+      vessel: 'Ground Freight',
+      containerNumber: 'FDX-CHE-778',
+    },
+  },
+  'TXN-2024-004': {
+    orderNumber: 'PO-2024-004',
+    status: 'PENDING',
+    progress: 10,
+    createdAt: '2024-01-20T09:00:00Z',
+    requirement: {
+      id: 'REQ-2024-004',
+      title: 'Chemical Raw Materials',
+      category: 'Chemicals',
+      quantity: 1000,
+      unit: 'liters',
+      description: 'Industrial-grade chemical additives for polymer production.',
+      deliveryLocation: 'Kolkata, India',
+      deadline: '2024-02-10',
+    },
+    quotation: {
+      id: 'QUO-2024-011',
+      unitPrice: 15,
+      quantity: 1000,
+    },
+    supplier: {
+      id: 'SUP-004',
+      name: 'Global Chemicals Co.',
+      companyName: 'Global Chemicals Company Pvt Ltd',
+      location: 'Singapore',
+      email: 'sales@globalchemicals.com',
+      phone: '+65 7000 0044',
+      rating: 4.3,
+      onTimeDelivery: 90,
+    },
+    payment: {
+      status: 'PENDING',
+      method: 'Bank Transfer',
+      transactionId: 'PAY-2024-004-PENDING',
+      breakdown: {
+        unitPrice: 15,
+        quantity: 1000,
+        subtotal: 15000,
+        shipping: 0,
+        insurance: 0,
+        platformFee: 0,
+        taxes: 0,
+        total: 15000,
+      },
+    },
+    shipment: {
+      id: 'SHP-2024-004',
+      trackingNumber: 'UPS7788990011',
+      carrier: {
+        name: 'UPS',
+        type: 'sea',
+        trackingUrl: 'https://www.ups.com/track?tracknum=UPS7788990011',
+      },
+      status: 'EXCEPTION',
+      origin: 'Singapore',
+      destination: 'Kolkata, India',
+      currentLocation: {
+        address: 'Singapore Customs',
+        timestamp: '2024-01-23T16:00:00Z',
+      },
+      estimatedDelivery: '2024-02-05',
+      shippedAt: '2024-01-21T08:00:00Z',
+      vessel: 'Ocean Cargo',
+      containerNumber: 'UPS-SEA-041',
+    },
+  },
+  'TXN-S-001': {
+    orderNumber: 'SO-2026-001',
+    status: 'PRODUCTION',
+    progress: 40,
+    requirement: {
+      id: 'REQ-S-001',
+      title: 'Industrial Steel Pipes - Grade 304',
+      category: 'Industrial Materials',
+      quantity: 500,
+      unit: 'MT',
+      deliveryLocation: 'Rotterdam, Netherlands',
+      deadline: '2026-05-15',
+    },
+    payment: {
+      status: 'PROCESSING',
+      method: 'Bank Transfer',
+      transactionId: 'PAY-S-001-PROCESSING',
+      breakdown: {
+        unitPrice: 1150,
+        quantity: 500,
+        subtotal: 575000,
+        shipping: 0,
+        insurance: 0,
+        platformFee: 0,
+        taxes: 0,
+        total: 575000,
+      },
+    },
+  },
+  'TXN-S-002': {
+    orderNumber: 'SO-2026-002',
+    status: 'CONFIRMED',
+    progress: 15,
+    requirement: {
+      id: 'REQ-S-002',
+      title: 'Copper Wire - Industrial Grade',
+      category: 'Metals & Alloys',
+      quantity: 200,
+      unit: 'MT',
+      deliveryLocation: 'Amsterdam, Netherlands',
+      deadline: '2026-06-01',
+    },
+    payment: {
+      status: 'PROCESSING',
+      method: 'Bank Transfer',
+      transactionId: 'PAY-S-002-PROCESSING',
+      breakdown: {
+        unitPrice: 8800,
+        quantity: 200,
+        subtotal: 1760000,
+        shipping: 0,
+        insurance: 0,
+        platformFee: 0,
+        taxes: 0,
+        total: 1760000,
+      },
+    },
+  },
+  'TXN-S-003': {
+    orderNumber: 'SO-2026-003',
+    status: 'COMPLETED',
+    progress: 100,
+    requirement: {
+      id: 'REQ-S-003',
+      title: 'Aluminum Sheets - 5mm',
+      category: 'Metals & Alloys',
+      quantity: 150,
+      unit: 'MT',
+      deliveryLocation: 'Rotterdam, Netherlands',
+      deadline: '2026-03-30',
+    },
+    payment: {
+      status: 'COMPLETED',
+      method: 'Bank Transfer',
+      transactionId: 'PAY-S-003-DONE',
+      breakdown: {
+        unitPrice: 2400,
+        quantity: 150,
+        subtotal: 360000,
+        shipping: 0,
+        insurance: 0,
+        platformFee: 0,
+        taxes: 0,
+        total: 360000,
+      },
+    },
+    shipment: {
+      id: 'SHP-S-003',
+      trackingNumber: 'DHL5555002',
+      carrier: {
+        name: 'DHL',
+        type: 'air',
+        trackingUrl: 'https://www.dhl.com/global-en/home/tracking.html?tracking-id=DHL5555002',
+      },
+      status: 'DELIVERED',
+      origin: 'Mumbai, India',
+      destination: 'Amsterdam, Netherlands',
+      currentLocation: {
+        address: 'Delivered - Amsterdam, Netherlands',
+        timestamp: '2026-02-28T12:00:00Z',
+      },
+      estimatedDelivery: '2026-02-28',
+      shippedAt: '2026-02-21T09:00:00Z',
+      vessel: 'Air Cargo',
+      containerNumber: 'DHL-AIR-003',
+    },
+  },
+};
+
+function getOrderById(orderId: string): OrderDetail {
+  const override = ORDER_OVERRIDES[orderId];
+  if (!override) {
+    return orderDetail;
+  }
+
+  return {
+    ...orderDetail,
+    ...override,
+    id: orderId,
+    requirement: {
+      ...orderDetail.requirement,
+      ...(override.requirement || {}),
+    },
+    quotation: {
+      ...orderDetail.quotation,
+      ...(override.quotation || {}),
+    },
+    supplier: {
+      ...orderDetail.supplier,
+      ...(override.supplier || {}),
+    },
+    payment: {
+      ...orderDetail.payment,
+      ...(override.payment || {}),
+      breakdown: {
+        ...orderDetail.payment.breakdown,
+        ...((override.payment && override.payment.breakdown) || {}),
+      },
+    },
+    escrow: {
+      ...orderDetail.escrow,
+      ...(override.escrow || {}),
+      conditions: (override.escrow && override.escrow.conditions) || orderDetail.escrow.conditions,
+    },
+    shipment: {
+      ...orderDetail.shipment,
+      ...(override.shipment || {}),
+      carrier: {
+        ...orderDetail.shipment.carrier,
+        ...((override.shipment && override.shipment.carrier) || {}),
+      },
+      currentLocation: {
+        ...orderDetail.shipment.currentLocation,
+        ...((override.shipment && override.shipment.currentLocation) || {}),
+      },
+    },
+    timeline: override.timeline || orderDetail.timeline,
+  } as OrderDetail;
+}
+
 const tabs = [
   { id: 'overview', label: 'Overview', icon: Package },
   { id: 'payment', label: 'Payment Details', icon: CreditCard },
@@ -215,17 +586,19 @@ const getEscrowBadge = (status: string) => {
 };
 
 export default function OrderDetailPage() {
+  const params = useParams();
+  const orderId = params.id as string;
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedTimeline, setExpandedTimeline] = useState(true);
 
-  const order = orderDetail;
+  const order = getOrderById(orderId);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-4">
-          <Link href="/dashboard">
+          <Link href="/orders">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back
@@ -261,7 +634,7 @@ export default function OrderDetailPage() {
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between overflow-x-auto pb-2">
-            {order.timeline.slice(0, 5).map((step, idx) => (
+            {order.timeline.slice(0, 5).map((step: TimelineItem, idx: number) => (
               <div key={step.step} className="flex items-center flex-1 min-w-[100px]">
                 <div className="flex flex-col items-center">
                   <div
@@ -362,10 +735,10 @@ export default function OrderDetailPage() {
                       <p className="text-sm text-muted-foreground">{order.requirement.description}</p>
                       
                       <div className="grid gap-2 sm:grid-cols-2 pt-2 border-t">
-                        {Object.entries(order.requirement.specifications).map(([key, value]) => (
+                        {Object.entries(order.requirement.specifications).map(([key, value]: [string, unknown]) => (
                           <div key={key} className="text-sm">
                             <span className="text-muted-foreground">{key}:</span>{' '}
-                            <span className="font-medium">{value}</span>
+                            <span className="font-medium">{String(value)}</span>
                           </div>
                         ))}
                       </div>
@@ -453,7 +826,7 @@ export default function OrderDetailPage() {
                 {expandedTimeline && (
                   <CardContent>
                     <div className="space-y-4">
-                      {order.timeline.map((step, idx) => (
+                      {order.timeline.map((step: TimelineItem, idx: number) => (
                         <div key={step.step} className="relative">
                           {idx < order.timeline.length - 1 && (
                             <div
@@ -606,7 +979,7 @@ export default function OrderDetailPage() {
                   <div>
                     <h4 className="font-medium mb-3">Release Conditions</h4>
                     <div className="space-y-3">
-                      {order.escrow.conditions.map((condition) => (
+                      {order.escrow.conditions.map((condition: EscrowCondition) => (
                         <div
                           key={condition.id}
                           className={`flex items-center justify-between rounded-lg border p-3 ${
@@ -749,7 +1122,7 @@ export default function OrderDetailPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {order.documents.buyer.map((doc) => (
+                    {order.documents.buyer.map((doc: BuyerDocument) => (
                       <div key={doc.id} className="flex items-center justify-between rounded-lg border p-4">
                         <div className="flex items-center gap-3">
                           <FileText className="h-5 w-5 text-muted-foreground" />
@@ -782,7 +1155,7 @@ export default function OrderDetailPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {order.documents.supplier.map((doc) => (
+                    {order.documents.supplier.map((doc: SupplierDocument) => (
                       <div key={doc.id} className="flex items-center justify-between rounded-lg border p-4">
                         <div className="flex items-center gap-3">
                           <div className="relative">
@@ -836,7 +1209,7 @@ export default function OrderDetailPage() {
                     <div>
                       <h4 className="font-semibold text-green-800">Blockchain Verification</h4>
                       <p className="text-sm text-green-700 mt-1">
-                        {order.documents.supplier.filter(d => d.verified).length} of {order.documents.supplier.length} documents 
+                        {order.documents.supplier.filter((d: SupplierDocument) => d.verified).length} of {order.documents.supplier.length} documents 
                         have been verified on the blockchain for authenticity and integrity.
                       </p>
                       <Link href="/blockchain">

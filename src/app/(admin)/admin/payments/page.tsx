@@ -7,14 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -22,31 +14,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
-import {
   DollarSign,
   TrendingUp,
   Clock,
   CheckCircle,
-  XCircle,
   Search,
   RefreshCw,
-  MoreVertical,
   ArrowUpRight,
-  ArrowDownRight,
-  Send,
   Eye,
   AlertTriangle,
-  Loader2,
   Building2,
   User,
-  FileText,
 } from 'lucide-react';
+import Link from 'next/link';
 
 interface Transaction {
   id: string;
@@ -164,10 +144,6 @@ export default function PaymentsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('all');
-  const [showActionModal, setShowActionModal] = useState(false);
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const [actionType, setActionType] = useState<string>('');
-  const [processing, setProcessing] = useState(false);
 
   const stats = {
     totalProcessed: transactions.filter(t => t.status === 'COMPLETED' || t.status === 'SUPPLIER_PAID').reduce((sum, t) => sum + t.amount, 0),
@@ -190,65 +166,12 @@ export default function PaymentsPage() {
     return matchesSearch && matchesStatus && matchesTab;
   });
 
-  const openActionModal = (transaction: Transaction, action: string) => {
-    setSelectedTransaction(transaction);
-    setActionType(action);
-    setShowActionModal(true);
-  };
-
-  const handleAction = async () => {
-    if (!selectedTransaction) return;
-    
-    setProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    let newStatus = selectedTransaction.status;
-    if (actionType === 'confirm_payment') newStatus = 'BUYER_PAID';
-    else if (actionType === 'release_to_escrow') newStatus = 'IN_ESCROW';
-    else if (actionType === 'pay_supplier') newStatus = 'SUPPLIER_PAID';
-    else if (actionType === 'complete') newStatus = 'COMPLETED';
-    else if (actionType === 'refund') newStatus = 'REFUNDED';
-    
-    setTransactions(prev => prev.map(t => 
-      t.id === selectedTransaction.id ? { ...t, status: newStatus } : t
-    ));
-    
-    setProcessing(false);
-    setShowActionModal(false);
-    setSelectedTransaction(null);
-  };
-
   const formatCurrency = (amount: number, currency: string = 'USD') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency,
       minimumFractionDigits: 0,
     }).format(amount);
-  };
-
-  const getAvailableActions = (transaction: Transaction) => {
-    const actions = [];
-    switch (transaction.status) {
-      case 'PAYMENT_PENDING':
-        actions.push({ key: 'confirm_payment', label: 'Confirm Payment Received', icon: CheckCircle, color: 'text-green-400' });
-        actions.push({ key: 'send_reminder', label: 'Send Payment Reminder', icon: Send, color: 'text-blue-400' });
-        break;
-      case 'BUYER_PAID':
-        actions.push({ key: 'release_to_escrow', label: 'Release to Escrow', icon: ArrowUpRight, color: 'text-purple-400' });
-        actions.push({ key: 'refund', label: 'Refund Buyer', icon: ArrowDownRight, color: 'text-orange-400' });
-        break;
-      case 'IN_ESCROW':
-        actions.push({ key: 'pay_supplier', label: 'Pay Supplier', icon: Send, color: 'text-green-400' });
-        actions.push({ key: 'refund', label: 'Refund Buyer', icon: ArrowDownRight, color: 'text-orange-400' });
-        break;
-      case 'SUPPLIER_PAID':
-        actions.push({ key: 'complete', label: 'Mark as Completed', icon: CheckCircle, color: 'text-emerald-400' });
-        break;
-      case 'DISPUTED':
-        actions.push({ key: 'resolve_dispute', label: 'Resolve Dispute', icon: AlertTriangle, color: 'text-yellow-400' });
-        break;
-    }
-    return actions;
   };
 
   return (
@@ -375,12 +298,11 @@ export default function PaymentsPage() {
                   <th className="text-left p-4 text-sm font-medium text-slate-400">Amount</th>
                   <th className="text-left p-4 text-sm font-medium text-slate-400">Status</th>
                   <th className="text-left p-4 text-sm font-medium text-slate-400">Date</th>
-                  <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
+                  <th className="text-right p-4 text-sm font-medium text-slate-400">Open</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTransactions.map((t) => {
-                  const actions = getAvailableActions(t);
                   return (
                     <tr key={t.id} className="border-b border-slate-700 hover:bg-slate-700/50">
                       <td className="p-4">
@@ -423,32 +345,12 @@ export default function PaymentsPage() {
                         )}
                       </td>
                       <td className="p-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="sm" className="text-slate-400">
-                            <Eye className="h-4 w-4" />
+                        <Link href={`/admin/payments/${t.id}`}>
+                          <Button variant="outline" size="sm" className="border-slate-600 text-slate-200">
+                            Open Details
+                            <ArrowUpRight className="ml-2 h-4 w-4" />
                           </Button>
-                          {actions.length > 0 && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="border-slate-600 text-slate-300">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
-                                {actions.map((action) => (
-                                  <DropdownMenuItem
-                                    key={action.key}
-                                    className={`${action.color} hover:bg-slate-700`}
-                                    onClick={() => openActionModal(t, action.key)}
-                                  >
-                                    <action.icon className="mr-2 h-4 w-4" />
-                                    {action.label}
-                                  </DropdownMenuItem>
-                                ))}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
+                        </Link>
                       </td>
                     </tr>
                   );
@@ -465,83 +367,6 @@ export default function PaymentsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Action Confirmation Modal */}
-      <Dialog open={showActionModal} onOpenChange={setShowActionModal}>
-        <DialogContent className="bg-slate-800 border-slate-700 text-white">
-          <DialogHeader>
-            <DialogTitle className="text-xl">
-              {actionType === 'confirm_payment' && 'Confirm Payment Received'}
-              {actionType === 'release_to_escrow' && 'Release to Escrow'}
-              {actionType === 'pay_supplier' && 'Pay Supplier'}
-              {actionType === 'complete' && 'Mark as Completed'}
-              {actionType === 'refund' && 'Refund Buyer'}
-              {actionType === 'send_reminder' && 'Send Payment Reminder'}
-              {actionType === 'resolve_dispute' && 'Resolve Dispute'}
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              {actionType === 'confirm_payment' && 'Confirm that payment has been received from the buyer.'}
-              {actionType === 'release_to_escrow' && 'Release the funds to escrow pending order completion.'}
-              {actionType === 'pay_supplier' && 'Release payment to the supplier.'}
-              {actionType === 'complete' && 'Mark this transaction as fully completed.'}
-              {actionType === 'refund' && 'Process a refund to the buyer.'}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedTransaction && (
-            <div className="space-y-4">
-              <div className="bg-slate-900 rounded-lg p-4">
-                <p className="font-mono text-xs text-slate-500">{selectedTransaction.id}</p>
-                <p className="font-medium text-white">{selectedTransaction.requirementTitle}</p>
-                <div className="mt-2 flex justify-between">
-                  <span className="text-slate-400">Amount:</span>
-                  <span className="text-white font-bold">{formatCurrency(selectedTransaction.amount)}</span>
-                </div>
-                {actionType === 'pay_supplier' && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Supplier Amount:</span>
-                    <span className="text-green-400 font-bold">{formatCurrency(selectedTransaction.supplierAmount)}</span>
-                  </div>
-                )}
-              </div>
-
-              {actionType === 'refund' && (
-                <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-5 w-5 text-orange-400 mt-0.5" />
-                    <p className="text-sm text-orange-200">
-                      This will initiate a refund to the buyer. This action cannot be undone.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setShowActionModal(false)} className="border-slate-600 text-slate-300">
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleAction} 
-              disabled={processing}
-              className={
-                actionType === 'refund' ? 'bg-orange-600 hover:bg-orange-700' :
-                'bg-green-600 hover:bg-green-700'
-              }
-            >
-              {processing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                'Confirm'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

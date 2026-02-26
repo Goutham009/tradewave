@@ -56,6 +56,42 @@ export const authOptions: NextAuthOptions = {
             companyName: 'Premium Supplies Co.',
             walletAddress: null,
           },
+          'am1@tradewave.io': {
+            id: 'demo-am-001',
+            email: 'am1@tradewave.io',
+            name: 'Sarah Johnson',
+            password: 'password123',
+            role: 'ACCOUNT_MANAGER',
+            companyName: 'Tradewave',
+            walletAddress: null,
+          },
+          'am2@tradewave.io': {
+            id: 'demo-am-002',
+            email: 'am2@tradewave.io',
+            name: 'Michael Chen',
+            password: 'password123',
+            role: 'ACCOUNT_MANAGER',
+            companyName: 'Tradewave',
+            walletAddress: null,
+          },
+          'procurement1@tradewave.io': {
+            id: 'demo-proc-001',
+            email: 'procurement1@tradewave.io',
+            name: 'David Rodriguez',
+            password: 'password123',
+            role: 'PROCUREMENT_OFFICER',
+            companyName: 'Tradewave',
+            walletAddress: null,
+          },
+          'procurement2@tradewave.io': {
+            id: 'demo-proc-002',
+            email: 'procurement2@tradewave.io',
+            name: 'Emily Watson',
+            password: 'password123',
+            role: 'PROCUREMENT_OFFICER',
+            companyName: 'Tradewave',
+            walletAddress: null,
+          },
         };
 
         const demoUser = demoUsers[credentials.email];

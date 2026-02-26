@@ -3,8 +3,20 @@
 import { useState } from 'react';
 import { 
   Users, Phone, Mail, Clock, CheckCircle, AlertCircle, 
-  Calendar, FileText, MessageSquare, TrendingUp, Filter
+  Calendar, FileText, MessageSquare, TrendingUp, Filter, Eye,
+  RotateCcw, UserCheck, Settings, BarChart3, AlertTriangle
 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 interface Requirement {
   id: string;
@@ -19,6 +31,7 @@ interface Requirement {
   urgencyScore: number;
   submittedAt: string;
   lastContactAt?: string;
+  assignedAM?: string;
 }
 
 const mockRequirements: Requirement[] = [
@@ -34,6 +47,7 @@ const mockRequirements: Requirement[] = [
     status: 'PENDING_VERIFICATION',
     urgencyScore: 85,
     submittedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    assignedAM: 'Sarah Johnson',
   },
   {
     id: '2',
@@ -48,6 +62,7 @@ const mockRequirements: Requirement[] = [
     urgencyScore: 65,
     submittedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     lastContactAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+    assignedAM: 'Michael Chen',
   },
   {
     id: '3',
@@ -62,7 +77,29 @@ const mockRequirements: Requirement[] = [
     urgencyScore: 45,
     submittedAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
     lastContactAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    assignedAM: 'David Park',
   },
+  {
+    id: '4',
+    companyName: 'AutoParts Direct',
+    contactName: 'Emily Brown',
+    contactEmail: 'emily@autoparts.com',
+    contactPhone: '+1 555-0321',
+    productType: 'Brake Components',
+    quantity: 10000,
+    unit: 'pieces',
+    status: 'PENDING_VERIFICATION',
+    urgencyScore: 90,
+    submittedAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+    assignedAM: 'Lisa Wong',
+  },
+];
+
+const accountManagers = [
+  { id: 'am1', name: 'Sarah Johnson', pendingCount: 3, activeClients: 45 },
+  { id: 'am2', name: 'Michael Chen', pendingCount: 5, activeClients: 42 },
+  { id: 'am3', name: 'David Park', pendingCount: 2, activeClients: 38 },
+  { id: 'am4', name: 'Lisa Wong', pendingCount: 4, activeClients: 35 },
 ];
 
 const statusColors = {
@@ -83,6 +120,9 @@ export default function AccountManagerDashboard() {
   const [requirements, setRequirements] = useState<Requirement[]>(mockRequirements);
   const [selectedReq, setSelectedReq] = useState<Requirement | null>(null);
   const [filter, setFilter] = useState<string>('all');
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [selectedAM, setSelectedAM] = useState<string>('');
 
   const filteredRequirements = filter === 'all' 
     ? requirements 
@@ -104,12 +144,40 @@ export default function AccountManagerDashboard() {
     }
   };
 
+  const handleReassign = () => {
+    if (selectedReq && selectedAM) {
+      setRequirements(prev =>
+        prev.map(r => r.id === selectedReq.id ? { ...r, assignedAM: selectedAM } : r)
+      );
+      setSelectedReq(prev => prev ? { ...prev, assignedAM: selectedAM } : null);
+      setShowReassignModal(false);
+      setSelectedAM('');
+    }
+  };
+
+  const handleAdminOverride = (newStatus: Requirement['status']) => {
+    if (selectedReq) {
+      updateStatus(selectedReq.id, newStatus);
+      setShowOverrideModal(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-white">Account Manager Dashboard</h1>
-          <p className="text-slate-400 mt-1">Manage buyer consultations and verifications</p>
+          <h1 className="text-2xl font-bold text-white">AM Verification Queue - Admin Overview</h1>
+          <p className="text-slate-400 mt-1">Monitor and override AM verification workflow</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="border-slate-600 text-slate-300" onClick={() => window.location.href = '/admin/account-managers'}>
+            <Users className="w-4 h-4 mr-2" />
+            View All AMs
+          </Button>
+          <Button variant="outline" className="border-slate-600 text-slate-300" onClick={() => window.location.href = '/admin/account-managers/analytics'}>
+            <BarChart3 className="w-4 h-4 mr-2" />
+            AM Analytics
+          </Button>
         </div>
       </div>
 
@@ -247,8 +315,23 @@ export default function AccountManagerDashboard() {
                 </div>
               </div>
 
+              {/* Assigned AM */}
+              <div>
+                <p className="text-xs text-slate-500 uppercase mb-1">Assigned AM</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-white">{selectedReq.assignedAM || 'Unassigned'}</p>
+                  <button
+                    onClick={() => setShowReassignModal(true)}
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    Reassign
+                  </button>
+                </div>
+              </div>
+
+              {/* AM Actions (Normal Workflow) */}
               <div className="pt-4 border-t border-slate-700 space-y-2">
-                <p className="text-xs text-slate-500 uppercase mb-2">Update Status</p>
+                <p className="text-xs text-slate-500 uppercase mb-2">AM Workflow</p>
                 {selectedReq.status === 'PENDING_VERIFICATION' && (
                   <button
                     onClick={() => updateStatus(selectedReq.id, 'IN_CONSULTATION')}
@@ -277,6 +360,28 @@ export default function AccountManagerDashboard() {
                   </button>
                 )}
               </div>
+
+              {/* Admin Override Options */}
+              <div className="pt-4 border-t border-slate-700 space-y-2">
+                <p className="text-xs text-red-400 uppercase mb-2 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Admin Override
+                </p>
+                <button
+                  onClick={() => setShowOverrideModal(true)}
+                  className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors border border-slate-600"
+                >
+                  <Settings className="w-4 h-4 inline mr-2" />
+                  Force Status Change
+                </button>
+                <button
+                  onClick={() => setShowReassignModal(true)}
+                  className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors border border-slate-600"
+                >
+                  <RotateCcw className="w-4 h-4 inline mr-2" />
+                  Reassign to Different AM
+                </button>
+              </div>
             </div>
           ) : (
             <div className="p-8 text-center">
@@ -286,6 +391,111 @@ export default function AccountManagerDashboard() {
           )}
         </div>
       </div>
+
+      {/* Reassign Modal */}
+      <Dialog open={showReassignModal} onOpenChange={setShowReassignModal}>
+        <DialogContent className="bg-slate-800 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle>Reassign Requirement</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Select a different Account Manager to handle this requirement.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            {accountManagers.map((am) => (
+              <div
+                key={am.id}
+                onClick={() => setSelectedAM(am.name)}
+                className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                  selectedAM === am.name
+                    ? 'border-red-500 bg-red-500/10'
+                    : 'border-slate-600 hover:border-slate-500'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-white">{am.name}</p>
+                    <p className="text-xs text-slate-400">{am.activeClients} clients • {am.pendingCount} pending</p>
+                  </div>
+                  {selectedAM === am.name && (
+                    <CheckCircle className="w-5 h-5 text-red-500" />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReassignModal(false)} className="border-slate-600 text-slate-300">
+              Cancel
+            </Button>
+            <Button onClick={handleReassign} disabled={!selectedAM} className="bg-red-600 hover:bg-red-700">
+              Reassign
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Override Modal */}
+      <Dialog open={showOverrideModal} onOpenChange={setShowOverrideModal}>
+        <DialogContent className="bg-slate-800 border-slate-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-500" />
+              Admin Override
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Force a status change. This will bypass the normal AM workflow.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <button
+              onClick={() => handleAdminOverride('PENDING_VERIFICATION')}
+              className={`w-full p-3 rounded-lg text-left border border-slate-600 hover:border-yellow-500/50 transition-colors ${
+                selectedReq?.status === 'PENDING_VERIFICATION' ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              disabled={selectedReq?.status === 'PENDING_VERIFICATION'}
+            >
+              <span className="font-medium text-yellow-400">Reset to Pending Verification</span>
+              <p className="text-xs text-slate-400 mt-1">Send back to initial state</p>
+            </button>
+            <button
+              onClick={() => handleAdminOverride('IN_CONSULTATION')}
+              className={`w-full p-3 rounded-lg text-left border border-slate-600 hover:border-blue-500/50 transition-colors ${
+                selectedReq?.status === 'IN_CONSULTATION' ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              disabled={selectedReq?.status === 'IN_CONSULTATION'}
+            >
+              <span className="font-medium text-blue-400">Set to In Consultation</span>
+              <p className="text-xs text-slate-400 mt-1">Mark as being consulted by AM</p>
+            </button>
+            <button
+              onClick={() => handleAdminOverride('VERIFIED')}
+              className={`w-full p-3 rounded-lg text-left border border-slate-600 hover:border-green-500/50 transition-colors ${
+                selectedReq?.status === 'VERIFIED' ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              disabled={selectedReq?.status === 'VERIFIED'}
+            >
+              <span className="font-medium text-green-400">Force Verify</span>
+              <p className="text-xs text-slate-400 mt-1">Skip consultation and verify directly</p>
+            </button>
+            <button
+              onClick={() => handleAdminOverride('READY_FOR_MATCHING')}
+              className={`w-full p-3 rounded-lg text-left border border-slate-600 hover:border-purple-500/50 transition-colors ${
+                selectedReq?.status === 'READY_FOR_MATCHING' ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              disabled={selectedReq?.status === 'READY_FOR_MATCHING'}
+            >
+              <span className="font-medium text-purple-400">Send to Procurement</span>
+              <p className="text-xs text-slate-400 mt-1">Skip to procurement matching</p>
+            </button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowOverrideModal(false)} className="border-slate-600 text-slate-300">
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

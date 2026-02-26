@@ -47,7 +47,7 @@ export const DeliveryConfirmedEmail: React.FC<DeliveryConfirmedEmailProps> = ({
       <Text style={paragraph}>
         The buyer is now reviewing the quality of the delivered goods. Once they approve the quality, the funds will be released to your account.
       </Text>
-      <Text style={subheading}>What's Next:</Text>
+      <Text style={subheading}>What&rsquo;s Next:</Text>
       <Text style={listItem}>1. Buyer inspects the goods</Text>
       <Text style={listItem}>2. Buyer approves quality (or raises dispute)</Text>
       <Text style={listItem}>3. Funds released to your account</Text>

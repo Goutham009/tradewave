@@ -25,14 +25,17 @@ import {
   MapPin,
   DollarSign,
   ArrowUpRight,
+  Loader2,
 } from 'lucide-react';
+import { formatRequirementReference } from '@/lib/flow-references';
 
 interface Requirement {
   id: string;
+  requirementReference?: string;
   title: string;
   description: string;
   category: string;
-  status: 'PENDING_AM_VERIFICATION' | 'PENDING_ADMIN_REVIEW' | 'VERIFIED' | 'QUOTES_PENDING' | 'QUOTATIONS_READY' | 'ACCEPTED' | 'COMPLETED';
+  status: string;
   quantity: number;
   unit: string;
   budgetMin: number | null;
@@ -40,7 +43,7 @@ interface Requirement {
   currency: string;
   deliveryLocation: string;
   deliveryDeadline: string;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  priority: string;
   amVerified: boolean;
   adminReviewed: boolean;
   buyer: {
@@ -49,7 +52,7 @@ interface Requirement {
     email: string;
     companyName: string;
   };
-  accountManager?: { id: string; name: string };
+  accountManager?: { id: string; name: string; email?: string } | null;
   suppliersContacted: number;
   quotesReceived: number;
   createdAt: string;
@@ -58,11 +61,15 @@ interface Requirement {
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
   PENDING_AM_VERIFICATION: { label: 'Pending AM', color: 'bg-slate-500/20 text-slate-400', icon: Clock },
   PENDING_ADMIN_REVIEW: { label: 'Pending Review', color: 'bg-blue-500/20 text-blue-400', icon: Package },
+  UNDER_REVIEW: { label: 'Changes Requested', color: 'bg-orange-500/20 text-orange-400', icon: AlertCircle },
   VERIFIED: { label: 'Verified', color: 'bg-purple-500/20 text-purple-400', icon: CheckCircle },
+  SOURCING: { label: 'Sourcing', color: 'bg-indigo-500/20 text-indigo-400', icon: Send },
   QUOTES_PENDING: { label: 'Quotes Pending', color: 'bg-yellow-500/20 text-yellow-400', icon: Send },
   QUOTATIONS_READY: { label: 'Quotes Ready', color: 'bg-cyan-500/20 text-cyan-400', icon: FileText },
   ACCEPTED: { label: 'Accepted', color: 'bg-green-500/20 text-green-400', icon: CheckCircle },
   COMPLETED: { label: 'Completed', color: 'bg-green-500/20 text-green-400', icon: CheckCircle },
+  REJECTED: { label: 'Rejected', color: 'bg-red-500/20 text-red-400', icon: AlertCircle },
+  CANCELLED: { label: 'Cancelled', color: 'bg-red-500/20 text-red-400', icon: AlertCircle },
 };
 
 const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
@@ -72,20 +79,52 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
   URGENT: { label: 'Urgent', color: 'bg-red-500/20 text-red-400' },
 };
 
-const mockRequirements: Requirement[] = [
-  { id: 'REQ-2024-001', title: 'Steel Coils - Grade A', description: 'Hot rolled steel coils for automotive manufacturing', category: 'Steel', status: 'PENDING_ADMIN_REVIEW', quantity: 500, unit: 'tons', budgetMin: 400, budgetMax: 450, currency: 'USD', deliveryLocation: 'Detroit, USA', deliveryDeadline: '2024-03-15', priority: 'HIGH', amVerified: true, adminReviewed: false, buyer: { id: 'b1', name: 'John Smith', email: 'john@acmecorp.com', companyName: 'Acme Corporation' }, accountManager: { id: 'am1', name: 'Sarah Johnson' }, suppliersContacted: 0, quotesReceived: 0, createdAt: '2024-02-15T10:30:00Z' },
-  { id: 'REQ-2024-002', title: 'Cotton Fabric - Premium Quality', description: '100% cotton fabric for garment production', category: 'Textiles', status: 'VERIFIED', quantity: 10000, unit: 'meters', budgetMin: 2, budgetMax: 3, currency: 'USD', deliveryLocation: 'Los Angeles, USA', deliveryDeadline: '2024-03-20', priority: 'MEDIUM', amVerified: true, adminReviewed: true, buyer: { id: 'b2', name: 'Lisa Wang', email: 'lisa@globalimports.com', companyName: 'Global Imports LLC' }, accountManager: { id: 'am1', name: 'Sarah Johnson' }, suppliersContacted: 0, quotesReceived: 0, createdAt: '2024-02-14T14:20:00Z' },
-  { id: 'REQ-2024-003', title: 'Electronic Components - Capacitors', description: 'Ceramic capacitors 100uF, 50V', category: 'Electronics', status: 'QUOTES_PENDING', quantity: 50000, unit: 'pcs', budgetMin: 0.05, budgetMax: 0.08, currency: 'USD', deliveryLocation: 'Singapore', deliveryDeadline: '2024-03-10', priority: 'HIGH', amVerified: true, adminReviewed: true, buyer: { id: 'b3', name: 'Wei Lin', email: 'wei@asiamart.sg', companyName: 'Asia Mart Pte Ltd' }, accountManager: { id: 'am2', name: 'Michael Chen' }, suppliersContacted: 3, quotesReceived: 2, createdAt: '2024-02-10T09:15:00Z' },
-  { id: 'REQ-2024-004', title: 'Industrial Chemicals - Sulfuric Acid', description: 'Technical grade sulfuric acid 98%', category: 'Chemicals', status: 'PENDING_AM_VERIFICATION', quantity: 100, unit: 'tons', budgetMin: 200, budgetMax: 250, currency: 'USD', deliveryLocation: 'Houston, USA', deliveryDeadline: '2024-04-15', priority: 'LOW', amVerified: false, adminReviewed: false, buyer: { id: 'b1', name: 'John Smith', email: 'john@acmecorp.com', companyName: 'Acme Corporation' }, accountManager: { id: 'am1', name: 'Sarah Johnson' }, suppliersContacted: 0, quotesReceived: 0, createdAt: '2024-02-12T16:45:00Z' },
-  { id: 'REQ-2024-005', title: 'Aluminum Sheets - Aircraft Grade', description: '2024-T3 aluminum alloy sheets', category: 'Metals', status: 'QUOTATIONS_READY', quantity: 200, unit: 'sheets', budgetMin: 150, budgetMax: 200, currency: 'USD', deliveryLocation: 'Seattle, USA', deliveryDeadline: '2024-03-25', priority: 'URGENT', amVerified: true, adminReviewed: true, buyer: { id: 'b4', name: 'Robert Brown', email: 'robert@aerospace.com', companyName: 'Aerospace Parts Inc' }, accountManager: { id: 'am2', name: 'Michael Chen' }, suppliersContacted: 4, quotesReceived: 4, createdAt: '2024-02-08T11:00:00Z' },
-];
-
 export default function AdminRequirementsPage() {
-  const [requirements, setRequirements] = useState<Requirement[]>(mockRequirements);
-  const [loading, setLoading] = useState(false);
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [page, setPage] = useState(1);
+
+  const fetchRequirements = useCallback(async (isManualRefresh = false) => {
+    try {
+      if (isManualRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+
+      const query = new URLSearchParams({ page: '1', limit: '100' });
+      if (statusFilter !== 'all') {
+        query.set('status', statusFilter);
+      }
+      if (search.trim()) {
+        query.set('search', search.trim());
+      }
+
+      const res = await fetch(`/api/admin/requirements?${query.toString()}`);
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to fetch requirements');
+      }
+
+      setRequirements(Array.isArray(data.data) ? data.data : []);
+    } catch (fetchError) {
+      console.error('Failed to fetch admin requirements:', fetchError);
+      setRequirements([]);
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to fetch requirements');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [statusFilter, search]);
+
+  useEffect(() => {
+    void fetchRequirements();
+  }, [fetchRequirements]);
 
   const stats = {
     total: requirements.length,
@@ -95,13 +134,7 @@ export default function AdminRequirementsPage() {
     quotationsReady: requirements.filter(r => r.status === 'QUOTATIONS_READY').length,
   };
 
-  const filteredRequirements = requirements.filter(req => {
-    const matchesSearch = req.title.toLowerCase().includes(search.toLowerCase()) ||
-      req.id.toLowerCase().includes(search.toLowerCase()) ||
-      req.buyer.companyName.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredRequirements = requirements;
 
   const formatCurrency = (amount: number | null, currency: string = 'USD') => {
     if (amount === null) return '-';
@@ -116,11 +149,17 @@ export default function AdminRequirementsPage() {
           <h1 className="text-2xl font-bold text-white">Requirement Management</h1>
           <p className="text-slate-400">Open each requirement to review details and take actions</p>
         </div>
-        <Button variant="outline" className="border-slate-600 text-slate-300" onClick={() => setLoading(true)}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        <Button variant="outline" className="border-slate-600 text-slate-300" onClick={() => void fetchRequirements(true)}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-500/30 bg-red-900/20 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-5">
@@ -204,7 +243,9 @@ export default function AdminRequirementsPage() {
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="PENDING_AM_VERIFICATION">Pending AM</SelectItem>
                 <SelectItem value="PENDING_ADMIN_REVIEW">Pending Review</SelectItem>
+                <SelectItem value="UNDER_REVIEW">Changes Requested</SelectItem>
                 <SelectItem value="VERIFIED">Verified</SelectItem>
+                <SelectItem value="SOURCING">Sourcing</SelectItem>
                 <SelectItem value="QUOTES_PENDING">Quotes Pending</SelectItem>
                 <SelectItem value="QUOTATIONS_READY">Quotes Ready</SelectItem>
               </SelectContent>
@@ -216,6 +257,12 @@ export default function AdminRequirementsPage() {
       {/* Requirements List */}
       <Card className="bg-slate-800 border-slate-700">
         <CardContent className="p-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-14 text-slate-400">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Loading requirements...
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -233,7 +280,9 @@ export default function AdminRequirementsPage() {
                   <tr key={req.id} className="border-b border-slate-700 hover:bg-slate-700/50">
                     <td className="p-4">
                       <div>
-                        <p className="font-mono text-xs text-slate-500">{req.id}</p>
+                        <p className="font-mono text-xs text-slate-500">
+                          {req.requirementReference || formatRequirementReference(req.id)}
+                        </p>
                         <p className="font-medium text-white truncate max-w-[250px]">{req.title}</p>
                         <p className="text-xs text-slate-400">{req.category}</p>
                       </div>
@@ -297,8 +346,9 @@ export default function AdminRequirementsPage() {
               </tbody>
             </table>
           </div>
+          )}
 
-          {filteredRequirements.length === 0 && (
+          {!loading && filteredRequirements.length === 0 && (
             <div className="text-center py-12 text-slate-400">
               <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No requirements found</p>

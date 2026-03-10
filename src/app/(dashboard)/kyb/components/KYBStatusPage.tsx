@@ -59,6 +59,8 @@ export function KYBStatusPage() {
   const [kyb, setKyb] = useState<KYBData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [renewing, setRenewing] = useState(false);
+  const [renewalMessage, setRenewalMessage] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -67,6 +69,7 @@ export function KYBStatusPage() {
 
   const fetchKYB = async () => {
     try {
+      setError('');
       const res = await fetch('/api/kyb');
       const data = await res.json();
       if (!data.kyb) {
@@ -84,6 +87,31 @@ export function KYBStatusPage() {
       setError('Failed to load KYB data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStartRenewal = async () => {
+    setRenewing(true);
+    setError('');
+    setRenewalMessage('');
+
+    try {
+      const res = await fetch('/api/kyb/renewal/check', {
+        method: 'POST',
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to initiate KYB renewal');
+      }
+
+      setRenewalMessage(data?.message || 'KYB renewal process initiated successfully.');
+      await fetchKYB();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to initiate KYB renewal');
+    } finally {
+      setRenewing(false);
     }
   };
 
@@ -115,6 +143,18 @@ export function KYBStatusPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {renewalMessage && (
+        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+          {renewalMessage}
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
         <div className="flex items-start justify-between">
@@ -175,10 +215,11 @@ export function KYBStatusPage() {
             <h4 className="font-medium text-red-800 mb-1">KYB Verification Expired</h4>
             <p className="text-red-700 mb-3">Your business verification has expired. Please renew to continue accepting quotes and receiving requirements.</p>
             <button 
-              onClick={() => {/* TODO: Trigger renewal */}}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+              onClick={handleStartRenewal}
+              disabled={renewing}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60 text-sm font-medium"
             >
-              Start Renewal Process
+              {renewing ? 'Starting...' : 'Start Renewal Process'}
             </button>
           </div>
         )}

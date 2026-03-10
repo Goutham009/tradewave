@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
+import { getDemoAdminQuotationsApiPayload, shouldUseDemoFallback } from '@/lib/demo/fallback';
 
 function successResponse(data: any, status = 200) {
   return NextResponse.json({ status: 'success', data }, { status });
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 100);
     const status = searchParams.get('status');
     const search = searchParams.get('search');
+    const requirementId = searchParams.get('requirementId');
 
     const where: any = {};
 
@@ -31,9 +33,16 @@ export async function GET(request: NextRequest) {
       where.status = status;
     }
 
+    if (requirementId) {
+      where.requirementId = requirementId;
+    }
+
     if (search) {
       where.OR = [
         { id: { contains: search, mode: 'insensitive' } },
+        { requirement: { title: { contains: search, mode: 'insensitive' } } },
+        { supplier: { companyName: { contains: search, mode: 'insensitive' } } },
+        { requirement: { buyer: { companyName: { contains: search, mode: 'insensitive' } } } },
       ];
     }
 
@@ -49,6 +58,10 @@ export async function GET(request: NextRequest) {
               id: true, 
               title: true, 
               category: true,
+              quantity: true,
+              unit: true,
+              status: true,
+              createdAt: true,
               buyer: {
                 select: { id: true, name: true, companyName: true, email: true },
               },
@@ -78,16 +91,24 @@ export async function GET(request: NextRequest) {
     // Transform for response
     const transformedQuotations = quotations.map((q: any) => ({
       id: q.id,
+      requirementId: q.requirement?.id,
       supplierName: q.supplier?.companyName || 'Unknown',
       supplierEmail: q.supplier?.email || '',
       buyerName: q.requirement?.buyer?.name || q.requirement?.buyer?.companyName || 'Unknown',
+      buyerCompany: q.requirement?.buyer?.companyName || q.requirement?.buyer?.name || 'Unknown',
       buyerEmail: q.requirement?.buyer?.email || '',
       requirementTitle: q.requirement?.title || 'N/A',
       category: q.requirement?.category || 'N/A',
+      requirementQuantity: q.requirement?.quantity || 0,
+      requirementUnit: q.requirement?.unit || '',
+      requirementStatus: q.requirement?.status || null,
+      requirementCreatedAt: q.requirement?.createdAt || null,
       amount: Number(q.total || 0),
       unitPrice: Number(q.unitPrice || 0),
       quantity: q.quantity || 0,
       currency: q.currency || 'USD',
+      leadTime: q.leadTime || 0,
+      notes: q.notes || q.terms || '',
       status: q.status,
       validUntil: q.validUntil,
       createdAt: q.createdAt,
@@ -106,6 +127,13 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Failed to fetch quotations:', error);
+
+    if (shouldUseDemoFallback(error)) {
+      const page = Number(new URL(request.url).searchParams.get('page') || '1');
+      const limit = Number(new URL(request.url).searchParams.get('limit') || '10');
+      return NextResponse.json(getDemoAdminQuotationsApiPayload(page, limit));
+    }
+
     return errorResponse('Internal server error', 500);
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { Heart, Building2, Star, Trash2, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
@@ -24,11 +25,7 @@ export default function FavoritesPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('SUPPLIER');
 
-  useEffect(() => {
-    fetchFavorites();
-  }, [filter]);
-
-  const fetchFavorites = async () => {
+  const fetchFavorites = useCallback(async () => {
     try {
       const res = await fetch(`/api/buyer/favorites?type=${filter}`);
       const data = await res.json();
@@ -38,7 +35,11 @@ export default function FavoritesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    fetchFavorites();
+  }, [fetchFavorites]);
 
   const removeFavorite = async (id: string) => {
     try {
@@ -98,9 +99,11 @@ export default function FavoritesPage() {
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
                     {favorite.supplier?.avatar ? (
-                      <img
+                      <Image
                         src={favorite.supplier.avatar}
                         alt=""
+                        width={48}
+                        height={48}
                         className="w-12 h-12 rounded-full object-cover"
                       />
                     ) : (

@@ -71,22 +71,6 @@ const STATUS_CONFIG: Record<string, string> = {
   IN_NEGOTIATION: 'bg-yellow-500/20 text-yellow-400',
 };
 
-const DEFAULT_QUOTE: Quotation = {
-  id: 'QUO-DEMO-001',
-  supplierName: 'Demo Supplier Ltd',
-  supplierEmail: 'demo@supplier.com',
-  supplierRating: 4.5,
-  amount: 10000,
-  unitPrice: 100,
-  quantity: 100,
-  currency: 'USD',
-  status: 'SUBMITTED',
-  validUntil: new Date(Date.now() + 7 * 86400000).toISOString(),
-  createdAt: new Date().toISOString(),
-  deliveryDays: 12,
-  notes: 'Demo quotation for detail review workflow.',
-};
-
 function formatCurrency(value: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -99,10 +83,12 @@ export default function AdminQuotationDetailPage() {
   const params = useParams();
   const router = useRouter();
 
-  const requirementId = params.requirementId as string;
-  const quotationId = params.quotationId as string;
+  const requirementId = (params?.requirementId as string) || '';
+  const quotationId = (params?.quotationId as string) || '';
 
-  const [quote, setQuote] = useState<Quotation>({ ...DEFAULT_QUOTE, id: quotationId });
+  const [quote, setQuote] = useState<Quotation | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [marginMode, setMarginMode] = useState<'percent' | 'fixed'>('percent');
   const [marginValue, setMarginValue] = useState<number>(10);
@@ -113,11 +99,16 @@ export default function AdminQuotationDetailPage() {
 
   // Fetch real quotation data
   const fetchQuote = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+
     try {
       const res = await fetch(`/api/quotations/${quotationId}`);
       const data = await res.json();
+
       if (data.status === 'success' && data.data?.quotation) {
         const q = data.data.quotation;
+
         setQuote({
           id: q.id,
           supplierName: q.supplier?.companyName || q.supplier?.name || 'Unknown Supplier',
@@ -137,10 +128,18 @@ export default function AdminQuotationDetailPage() {
           buyerPrice: q.supplierPricePerUnit ? Number(q.total) : undefined,
           requirementId: q.requirementId || q.requirement?.id,
         });
+
         if (q.marginPercentage) setMarginValue(q.marginPercentage);
+      } else {
+        setQuote(null);
+        setLoadError(data.error || 'Failed to load quotation details');
       }
     } catch (err) {
       console.error('Failed to fetch quotation:', err);
+      setQuote(null);
+      setLoadError('Failed to load quotation details');
+    } finally {
+      setLoading(false);
     }
   }, [quotationId]);
 
@@ -172,14 +171,18 @@ export default function AdminQuotationDetailPage() {
 
       if (res.ok && data.status === 'success') {
         const newStatus = action === 'approve' ? 'APPROVED_BY_ADMIN' : action === 'reject' ? 'REJECTED' : 'UNDER_REVIEW';
-        setQuote((prev) => ({ ...prev, status: newStatus as QuoteStatus }));
+        setQuote((prev) => (prev ? { ...prev, status: newStatus as QuoteStatus } : prev));
         if (data.pricing) {
-          setQuote((prev) => ({
-            ...prev,
-            adminMarginPercent: data.pricing.marginType === 'PERCENTAGE' ? marginValue : undefined,
-            adminMarginAmount: data.pricing.margin,
-            buyerPrice: data.pricing.buyerTotal,
-          }));
+          setQuote((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  adminMarginPercent: data.pricing.marginType === 'PERCENTAGE' ? marginValue : undefined,
+                  adminMarginAmount: data.pricing.margin,
+                  buyerPrice: data.pricing.buyerTotal,
+                }
+              : prev
+          );
         }
         setActionResult({ type: 'success', message: action === 'approve' ? 'Quote approved and visible to buyer' : action === 'reject' ? 'Quote rejected' : 'Revision requested' });
       } else {
@@ -194,6 +197,8 @@ export default function AdminQuotationDetailPage() {
 
   // Create Transaction from accepted quotation
   const handleCreateTransaction = async () => {
+    if (!quote) return;
+
     setTxnCreating(true);
     setTxnResult(null);
     try {
@@ -228,18 +233,63 @@ export default function AdminQuotationDetailPage() {
   };
 
   const applyMargin = () => {
+    if (!quote) return;
+
     const marginAmount =
       marginMode === 'percent' ? quote.amount * (marginValue / 100) : marginValue;
     const marginPercent =
       marginMode === 'percent' ? marginValue : Number(((marginValue / quote.amount) * 100).toFixed(2));
 
-    setQuote((prev) => ({
-      ...prev,
-      adminMarginAmount: marginAmount,
-      adminMarginPercent: marginPercent,
-      buyerPrice: prev.amount + marginAmount,
-    }));
+    setQuote((prev) =>
+      prev
+        ? {
+            ...prev,
+            adminMarginAmount: marginAmount,
+            adminMarginPercent: marginPercent,
+            buyerPrice: prev.amount + marginAmount,
+          }
+        : prev
+    );
   };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center p-6">
+        <div className="flex items-center gap-2 text-slate-300">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Loading quotation details...
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError || !quote) {
+    return (
+      <div className="space-y-6 p-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" onClick={() => router.push(`/admin/quotations/${requirementId}`)} className="text-slate-400">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Quotations
+          </Button>
+        </div>
+
+        <Card className="border-red-500/30 bg-red-950/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-300">
+              <AlertCircle className="h-5 w-5" />
+              Failed to load quotation
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-red-200">
+            <p>{loadError || 'Quotation details are unavailable right now.'}</p>
+            <Button onClick={fetchQuote} className="bg-red-600 hover:bg-red-700">
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const isAccepted = quote.status === 'ACCEPTED';
   const isTerminal = ['REJECTED', 'DECLINED'].includes(quote.status);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,22 @@ interface Lead {
   createdAt: string;
 }
 
+interface AccountManagerOption {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface CreatedAccount {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    accountNumber?: string;
+  };
+  tempPassword: string;
+}
+
 const CALL_CHECKLIST_ITEMS = [
   'Confirmed product specifications',
   'Discussed quality standards required',
@@ -63,10 +79,18 @@ const CALL_CHECKLIST_ITEMS = [
 
 export default function LeadDetailPage() {
   const params = useParams();
+  const leadId = typeof params.id === 'string' ? params.id : '';
   const router = useRouter();
   const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
+  const [leadError, setLeadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'call' | 'create-account'>('details');
+
+  const [accountManagers, setAccountManagers] = useState<AccountManagerOption[]>([]);
+  const [selectedAccountManagerId, setSelectedAccountManagerId] = useState('');
+  const [loadingAccountManagers, setLoadingAccountManagers] = useState(true);
+  const [assigningLead, setAssigningLead] = useState(false);
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
 
   // Call notes form
   const [callNotes, setCallNotes] = useState('');
@@ -86,78 +110,130 @@ export default function LeadDetailPage() {
     sendWelcomeEmail: true,
   });
   const [creatingAccount, setCreatingAccount] = useState(false);
-  const [createdAccount, setCreatedAccount] = useState<any>(null);
+  const [createdAccount, setCreatedAccount] = useState<CreatedAccount | null>(null);
+  const [createAccountError, setCreateAccountError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchLead();
-  }, [params.id]);
-
-  const fetchLead = async () => {
+  const fetchLead = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/admin/leads/${params.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setLead(data.lead);
-        // Pre-fill account form from lead data
-        setAccountForm(prev => ({
+      setLeadError(null);
+
+      const res = await fetch(`/api/admin/leads/${leadId}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to fetch lead');
+      }
+
+      setLead(data.lead);
+      setSelectedAccountManagerId(data.lead.assignedTo || '');
+
+      // Pre-fill account form from lead data
+      setAccountForm(prev => ({
+        ...prev,
+        name: data.lead.fullName,
+        email: data.lead.email,
+        phone: data.lead.phoneNumber,
+        companyName: data.lead.companyName,
+      }));
+    } catch (error) {
+      console.error('Error fetching lead:', error);
+      setLead(null);
+      setLeadError(error instanceof Error ? error.message : 'Failed to fetch lead');
+    } finally {
+      setLoading(false);
+    }
+  }, [leadId]);
+
+  const fetchAccountManagers = useCallback(async () => {
+    try {
+      setLoadingAccountManagers(true);
+      setAssignmentError(null);
+
+      const res = await fetch('/api/admin/users?role=ACCOUNT_MANAGER&limit=100');
+      const data = await res.json();
+
+      if (data.status !== 'success') {
+        throw new Error(data.error || 'Failed to load account managers');
+      }
+
+      const managers: AccountManagerOption[] = data.data.users.map((user: any) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      }));
+
+      setAccountManagers(managers);
+    } catch (error) {
+      console.error('Error fetching account managers:', error);
+      setAssignmentError(
+        error instanceof Error ? error.message : 'Failed to load account managers'
+      );
+    } finally {
+      setLoadingAccountManagers(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchLead();
+    void fetchAccountManagers();
+  }, [fetchLead, fetchAccountManagers]);
+
+  const handleAssignLead = async () => {
+    if (!lead || !selectedAccountManagerId) {
+      return;
+    }
+
+    setAssigningLead(true);
+    setAssignmentError(null);
+
+    try {
+      const res = await fetch(`/api/admin/leads/${lead.id}/assign`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedTo: selectedAccountManagerId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to assign lead');
+      }
+
+      const assignedManager = accountManagers.find(
+        (accountManager) => accountManager.id === selectedAccountManagerId
+      );
+      setLead((prev) =>
+        prev
+          ? {
+              ...prev,
+              assignedTo: selectedAccountManagerId,
+              status: data.lead?.status || 'ASSIGNED_TO_AM',
+            }
+          : null
+      );
+
+      if (assignedManager) {
+        setAccountForm((prev) => ({
           ...prev,
-          name: data.lead.fullName,
-          email: data.lead.email,
-          phone: data.lead.phoneNumber,
-          companyName: data.lead.companyName,
+          notes: prev.notes || `Assigned to ${assignedManager.name} (${assignedManager.email})`,
         }));
       }
     } catch (error) {
-      console.error('Error fetching lead:', error);
-      // Demo fallback
-      const demoLead: Lead = {
-        id: params.id as string,
-        email: 'john@abccorp.com',
-        fullName: 'John Doe',
-        companyName: 'ABC Corp',
-        phoneNumber: '+91 98765 43210',
-        category: 'Metals',
-        productName: 'Industrial Steel Pipes',
-        quantity: 500,
-        unit: 'MT',
-        location: 'Mumbai, India',
-        timeline: '1-3 months',
-        targetPrice: '$1200/MT',
-        additionalReqs: 'Need ISO 9001 certified suppliers. Quality inspection required.',
-        source: 'LANDING_PAGE_FORM',
-        leadScore: 'HIGH',
-        status: 'ASSIGNED_TO_AM',
-        notes: null,
-        assignedTo: 'am_sarah_001',
-        callScheduledAt: null,
-        callCompletedAt: null,
-        callNotes: null,
-        callChecklist: null,
-        createdAt: new Date().toISOString(),
-      };
-      setLead(demoLead);
-      setAccountForm({
-        name: demoLead.fullName,
-        email: demoLead.email,
-        phone: demoLead.phoneNumber,
-        companyName: demoLead.companyName,
-        country: 'India',
-        region: 'Maharashtra',
-        role: 'BUYER',
-        notes: 'First-time importer. Needs guidance throughout process. Quality-focused.',
-        sendWelcomeEmail: true,
-      });
+      console.error('Error assigning lead:', error);
+      setAssignmentError(error instanceof Error ? error.message : 'Failed to assign lead');
     } finally {
-      setLoading(false);
+      setAssigningLead(false);
     }
   };
 
   const handleSaveCallNotes = async () => {
     if (!lead) return;
+
     setSavingCall(true);
+    setLeadError(null);
+
     try {
-      await fetch(`/api/admin/leads/${lead.id}`, {
+      const res = await fetch(`/api/admin/leads/${lead.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -167,13 +243,17 @@ export default function LeadDetailPage() {
           callChecklist: checklist,
         }),
       });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to save call notes');
+      }
+
       setLead(prev => prev ? { ...prev, status: 'CALL_COMPLETED', callNotes, callChecklist: checklist } : null);
       setActiveTab('create-account');
     } catch (error) {
       console.error('Error saving call notes:', error);
-      // Update locally for demo
-      setLead(prev => prev ? { ...prev, status: 'CALL_COMPLETED', callNotes, callChecklist: checklist } : null);
-      setActiveTab('create-account');
+      setLeadError(error instanceof Error ? error.message : 'Failed to save call notes');
     } finally {
       setSavingCall(false);
     }
@@ -182,32 +262,39 @@ export default function LeadDetailPage() {
   const handleCreateAccount = async () => {
     if (!lead) return;
     setCreatingAccount(true);
+    setCreateAccountError(null);
+
     try {
       const res = await fetch(`/api/am/leads/${lead.id}/create-account`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...accountForm,
-          accountManagerId: lead.assignedTo || 'am_sarah_001',
+          accountManagerId: lead.assignedTo || null,
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setCreatedAccount(data);
-      } else {
-        // Demo fallback
-        setCreatedAccount({
-          user: { id: 'usr_demo_001', ...accountForm },
-          tempPassword: `TW-2026-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-        });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create account');
       }
+
+      setCreatedAccount(data);
+
+      setLead((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'CONVERTED',
+            }
+          : null
+      );
     } catch (error) {
       console.error('Error creating account:', error);
-      setCreatedAccount({
-        user: { id: 'usr_demo_001', ...accountForm },
-        tempPassword: `TW-2026-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-      });
+      setCreateAccountError(
+        error instanceof Error ? error.message : 'Failed to create account'
+      );
     } finally {
       setCreatingAccount(false);
     }
@@ -227,6 +314,7 @@ export default function LeadDetailPage() {
         <CardContent className="py-12 text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-white">Lead not found</h3>
+          {leadError && <p className="mt-2 text-sm text-red-300">{leadError}</p>}
         </CardContent>
       </Card>
     );
@@ -352,6 +440,51 @@ export default function LeadDetailPage() {
               </Button>
             </CardContent>
           </Card>
+
+          <Card className="bg-slate-800 border-slate-700 md:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-white">Assign to Account Manager</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+                <select
+                  value={selectedAccountManagerId}
+                  onChange={(event) => setSelectedAccountManagerId(event.target.value)}
+                  disabled={loadingAccountManagers || assigningLead}
+                  className="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-white focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">Select account manager</option>
+                  {accountManagers.map((accountManager) => (
+                    <option key={accountManager.id} value={accountManager.id}>
+                      {accountManager.name} ({accountManager.email})
+                    </option>
+                  ))}
+                </select>
+
+                <Button
+                  className="bg-red-600 hover:bg-red-700"
+                  onClick={handleAssignLead}
+                  disabled={loadingAccountManagers || assigningLead || !selectedAccountManagerId}
+                >
+                  {assigningLead ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    'Assign Lead'
+                  )}
+                </Button>
+              </div>
+
+              {lead.assignedTo && (
+                <p className="text-sm text-blue-300">
+                  Currently assigned to user ID: <span className="font-mono">{lead.assignedTo}</span>
+                </p>
+              )}
+
+              {assignmentError && (
+                <p className="text-sm text-red-300">{assignmentError}</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -417,6 +550,7 @@ export default function LeadDetailPage() {
                 <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
                 <h3 className="text-xl font-bold text-white mb-2">Account Created Successfully!</h3>
                 <div className="bg-slate-700 rounded-lg p-4 max-w-md mx-auto text-left space-y-2 mb-6">
+                  <p className="text-sm text-slate-300"><span className="text-slate-500">Account #:</span> <span className="font-mono">{createdAccount.user.accountNumber || 'Pending'}</span></p>
                   <p className="text-sm text-slate-300"><span className="text-slate-500">Name:</span> {createdAccount.user.name}</p>
                   <p className="text-sm text-slate-300"><span className="text-slate-500">Email:</span> {createdAccount.user.email}</p>
                   <p className="text-sm text-yellow-400 font-mono"><span className="text-slate-500">Temp Password:</span> {createdAccount.tempPassword}</p>
@@ -425,7 +559,11 @@ export default function LeadDetailPage() {
                   <Button className="bg-red-600 hover:bg-red-700" onClick={() => router.push('/admin/leads')}>
                     Back to Leads
                   </Button>
-                  <Button variant="outline" className="border-slate-600 text-slate-300">
+                  <Button
+                    variant="outline"
+                    className="border-slate-600 text-slate-300"
+                    onClick={() => router.push(`/admin/leads/${lead.id}/create-requirement`)}
+                  >
                     Create Requirement
                   </Button>
                 </div>
@@ -544,6 +682,10 @@ export default function LeadDetailPage() {
                   {creatingAccount ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UserPlus className="h-4 w-4 mr-2" />}
                   Create Account & Continue to Requirement
                 </Button>
+
+                {createAccountError && (
+                  <p className="text-sm text-red-300">{createAccountError}</p>
+                )}
               </CardContent>
             </Card>
           )}

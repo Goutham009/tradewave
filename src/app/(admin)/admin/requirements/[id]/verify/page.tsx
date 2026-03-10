@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -73,11 +73,7 @@ export default function AMVerifyRequirementPage() {
     docsAttached: false,
   });
 
-  useEffect(() => {
-    fetchRequirement();
-  }, [params.id]);
-
-  const fetchRequirement = async () => {
+  const fetchRequirement = useCallback(async () => {
     try {
       const res = await fetch(`/api/am/requirements/${params.id}/verify`);
       if (res.ok) {
@@ -91,7 +87,11 @@ export default function AMVerifyRequirementPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id]);
+
+  useEffect(() => {
+    fetchRequirement();
+  }, [fetchRequirement]);
 
   const handleAction = async (action: 'approve' | 'reject' | 'request_changes') => {
     setSubmitting(true);

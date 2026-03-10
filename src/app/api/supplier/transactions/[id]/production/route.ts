@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createNotification } from '@/lib/services/notificationService';
 
 // POST /api/supplier/transactions/[id]/production - Confirm production start or update progress
 export async function POST(
@@ -36,6 +37,14 @@ export async function POST(
 
     const transaction: any = await prisma.transaction.findUnique({
       where: { id: params.id },
+      include: {
+        requirement: {
+          select: {
+            assignedAccountManagerId: true,
+            title: true,
+          },
+        },
+      },
     });
 
     if (!transaction) {
@@ -49,7 +58,7 @@ export async function POST(
     switch (action) {
       case 'confirm_start': {
         // Validate that payment has been received
-        const validStatuses = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAID', 'ESCROW_HELD'];
+        const validStatuses = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAID', 'ESCROW_HELD', 'CONFIRMED'];
         if (!validStatuses.includes(transaction.status)) {
           return NextResponse.json(
             { error: `Cannot start production. Transaction status is ${transaction.status}. Payment must be received first.` },
@@ -74,8 +83,27 @@ export async function POST(
           } as any,
         });
 
-        // TODO: Notify buyer about production start
-        // TODO: Notify AM
+        await createNotification({
+          userId: transaction.buyerId,
+          type: 'SYSTEM',
+          title: 'Production Started',
+          message: `Production has started for ${transaction.requirement?.title || 'your order'}. We will keep you updated on progress.`,
+          resourceType: 'transaction',
+          resourceId: params.id,
+          sendEmail: true,
+        });
+
+        if (transaction.requirement?.assignedAccountManagerId) {
+          await createNotification({
+            userId: transaction.requirement.assignedAccountManagerId,
+            type: 'SYSTEM',
+            title: 'Production Started for Client Order',
+            message: `Supplier has started production for transaction ${params.id}.`,
+            resourceType: 'transaction',
+            resourceId: params.id,
+            sendEmail: true,
+          });
+        }
 
         return NextResponse.json({
           status: 'success',
@@ -101,7 +129,20 @@ export async function POST(
           } as any,
         });
 
-        // TODO: Notify buyer about progress update
+        await createNotification({
+          userId: transaction.buyerId,
+          type: 'SYSTEM',
+          title: 'Production Progress Updated',
+          message: `Production progress is now ${progressPercentage || 0}% for ${transaction.requirement?.title || 'your order'}.`,
+          resourceType: 'transaction',
+          resourceId: params.id,
+          metadata: {
+            progressPercentage: progressPercentage || 0,
+            progressNotes: progressNotes || null,
+            progressPhotos: progressPhotos || [],
+          },
+          sendEmail: true,
+        });
 
         return NextResponse.json({
           status: 'success',
@@ -128,7 +169,40 @@ export async function POST(
           } as any,
         });
 
-        // TODO: Notify buyer and inspection team
+        await createNotification({
+          userId: transaction.buyerId,
+          type: 'QUALITY_APPROVED',
+          title: 'Production Completed',
+          message: `Production is complete for ${transaction.requirement?.title || 'your order'} and is moving to quality inspection.`,
+          resourceType: 'transaction',
+          resourceId: params.id,
+          metadata: {
+            completionNotes: completionNotes || null,
+            inspectionCertificateUrl: inspectionCertificateUrl || null,
+          },
+          sendEmail: true,
+        });
+
+        const inspectionTeam = await prisma.user.findMany({
+          where: {
+            role: { in: ['ADMIN', 'PROCUREMENT_OFFICER'] },
+          },
+          select: { id: true },
+        });
+
+        await Promise.all(
+          inspectionTeam.map((member) =>
+            createNotification({
+              userId: member.id,
+              type: 'QUALITY_APPROVED',
+              title: 'Quality Inspection Required',
+              message: `Production is complete for transaction ${params.id}. Please begin quality inspection.`,
+              resourceType: 'transaction',
+              resourceId: params.id,
+              sendEmail: true,
+            })
+          )
+        );
 
         return NextResponse.json({
           status: 'success',

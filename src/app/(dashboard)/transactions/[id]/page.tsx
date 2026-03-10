@@ -328,6 +328,7 @@ export default function TransactionDetailPage() {
   if (!transaction) return null;
 
   const t = transaction;
+  const buyerOrderId = t.references?.buyerOrderId || t.references?.transactionReference || `${t.id.slice(0, 12)}...`;
   const progress = STATUS_CONFIG[t.status]?.progress || 0;
   const canConfirmDelivery = ['DELIVERED', 'IN_TRANSIT', 'SHIPPED'].includes(t.status) && 
     !t.deliveryConfirmedAt && (t.escrow ? !t.escrow.deliveryConfirmed : true);
@@ -392,7 +393,7 @@ export default function TransactionDetailPage() {
           </Link>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold">{t.id}</h1>
+              <h1 className="text-2xl font-bold">{buyerOrderId}</h1>
               {getStatusBadge(t.status)}
               {t.escrow && getEscrowBadge(t.escrow.status)}
             </div>
@@ -848,7 +849,7 @@ export default function TransactionDetailPage() {
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Order ID</span>
-                  <span className="font-mono text-xs">{t.id.slice(0, 12)}...</span>
+                  <span className="font-mono text-xs">{buyerOrderId}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Created</span>
@@ -871,14 +872,9 @@ export default function TransactionDetailPage() {
                 <Button 
                   variant="gradient" 
                   className="w-full"
-                  onClick={() => handleAction('CONFIRMDELIVERY')}
-                  disabled={actionLoading === 'CONFIRMDELIVERY'}
+                  onClick={() => setShowDeliveryForm(true)}
                 >
-                  {actionLoading === 'CONFIRMDELIVERY' ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Truck className="mr-2 h-4 w-4" />
-                  )}
+                  <Truck className="mr-2 h-4 w-4" />
                   Confirm Delivery
                 </Button>
               )}
@@ -886,14 +882,9 @@ export default function TransactionDetailPage() {
                 <Button 
                   variant="gradient" 
                   className="w-full"
-                  onClick={() => handleAction('APPROVEQUALITY')}
-                  disabled={actionLoading === 'APPROVEQUALITY'}
+                  onClick={() => setShowQualityForm(true)}
                 >
-                  {actionLoading === 'APPROVEQUALITY' ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <ThumbsUp className="mr-2 h-4 w-4" />
-                  )}
+                  <ThumbsUp className="mr-2 h-4 w-4" />
                   Approve Quality
                 </Button>
               )}

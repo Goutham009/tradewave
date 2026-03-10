@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
+import * as escrowService from '@/lib/services/escrowService';
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,20 +16,7 @@ export async function GET(request: NextRequest) {
     const transactionId = searchParams.get('transactionId');
 
     if (transactionId) {
-      const escrow = await prisma.escrowTransaction.findUnique({
-        where: { transactionId },
-        include: {
-          releaseConditions: true,
-          transaction: {
-            select: {
-              id: true,
-              status: true,
-              amount: true,
-              currency: true,
-            },
-          },
-        },
-      });
+      const escrow = await escrowService.getEscrowByTransaction(transactionId);
 
       return NextResponse.json(escrow);
     }
@@ -77,44 +65,70 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { transactionId, amount, currency } = body;
+    const amountValue = Number(amount);
 
-    if (!transactionId || !amount) {
+    if (!transactionId || !Number.isFinite(amountValue) || amountValue <= 0) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Create escrow record
-    const escrow = await prisma.escrowTransaction.create({
-      data: {
-        transactionId,
-        totalAmount: amount,
-        amount,
-        currency: currency || 'USD',
-        status: 'PENDING',
-      },
+    const existingEscrow = await escrowService.getEscrowByTransaction(transactionId);
+    if (existingEscrow) {
+      return NextResponse.json(
+        { error: 'Escrow already exists for this transaction', escrowId: existingEscrow.id },
+        { status: 409 }
+      );
+    }
+
+    const escrowResult = await escrowService.createEscrow({
+      transactionId,
+      amount: amountValue,
+      currency: currency || 'USD',
     });
+
+    if (!escrowResult.success || !escrowResult.escrowId) {
+      return NextResponse.json(
+        { error: escrowResult.error || 'Failed to create escrow' },
+        { status: 500 }
+      );
+    }
 
     // Create default release conditions
     await prisma.releaseCondition.createMany({
       data: [
         {
-          escrowId: escrow.id,
+          escrowId: escrowResult.escrowId,
           type: 'DELIVERY_CONFIRMED',
           description: 'Delivery must be confirmed by buyer',
         },
         {
-          escrowId: escrow.id,
+          escrowId: escrowResult.escrowId,
           type: 'QUALITY_APPROVED',
           description: 'Quality must be approved by buyer',
         },
         {
-          escrowId: escrow.id,
+          escrowId: escrowResult.escrowId,
           type: 'DOCUMENTS_VERIFIED',
           description: 'All documents must be verified',
         },
       ],
+    });
+
+    const escrow = await prisma.escrowTransaction.findUnique({
+      where: { id: escrowResult.escrowId },
+      include: {
+        releaseConditions: true,
+        transaction: {
+          select: {
+            id: true,
+            status: true,
+            amount: true,
+            currency: true,
+          },
+        },
+      },
     });
 
     return NextResponse.json(escrow, { status: 201 });

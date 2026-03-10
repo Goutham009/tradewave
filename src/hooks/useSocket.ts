@@ -49,42 +49,58 @@ export function useSocket() {
   useEffect(() => {
     if (!session?.user?.id) return;
 
-    // Initialize socket connection
-    const socket = io(SOCKET_URL, {
-      path: '/api/socketio',
-      transports: ['websocket', 'polling'],
-      autoConnect: true,
-    });
+    let isMounted = true;
+    let socket: Socket | null = null;
 
-    socketRef.current = socket;
+    const bootstrapAndConnectSocket = async () => {
+      try {
+        await fetch('/api/socketio');
+      } catch {
+        // Bootstrap endpoint is best-effort; connection can still retry.
+      }
 
-    socket.on('connect', () => {
-      console.log('Socket connected:', socket.id);
-      setIsConnected(true);
-      
-      // Join user's room
-      socket.emit(SOCKET_EVENTS.JOIN_ROOM, session.user.id);
-    });
+      if (!isMounted) return;
 
-    socket.on('disconnect', () => {
-      console.log('Socket disconnected');
-      setIsConnected(false);
-    });
+      // Initialize socket connection
+      socket = io(SOCKET_URL, {
+        path: '/api/socketio',
+        transports: ['websocket', 'polling'],
+        autoConnect: true,
+      });
 
-    // Listen for new notifications
-    socket.on(SOCKET_EVENTS.NEW_NOTIFICATION, (notification: Notification) => {
-      console.log('New notification received:', notification);
-      setNotifications((prev) => [notification, ...prev]);
-      setUnreadCount((prev) => prev + 1);
-      
-      // Play notification sound (optional)
-      playNotificationSound();
-      
-      // Show browser notification if permitted
-      showBrowserNotification(notification);
-    });
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
+        console.log('Socket connected:', socket?.id);
+        setIsConnected(true);
+
+        // Join user's room
+        socket?.emit(SOCKET_EVENTS.JOIN_ROOM, session.user.id);
+      });
+
+      socket.on('disconnect', () => {
+        console.log('Socket disconnected');
+        setIsConnected(false);
+      });
+
+      // Listen for new notifications
+      socket.on(SOCKET_EVENTS.NEW_NOTIFICATION, (notification: Notification) => {
+        console.log('New notification received:', notification);
+        setNotifications((prev) => [notification, ...prev]);
+        setUnreadCount((prev) => prev + 1);
+
+        // Play notification sound (optional)
+        playNotificationSound();
+
+        // Show browser notification if permitted
+        showBrowserNotification(notification);
+      });
+    };
+
+    void bootstrapAndConnectSocket();
 
     return () => {
+      isMounted = false;
       if (socket) {
         socket.emit(SOCKET_EVENTS.LEAVE_ROOM, session.user.id);
         socket.disconnect();

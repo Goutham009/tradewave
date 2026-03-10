@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle, XCircle, Clock, FileText, Shield, Globe, Building2, Phone, Mail, CreditCard, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
@@ -30,11 +30,7 @@ export default function AdminKYBReviewPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [activeTab, setActiveTab] = useState('details');
 
-  useEffect(() => {
-    fetchKYB();
-  }, [params.id]);
-
-  const fetchKYB = async () => {
+  const fetchKYB = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/kyb/${params.id}/review`);
       const data = await res.json();
@@ -51,7 +47,11 @@ export default function AdminKYBReviewPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id]);
+
+  useEffect(() => {
+    fetchKYB();
+  }, [fetchKYB]);
 
   const loadMockKYB = () => {
     setKyb({

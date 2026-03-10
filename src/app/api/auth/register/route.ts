@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import prisma from '@/lib/db';
+import { sendWelcomeEmail, sendAdminAlertEmail } from '@/lib/email/triggers';
+import { createNotification } from '@/lib/services/notificationService';
 
 // POST /api/auth/register - Universal registration for Buyer, Supplier, or Both
 export async function POST(request: NextRequest) {
@@ -148,9 +150,36 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // TODO: Send email verification email
-    // TODO: If BD referral, notify the BD/AM member
-    // TODO: If organic, notify admin for AM assignment
+    // Send welcome/verification email
+    sendWelcomeEmail(user.id, email, name).catch(console.error);
+
+    // If BD referral, notify the BD/AM member who referred
+    if (referralData && referralData.ownerId) {
+      createNotification({
+        userId: referralData.ownerId,
+        type: 'SYSTEM',
+        title: 'New Referral Registration',
+        message: `${name} (${companyName}) registered using your referral code "${referralCode}". ${autoAssignAM ? 'They have been auto-assigned to you.' : ''}`,
+        resourceType: 'user',
+        resourceId: user.id,
+        sendEmail: true,
+      }).catch(console.error);
+    }
+
+    // If organic signup, notify admin for AM assignment
+    if (!referralData && registrationSource === 'ORGANIC') {
+      sendAdminAlertEmail(
+        'New Organic Registration',
+        {
+          'User': name,
+          'Email': email,
+          'Company': companyName,
+          'Role': selectedType,
+          'Country': country || 'N/A',
+        },
+        'medium',
+      ).catch(console.error);
+    }
 
     return NextResponse.json(
       {

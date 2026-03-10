@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,10 +13,14 @@ import {
   Clock,
   ArrowRight,
   CheckCircle,
+  Loader2,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 
 interface Requirement {
   id: string;
+  requirementReference: string;
   title: string;
   buyerName: string;
   category: string;
@@ -26,59 +30,10 @@ interface Requirement {
   deadline: string;
   status: 'pending_match' | 'suppliers_contacted' | 'quotes_received';
   priority: 'high' | 'medium' | 'low';
+  rawStatus: string;
+  suppliersContacted: number;
+  quotesReceived: number;
 }
-
-
-const MOCK_REQUIREMENTS: Requirement[] = [
-  {
-    id: 'REQ-001',
-    title: 'Steel Components for Manufacturing',
-    buyerName: 'Acme Corporation',
-    category: 'Raw Materials',
-    quantity: 5000,
-    budget: 25000,
-    deliveryLocation: 'Mumbai, India',
-    deadline: '2024-02-15',
-    status: 'pending_match',
-    priority: 'high',
-  },
-  {
-    id: 'REQ-002',
-    title: 'Cotton Fabric - Premium Quality',
-    buyerName: 'Fashion Hub Ltd',
-    category: 'Textiles',
-    quantity: 10000,
-    budget: 45000,
-    deliveryLocation: 'Delhi, India',
-    deadline: '2024-02-20',
-    status: 'pending_match',
-    priority: 'medium',
-  },
-  {
-    id: 'REQ-003',
-    title: 'Industrial Chemicals - Grade A',
-    buyerName: 'Tech Solutions Inc',
-    category: 'Chemicals',
-    quantity: 500,
-    budget: 15000,
-    deliveryLocation: 'Bangalore, India',
-    deadline: '2024-02-10',
-    status: 'suppliers_contacted',
-    priority: 'high',
-  },
-  {
-    id: 'REQ-004',
-    title: 'Electronic Components - Capacitors',
-    buyerName: 'ElectroMart',
-    category: 'Electronics',
-    quantity: 50000,
-    budget: 75000,
-    deliveryLocation: 'Chennai, India',
-    deadline: '2024-02-25',
-    status: 'quotes_received',
-    priority: 'low',
-  },
-];
 
 
 const STATUS_CONFIG = {
@@ -94,23 +49,73 @@ const PRIORITY_CONFIG = {
 };
 
 export default function RequirementsQueuePage() {
-  const [requirements] = useState<Requirement[]>(MOCK_REQUIREMENTS);
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const filteredRequirements = requirements.filter((req) => {
-    const matchesSearch = req.title.toLowerCase().includes(search.toLowerCase()) ||
-      req.buyerName.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const fetchRequirements = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const query = new URLSearchParams();
+      if (search.trim()) {
+        query.set('search', search.trim());
+      }
+
+      const response = await fetch(`/api/procurement/requirements?${query.toString()}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch procurement queue');
+      }
+
+      setRequirements(data.requirements || []);
+    } catch (fetchError) {
+      console.error('Failed to fetch procurement requirements:', fetchError);
+      setRequirements([]);
+      setError(
+        fetchError instanceof Error ? fetchError.message : 'Failed to fetch procurement queue'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [search, statusFilter]);
+
+  useEffect(() => {
+    void fetchRequirements();
+  }, [fetchRequirements]);
+
+  const filteredRequirements =
+    statusFilter === 'all'
+      ? requirements
+      : requirements.filter((requirement) => requirement.status === statusFilter);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Requirements Queue</h1>
-        <p className="text-slate-400">Match buyer requirements with suitable suppliers</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Requirements Queue</h1>
+          <p className="text-slate-400">Match buyer requirements with suitable suppliers</p>
+        </div>
+        <Button
+          variant="outline"
+          className="border-slate-700 text-slate-300"
+          onClick={() => void fetchRequirements()}
+          disabled={loading}
+        >
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-500/30 bg-red-900/20 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
@@ -161,7 +166,16 @@ export default function RequirementsQueuePage() {
 
       {/* Requirements List */}
       <div className="space-y-4">
-        {filteredRequirements.map((req) => (
+        {loading && (
+          <Card className="bg-slate-900 border-slate-800">
+            <CardContent className="py-10 text-center text-slate-400">
+              <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />
+              Loading procurement queue...
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && filteredRequirements.map((req) => (
           <Card key={req.id} className="bg-slate-900 border-slate-800">
             <CardContent className="pt-6">
               <div className="flex items-start justify-between">
@@ -179,6 +193,7 @@ export default function RequirementsQueuePage() {
                         {PRIORITY_CONFIG[req.priority].label}
                       </Badge>
                     </div>
+                    <p className="font-mono text-xs text-slate-500 mt-1">{req.requirementReference}</p>
                     <p className="text-sm text-slate-400 mt-1">
                       {req.buyerName} • {req.category} • Qty: {req.quantity.toLocaleString()}
                     </p>
@@ -189,8 +204,11 @@ export default function RequirementsQueuePage() {
                       <span>•</span>
                       <span className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
-                        Deadline: {req.deadline}
+                        Deadline: {new Date(req.deadline).toLocaleDateString()}
                       </span>
+                    </div>
+                    <div className="mt-2 text-xs text-slate-400">
+                      {req.suppliersContacted} suppliers contacted • {req.quotesReceived} quotes received
                     </div>
                   </div>
                 </div>
@@ -217,12 +235,12 @@ export default function RequirementsQueuePage() {
           </Card>
         ))}
 
-        {filteredRequirements.length === 0 && (
+        {!loading && filteredRequirements.length === 0 && (
           <Card className="bg-slate-900 border-slate-800">
             <CardContent className="py-12 text-center">
-              <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-white">No requirements found</h3>
-              <p className="text-slate-400">Try adjusting your filters.</p>
+              <AlertCircle className="h-12 w-12 text-slate-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-white">No requirements in queue</h3>
+              <p className="text-slate-400">Approved requirements will appear here for procurement matching.</p>
             </CardContent>
           </Card>
         )}

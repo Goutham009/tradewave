@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
+import { getDemoAdminDisputesApiPayload, shouldUseDemoFallback } from '@/lib/demo/fallback';
 
 function successResponse(data: any, status = 200) {
   return NextResponse.json({ status: 'success', data }, { status });
@@ -65,6 +66,11 @@ export async function GET(request: NextRequest) {
     return successResponse({ disputes });
   } catch (error) {
     console.error('Failed to fetch disputes:', error);
+
+    if (shouldUseDemoFallback(error)) {
+      return NextResponse.json(getDemoAdminDisputesApiPayload());
+    }
+
     return errorResponse('Internal server error', 500);
   }
 }

@@ -19,6 +19,12 @@ export async function GET(
     const transaction = await prisma.transaction.findUnique({
       where: { id: transactionId },
       include: {
+        supplier: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
         quotation: true,
         escrow: true,
         shipment: true,
@@ -35,10 +41,12 @@ export async function GET(
     // Check authorization
     const userId = session.user.id;
     const userRole = session.user.role;
+    const isSupplierOwner =
+      !!session.user.email && transaction.supplier?.email === session.user.email;
     
     if (
       transaction.buyerId !== userId &&
-      transaction.supplierId !== userId &&
+      !isSupplierOwner &&
       !['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole || '')
     ) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

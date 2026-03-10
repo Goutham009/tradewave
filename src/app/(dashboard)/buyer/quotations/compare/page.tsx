@@ -71,93 +71,76 @@ export default function BuyerQuotationComparePage() {
   const [quotations, setQuotations] = useState<QuoteForComparison[]>([]);
   const [requirement, setRequirement] = useState<RequirementInfo | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const loadDemoData = useCallback(() => {
-    setRequirement({
-      id: 'req_demo_001',
-      title: 'Industrial Steel Pipes',
-      category: 'Metals',
-      quantity: 500,
-      unit: 'MT',
-      deliveryLocation: 'Mumbai, India',
-      currency: 'USD',
-    });
-    setQuotations([
-      {
-        id: 'q_001', supplierId: 's_001', supplierName: 'SteelCraft Industries',
-        supplierLocation: 'Ahmedabad, India', supplierRating: 4.7, supplierReviews: 156,
-        supplierVerified: true, unitPrice: 1380, quantity: 500, subtotal: 690000,
-        shipping: 12000, insurance: 3450, customs: 0, taxes: 0, total: 705450,
-        currency: 'USD', leadTime: 21, deliveryTimeline: 28, warranty: '12 months',
-        paymentTerms: '30% advance, 70% on delivery', terms: 'FOB Ahmedabad',
-        certifications: ['ISO 9001', 'MTC'], samples: true, sampleCost: 200,
-        validUntil: new Date(Date.now() + 14 * 86400000).toISOString(),
-        status: 'APPROVED_BY_ADMIN', ranking: 1, isRecommended: true,
-      },
-      {
-        id: 'q_002', supplierId: 's_002', supplierName: 'MetalPro Global',
-        supplierLocation: 'Jamshedpur, India', supplierRating: 4.4, supplierReviews: 89,
-        supplierVerified: true, unitPrice: 1320, quantity: 500, subtotal: 660000,
-        shipping: 18000, insurance: 3300, customs: 0, taxes: 0, total: 681300,
-        currency: 'USD', leadTime: 30, deliveryTimeline: 35, warranty: '6 months',
-        paymentTerms: '50% advance, 50% on delivery', terms: 'CIF Mumbai',
-        certifications: ['ISO 9001'], samples: false, sampleCost: null,
-        validUntil: new Date(Date.now() + 10 * 86400000).toISOString(),
-        status: 'APPROVED_BY_ADMIN', ranking: 2, isRecommended: false,
-      },
-      {
-        id: 'q_003', supplierId: 's_003', supplierName: 'AlloyTech Manufacturing',
-        supplierLocation: 'Chennai, India', supplierRating: 4.2, supplierReviews: 45,
-        supplierVerified: true, unitPrice: 1440, quantity: 500, subtotal: 720000,
-        shipping: 8000, insurance: 3600, customs: 0, taxes: 0, total: 731600,
-        currency: 'USD', leadTime: 14, deliveryTimeline: 21, warranty: '18 months',
-        paymentTerms: '100% escrow', terms: 'DDP Mumbai',
-        certifications: ['ISO 9001', 'CE Marking', 'MTC'], samples: true, sampleCost: 0,
-        validUntil: new Date(Date.now() + 21 * 86400000).toISOString(),
-        status: 'APPROVED_BY_ADMIN', ranking: 3, isRecommended: false,
-      },
-    ]);
-    setLoading(false);
-  }, []);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchQuotations = useCallback(async () => {
     if (!requirementId) {
-      loadDemoData();
+      setError('Missing requirementId. Open comparison from a requirement quotation group.');
+      setQuotations([]);
+      setRequirement(null);
+      setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
-      const res = await fetch(`/api/buyer/quotations/compare?requirementId=${requirementId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setQuotations(data.quotations);
-        setRequirement(data.requirement);
-      } else {
-        loadDemoData();
+      setError(null);
+
+      const res = await fetch(`/api/buyer/quotations/compare?requirementId=${encodeURIComponent(requirementId)}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data?.error || 'Failed to load quotations for comparison.');
+        setQuotations([]);
+        setRequirement(null);
+        return;
       }
+
+      setQuotations(Array.isArray(data?.quotations) ? data.quotations : []);
+      setRequirement(data?.requirement || null);
     } catch {
-      loadDemoData();
+      setError('Network error while loading comparison data.');
+      setQuotations([]);
+      setRequirement(null);
     } finally {
       setLoading(false);
     }
-  }, [loadDemoData, requirementId]);
+  }, [requirementId]);
 
   useEffect(() => {
-    if (requirementId) {
-      void fetchQuotations();
-    } else {
-      loadDemoData();
-    }
-  }, [fetchQuotations, loadDemoData, requirementId]);
+    void fetchQuotations();
+  }, [fetchQuotations]);
 
-  const lowestPrice = Math.min(...quotations.map(q => q.total));
-  const fastestDelivery = Math.min(...quotations.map(q => q.deliveryTimeline || q.leadTime));
+  const hasQuotations = quotations.length > 0;
+  const lowestPrice = hasQuotations ? Math.min(...quotations.map((q) => q.total)) : null;
+  const fastestDelivery = hasQuotations
+    ? Math.min(...quotations.map((q) => q.deliveryTimeline || q.leadTime))
+    : null;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-6">
+        <Button variant="ghost" onClick={() => router.back()} className="mb-2 text-gray-600">
+          <ArrowLeft className="h-4 w-4 mr-2" /> Back
+        </Button>
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900">Unable to load comparison</h3>
+            <p className="text-gray-600 mt-2">{error}</p>
+            <Button className="mt-4" variant="outline" onClick={() => void fetchQuotations()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -188,13 +171,17 @@ export default function BuyerQuotationComparePage() {
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-sm text-gray-500">Lowest Price</p>
-            <p className="text-2xl font-bold text-green-600">${lowestPrice.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-green-600">
+              {lowestPrice === null ? 'N/A' : `$${lowestPrice.toLocaleString()}`}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-sm text-gray-500">Fastest Delivery</p>
-            <p className="text-2xl font-bold text-blue-600">{fastestDelivery} days</p>
+            <p className="text-2xl font-bold text-blue-600">
+              {fastestDelivery === null ? 'N/A' : `${fastestDelivery} days`}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -216,14 +203,17 @@ export default function BuyerQuotationComparePage() {
                 </Badge>
               </div>
             )}
-            {q.total === lowestPrice && !q.isRecommended && (
+            {lowestPrice !== null && q.total === lowestPrice && !q.isRecommended && (
               <div className="absolute -top-3 left-4">
                 <Badge className="bg-blue-500 text-white px-3 py-1">
                   <TrendingDown className="h-3 w-3 mr-1" /> Lowest Price
                 </Badge>
               </div>
             )}
-            {(q.deliveryTimeline || q.leadTime) === fastestDelivery && !q.isRecommended && q.total !== lowestPrice && (
+            {fastestDelivery !== null &&
+              (q.deliveryTimeline || q.leadTime) === fastestDelivery &&
+              !q.isRecommended &&
+              q.total !== lowestPrice && (
               <div className="absolute -top-3 left-4">
                 <Badge className="bg-purple-500 text-white px-3 py-1">
                   <Clock className="h-3 w-3 mr-1" /> Fastest

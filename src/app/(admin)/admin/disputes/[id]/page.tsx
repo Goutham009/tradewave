@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -67,11 +67,7 @@ export default function AdminDisputeDetailPage() {
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
 
-  useEffect(() => {
-    fetchDispute();
-  }, [disputeId]);
-
-  const fetchDispute = async () => {
+  const fetchDispute = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch(`/api/disputes/${disputeId}`);
@@ -87,7 +83,11 @@ export default function AdminDisputeDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [disputeId]);
+
+  useEffect(() => {
+    fetchDispute();
+  }, [fetchDispute]);
 
   const refreshDispute = async () => {
     setRefreshing(true);

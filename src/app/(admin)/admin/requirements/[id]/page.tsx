@@ -44,6 +44,10 @@ interface Requirement {
   description: string;
   category: string;
   status: string;
+  isReorder?: boolean;
+  originalTransactionId?: string | null;
+  preferredSupplierId?: string | null;
+  sentDirectlyToSupplier?: boolean;
   quantity: number;
   unit: string;
   budgetMin: number | null;
@@ -106,24 +110,29 @@ export default function RequirementDetailPage() {
   const router = useRouter();
   const [requirement, setRequirement] = useState<Requirement | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'send'>('approve');
   const [notes, setNotes] = useState('');
 
   const fetchRequirement = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await fetch(`/api/admin/requirements/${params.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        setRequirement(data.data);
-      } else {
-        throw new Error('Not found');
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Requirement not found');
       }
+
+      setRequirement(data.data);
     } catch (error) {
-      // Use mock data
-      setRequirement({ ...MOCK_REQUIREMENT, id: params.id as string });
+      console.error('Failed to fetch requirement:', error);
+      setRequirement(null);
+      setError(error instanceof Error ? error.message : 'Failed to load requirement details');
     } finally {
       setLoading(false);
     }
@@ -136,25 +145,59 @@ export default function RequirementDetailPage() {
   const handleAction = (type: 'approve' | 'reject' | 'send') => {
     setActionType(type);
     setNotes('');
+    setActionError(null);
     setShowActionModal(true);
   };
 
   const handleSubmitAction = async () => {
     if (!requirement) return;
-    
+
     setProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    if (actionType === 'approve') {
-      setRequirement(prev => prev ? { ...prev, status: 'VERIFIED', adminReviewed: true } : null);
-    } else if (actionType === 'reject') {
-      setRequirement(prev => prev ? { ...prev, status: 'REJECTED' } : null);
-    } else if (actionType === 'send') {
-      setRequirement(prev => prev ? { ...prev, status: 'QUOTES_PENDING' } : null);
+    setActionError(null);
+    try {
+      if (actionType === 'send') {
+        router.push(`/admin/procurement/${requirement.id}`);
+        setShowActionModal(false);
+        return;
+      }
+
+      const isDirectReorderApproval = Boolean(
+        requirement.isReorder &&
+          requirement.sentDirectlyToSupplier &&
+          requirement.preferredSupplierId
+      );
+
+      const response = await fetch(`/api/admin/requirements/${requirement.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          actionType === 'approve'
+            ? {
+                action: 'approve',
+                adminNotes: notes || null,
+                sendTo: isDirectReorderApproval ? 'direct' : 'procurement',
+                sentDirectlyToSupplier: isDirectReorderApproval,
+              }
+            : {
+                action: 'reject',
+                adminNotes: notes || null,
+              }
+        ),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to process requirement review action');
+      }
+
+      await fetchRequirement();
+      setShowActionModal(false);
+    } catch (submitError) {
+      console.error('Failed to submit requirement action:', submitError);
+      setActionError(submitError instanceof Error ? submitError.message : 'Failed to process action');
+    } finally {
+      setProcessing(false);
     }
-    
-    setProcessing(false);
-    setShowActionModal(false);
   };
 
   const formatCurrency = (amount: number | null, currency: string = 'USD') => {
@@ -207,7 +250,7 @@ export default function RequirementDetailPage() {
     return (
       <div className="text-center py-12">
         <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-yellow-500" />
-        <p className="text-white text-lg">Requirement not found</p>
+        <p className="text-white text-lg">{error || 'Requirement not found'}</p>
         <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
       </div>
     );
@@ -217,6 +260,12 @@ export default function RequirementDetailPage() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="rounded-lg border border-red-500/30 bg-red-900/20 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -238,7 +287,9 @@ export default function RequirementDetailPage() {
               </Button>
               <Button onClick={() => handleAction('approve')} className="bg-green-600 hover:bg-green-700">
                 <CheckCircle className="h-4 w-4 mr-2" />
-                Approve & Send to Procurement
+                {requirement.isReorder && requirement.sentDirectlyToSupplier && requirement.preferredSupplierId
+                  ? 'Approve & Send Directly to Supplier'
+                  : 'Approve & Send to Procurement'}
               </Button>
             </>
           )}
@@ -438,7 +489,10 @@ export default function RequirementDetailPage() {
               {actionType === 'send' && 'Send to Suppliers'}
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              {actionType === 'approve' && 'This will approve the requirement and send it to the procurement team for supplier matching.'}
+              {actionType === 'approve' &&
+                (requirement.isReorder && requirement.sentDirectlyToSupplier && requirement.preferredSupplierId
+                  ? 'This will approve the reorder and send it directly to the preferred supplier for quotation submission.'
+                  : 'This will approve the requirement and send it to the procurement team for supplier matching.')}
               {actionType === 'reject' && 'This will reject the requirement and notify the buyer.'}
               {actionType === 'send' && 'This will send the requirement to matched suppliers for quotations.'}
             </DialogDescription>
@@ -452,6 +506,9 @@ export default function RequirementDetailPage() {
               placeholder="Add any notes..."
               className="bg-slate-700 border-slate-600 text-white"
             />
+            {actionError && (
+              <p className="mt-2 text-xs text-red-300">{actionError}</p>
+            )}
           </div>
 
           <DialogFooter>

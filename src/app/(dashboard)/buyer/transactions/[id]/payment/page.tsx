@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Shield,
   DollarSign,
@@ -48,7 +47,9 @@ export default function BuyerPaymentPage() {
   const router = useRouter();
   const [data, setData] = useState<PaymentPageData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState('STRIPE');
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState('BANK_TRANSFER');
   const [processing, setProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 
@@ -59,53 +60,28 @@ export default function BuyerPaymentPage() {
   const fetchPaymentDetails = async () => {
     try {
       setLoading(true);
+      setPageError(null);
       const res = await fetch(`/api/buyer/transactions/${params.id}/payment`);
       if (res.ok) {
         const result = await res.json();
         setData(result);
       } else {
-        loadDemoData();
+        const result = await res.json().catch(() => ({}));
+        setData(null);
+        setPageError(result?.error || 'Failed to load payment details');
       }
     } catch {
-      loadDemoData();
+      setData(null);
+      setPageError('Network error while loading payment details');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadDemoData = () => {
-    setData({
-      transaction: {
-        id: params.id as string,
-        status: 'ESCROW_CREATED',
-        amount: 705450,
-        advanceAmount: 211635,
-        balanceAmount: 493815,
-        currency: 'USD',
-        paymentTerms: '30% advance, 70% on delivery confirmation',
-        productName: 'Industrial Steel Pipes',
-        supplier: 'SteelCraft Industries',
-      },
-      escrow: {
-        id: 'esc_demo_001',
-        status: 'PENDING_PAYMENT',
-        totalAmount: 705450,
-        advancePaid: false,
-        advancePaidAmount: null,
-        balancePaid: false,
-        releaseConditions: [
-          { type: 'DELIVERY_CONFIRMED', description: 'Buyer confirms receipt of goods', satisfied: false },
-          { type: 'QUALITY_APPROVED', description: 'Quality inspection passed', satisfied: false },
-          { type: 'DOCUMENTS_VERIFIED', description: 'All shipping documents verified', satisfied: false },
-        ],
-      },
-      payments: [],
-    });
-  };
-
   const handlePayment = async (type: 'advance' | 'balance') => {
     if (!data) return;
     setProcessing(true);
+    setPaymentError(null);
     const amount = type === 'advance' ? data.transaction.advanceAmount : data.transaction.balanceAmount;
 
     try {
@@ -119,13 +95,17 @@ export default function BuyerPaymentPage() {
           buyerId: 'current_user',
         }),
       });
-      if (res.ok) {
+      const result = await res.json().catch(() => ({}));
+
+      if (res.ok && result?.status === 'success') {
         setPaymentSuccess(true);
+      } else if (res.ok && result?.status === 'pending_confirmation') {
+        setPaymentError('Card payment requires an additional Stripe confirmation step that is not completed here. Please use Bank Transfer or Wire, or complete Stripe confirmation in the dedicated checkout flow.');
       } else {
-        setPaymentSuccess(true); // Demo fallback
+        setPaymentError(result?.error || 'Payment failed. Please retry or contact support.');
       }
     } catch {
-      setPaymentSuccess(true); // Demo fallback
+      setPaymentError('Network error while processing payment. Please retry.');
     } finally {
       setProcessing(false);
     }
@@ -139,7 +119,21 @@ export default function BuyerPaymentPage() {
     );
   }
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="container mx-auto p-6 max-w-2xl">
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-8 text-center">
+            <AlertCircle className="h-10 w-10 text-red-500 mx-auto mb-3" />
+            <p className="text-red-700 mb-4">{pageError || 'Payment details unavailable.'}</p>
+            <Button variant="outline" onClick={fetchPaymentDetails}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   const { transaction: txn, escrow } = data;
 
   if (paymentSuccess) {
@@ -181,6 +175,15 @@ export default function BuyerPaymentPage() {
 
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Make Payment</h1>
       <p className="text-gray-600 mb-6">{txn.productName} • {txn.supplier}</p>
+
+      {(pageError || paymentError) && (
+        <Card className="mb-6 border-red-200 bg-red-50">
+          <CardContent className="p-4 flex items-start gap-2 text-red-700">
+            <AlertCircle className="h-4 w-4 mt-0.5" />
+            <p className="text-sm">{paymentError || pageError}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Order Summary */}
       <Card className="mb-6">

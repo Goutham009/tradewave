@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -9,21 +9,40 @@ import { Badge } from '@/components/ui/badge';
 import {
   ArrowLeft,
   ArrowUpRight,
-  DollarSign,
   Loader2,
   Package,
-  Star,
-  User,
-  Building2,
   FileText,
-  Calendar,
+  AlertCircle,
 } from 'lucide-react';
+
+interface AdminQuotationRow {
+  id: string;
+  requirementId: string;
+  requirementTitle: string;
+  requirementQuantity: number;
+  requirementUnit: string;
+  requirementCreatedAt: string | null;
+  buyerName: string;
+  buyerCompany?: string;
+  buyerEmail: string;
+  category: string;
+  supplierName: string;
+  supplierEmail: string;
+  amount: number;
+  unitPrice: number;
+  quantity: number;
+  currency: string;
+  status: string;
+  validUntil: string;
+  createdAt: string;
+  leadTime?: number;
+  notes?: string;
+}
 
 interface Quotation {
   id: string;
   supplierName: string;
   supplierEmail: string;
-  supplierRating: number;
   amount: number;
   unitPrice: number;
   quantity: number;
@@ -50,53 +69,125 @@ interface Requirement {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  SUBMITTED: { label: 'Pending Review', color: 'bg-blue-500/20 text-blue-400' },
-  VERIFIED: { label: 'Verified', color: 'bg-green-500/20 text-green-400' },
+  SUBMITTED: { label: 'Submitted', color: 'bg-blue-500/20 text-blue-400' },
+  PENDING: { label: 'Pending', color: 'bg-blue-500/20 text-blue-400' },
+  UNDER_REVIEW: { label: 'Under Review', color: 'bg-yellow-500/20 text-yellow-400' },
+  APPROVED_BY_ADMIN: { label: 'Approved by Admin', color: 'bg-green-500/20 text-green-400' },
+  VISIBLE_TO_BUYER: { label: 'Visible to Buyer', color: 'bg-cyan-500/20 text-cyan-400' },
+  VERIFIED: { label: 'Verified', color: 'bg-emerald-500/20 text-emerald-400' },
   SHORTLISTED: { label: 'Shortlisted', color: 'bg-purple-500/20 text-purple-400' },
   SENT_TO_BUYER: { label: 'Sent to Buyer', color: 'bg-cyan-500/20 text-cyan-400' },
   ACCEPTED: { label: 'Accepted', color: 'bg-emerald-500/20 text-emerald-400' },
   REJECTED: { label: 'Rejected', color: 'bg-red-500/20 text-red-400' },
-};
-
-const MOCK_REQUIREMENTS: Record<string, Requirement> = {
-  'REQ-2024-004': { id: 'REQ-2024-004', title: 'Textile Raw Materials - Cotton', buyerName: 'Mike Chen', buyerEmail: 'mike@fashionhub.com', buyerCompany: 'Fashion Hub Ltd', category: 'Textiles', quantity: 2000, unit: 'kg', description: 'High-quality cotton fabric for garment manufacturing. Need Grade A quality with proper certification.', createdAt: '2024-01-10', status: 'ACTIVE' },
-  'REQ-2024-005': { id: 'REQ-2024-005', title: 'Chemical Compounds - Industrial', buyerName: 'Sarah Lee', buyerEmail: 'sarah@techsolutions.com', buyerCompany: 'Tech Solutions Inc', category: 'Chemicals', quantity: 100, unit: 'barrels', description: 'Industrial grade chemical compounds for manufacturing process. Must meet safety standards.', createdAt: '2024-01-08', status: 'ACTIVE' },
-  'REQ-2024-001': { id: 'REQ-2024-001', title: 'Steel Components for Manufacturing', buyerName: 'John Smith', buyerEmail: 'john@acme.com', buyerCompany: 'Acme Corporation', category: 'Raw Materials', quantity: 1000, unit: 'units', description: 'Heavy-duty steel components for industrial machinery. Require tensile strength certification.', createdAt: '2024-01-05', status: 'ACTIVE' },
-};
-
-const MOCK_QUOTATIONS: Record<string, Quotation[]> = {
-  'REQ-2024-004': [
-    { id: 'QUO-2024-001', supplierName: 'Steel Inc', supplierEmail: 'sales@steelinc.com', supplierRating: 4.8, amount: 7200, unitPrice: 3.6, quantity: 2000, currency: 'USD', status: 'SUBMITTED', validUntil: '2024-02-15', createdAt: '2024-01-15', deliveryDays: 14, notes: 'Can provide bulk discount for orders over 5000kg' },
-    { id: 'QUO-2024-002', supplierName: 'Textile Masters', supplierEmail: 'sales@textilemasters.com', supplierRating: 4.6, amount: 7800, unitPrice: 3.9, quantity: 2000, currency: 'USD', status: 'SUBMITTED', validUntil: '2024-02-20', createdAt: '2024-01-18', deliveryDays: 10, notes: 'Premium quality cotton with organic certification available' },
-    { id: 'QUO-2024-003', supplierName: 'Cotton World', supplierEmail: 'sales@cottonworld.com', supplierRating: 4.3, amount: 6900, unitPrice: 3.45, quantity: 2000, currency: 'USD', status: 'SUBMITTED', validUntil: '2024-02-10', createdAt: '2024-01-12', deliveryDays: 21, notes: 'Standard delivery. Express shipping available at extra cost.' },
-    { id: 'QUO-2024-008', supplierName: 'Global Fabrics', supplierEmail: 'orders@globalfabrics.com', supplierRating: 4.5, amount: 7100, unitPrice: 3.55, quantity: 2000, currency: 'USD', status: 'VERIFIED', validUntil: '2024-02-18', createdAt: '2024-01-16', deliveryDays: 12, notes: 'Quality guarantee with replacement policy' },
-  ],
-  'REQ-2024-005': [
-    { id: 'QUO-2024-004', supplierName: 'ChemPro Industries', supplierEmail: 'sales@chempro.com', supplierRating: 4.9, amount: 2800, unitPrice: 28, quantity: 100, currency: 'USD', status: 'VERIFIED', validUntil: '2024-02-05', createdAt: '2024-01-10', deliveryDays: 7, notes: 'Fast delivery with all safety documentation included' },
-    { id: 'QUO-2024-005', supplierName: 'Industrial Chemicals Co', supplierEmail: 'sales@indchem.com', supplierRating: 4.7, amount: 3100, unitPrice: 31, quantity: 100, currency: 'USD', status: 'VERIFIED', validUntil: '2024-02-25', createdAt: '2024-01-20', deliveryDays: 5, notes: 'Express delivery. MSDS sheets provided.' },
-    { id: 'QUO-2024-006', supplierName: 'SafeChem Ltd', supplierEmail: 'sales@safechem.com', supplierRating: 4.5, amount: 2950, unitPrice: 29.5, quantity: 100, currency: 'USD', status: 'VERIFIED', validUntil: '2024-02-28', createdAt: '2024-01-21', deliveryDays: 10, notes: 'ISO certified. Includes handling instructions.' },
-  ],
-  'REQ-2024-001': [
-    { id: 'QUO-2024-007', supplierName: 'Steel Industries Ltd', supplierEmail: 'sales@steelindustries.com', supplierRating: 4.8, amount: 4800, unitPrice: 4.8, quantity: 1000, currency: 'USD', status: 'SENT_TO_BUYER', validUntil: '2024-02-15', createdAt: '2024-01-22', deliveryDays: 12, notes: 'Premium grade steel with full certification' },
-  ],
+  DECLINED: { label: 'Declined', color: 'bg-red-500/20 text-red-400' },
+  IN_NEGOTIATION: { label: 'In Negotiation', color: 'bg-amber-500/20 text-amber-400' },
 };
 
 export default function QuotationDetailPage() {
   const params = useParams();
   const requirementId = params.requirementId as string;
-  
+
   const [requirement, setRequirement] = useState<Requirement | null>(null);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRequirementQuotations = useCallback(async () => {
+    if (!requirementId) {
+      setRequirement(null);
+      setQuotations([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [requirementResponse, quotationsResponse] = await Promise.all([
+        fetch(`/api/admin/requirements/${encodeURIComponent(requirementId)}`),
+        fetch(`/api/admin/quotations?requirementId=${encodeURIComponent(requirementId)}&limit=200`),
+      ]);
+
+      const requirementPayload = await requirementResponse.json();
+      const quotationsPayload = await quotationsResponse.json();
+
+      const rows = Array.isArray(quotationsPayload?.data?.quotations)
+        ? (quotationsPayload.data.quotations as AdminQuotationRow[])
+        : [];
+
+      const scopedRows = rows.filter((row) => row.requirementId === requirementId);
+
+      if (requirementResponse.ok && requirementPayload?.success && requirementPayload?.data) {
+        const req = requirementPayload.data;
+        setRequirement({
+          id: req.id,
+          title: req.title,
+          buyerName: req?.buyer?.name || req?.buyer?.companyName || 'Unknown Buyer',
+          buyerEmail: req?.buyer?.email || '—',
+          buyerCompany: req?.buyer?.companyName || req?.buyer?.name || 'Unknown Buyer',
+          category: req.category || 'N/A',
+          quantity: Number(req.quantity || 0),
+          unit: req.unit || '',
+          description: req.description || 'No description provided.',
+          createdAt: req.createdAt || new Date().toISOString(),
+          status: req.status || 'UNKNOWN',
+        });
+      } else if (scopedRows.length > 0) {
+        const first = scopedRows[0];
+        setRequirement({
+          id: requirementId,
+          title: first.requirementTitle || 'Requirement',
+          buyerName: first.buyerName || 'Unknown Buyer',
+          buyerEmail: first.buyerEmail || '—',
+          buyerCompany: first.buyerCompany || first.buyerName || 'Unknown Buyer',
+          category: first.category || 'N/A',
+          quantity: Number(first.requirementQuantity || 0),
+          unit: first.requirementUnit || '',
+          description: 'Requirement details unavailable in this view.',
+          createdAt: first.requirementCreatedAt || first.createdAt || new Date().toISOString(),
+          status: 'UNKNOWN',
+        });
+      } else {
+        setRequirement(null);
+      }
+
+      setQuotations(
+        scopedRows.map((row) => ({
+          id: row.id,
+          supplierName: row.supplierName || 'Unknown Supplier',
+          supplierEmail: row.supplierEmail || '',
+          amount: Number(row.amount || 0),
+          unitPrice: Number(row.unitPrice || 0),
+          quantity: Number(row.quantity || 0),
+          currency: row.currency || 'USD',
+          status: row.status || 'SUBMITTED',
+          validUntil: row.validUntil,
+          createdAt: row.createdAt,
+          deliveryDays: Number(row.leadTime || 0),
+          notes: row.notes || '',
+        }))
+      );
+
+      if (!requirementResponse.ok && !requirementPayload?.success && scopedRows.length === 0) {
+        setError(requirementPayload?.error || 'Failed to load requirement details');
+      }
+
+      if (!quotationsResponse.ok || quotationsPayload?.status !== 'success') {
+        setError(quotationsPayload?.error || 'Failed to load quotations');
+      }
+    } catch {
+      setRequirement(null);
+      setQuotations([]);
+      setError('Network error while loading requirement quotations');
+    } finally {
+      setLoading(false);
+    }
+  }, [requirementId]);
 
   useEffect(() => {
-    // Load mock data
-    const req = MOCK_REQUIREMENTS[requirementId];
-    const quotes = MOCK_QUOTATIONS[requirementId] || [];
-    setRequirement(req || null);
-    setQuotations(quotes);
-    setLoading(false);
-  }, [requirementId]);
+    void fetchRequirementQuotations();
+  }, [fetchRequirementQuotations]);
 
   const formatCurrency = (amount: number, currency: string = 'USD') => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 0 }).format(amount);
@@ -106,6 +197,18 @@ export default function QuotationDetailPage() {
     return (
       <div className="p-6 flex items-center justify-center h-96">
         <Loader2 className="w-8 h-8 animate-spin text-red-500" />
+      </div>
+    );
+  }
+
+  if (error && !requirement) {
+    return (
+      <div className="p-6 text-center space-y-3">
+        <AlertCircle className="h-10 w-10 mx-auto text-red-400" />
+        <p className="text-slate-300">{error}</p>
+        <Button variant="outline" className="border-slate-600 text-slate-200" onClick={() => void fetchRequirementQuotations()}>
+          Retry
+        </Button>
       </div>
     );
   }
@@ -133,7 +236,10 @@ export default function QuotationDetailPage() {
             <p className="text-slate-400">{requirement.buyerCompany} • {requirement.category}</p>
           </div>
         </div>
-        <Badge className="bg-slate-700 text-slate-200">{quotations.length} quotations</Badge>
+        <div className="flex items-center gap-2">
+          {error && <Badge className="bg-red-500/20 text-red-300">Partial data</Badge>}
+          <Badge className="bg-slate-700 text-slate-200">{quotations.length} quotations</Badge>
+        </div>
       </div>
 
       {/* Requirement Details */}
@@ -203,10 +309,6 @@ export default function QuotationDetailPage() {
                             <p className="font-medium text-white">{q.supplierName}</p>
                             <p className="text-xs text-slate-400">{q.supplierEmail}</p>
                           </div>
-                          <div className="ml-2 flex items-center gap-1 text-yellow-400">
-                            <Star className="h-4 w-4 fill-yellow-400" />
-                            <span className="text-sm">{q.supplierRating}</span>
-                          </div>
                         </div>
 
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -216,7 +318,9 @@ export default function QuotationDetailPage() {
                           </div>
                           <div className="rounded-lg bg-slate-900 p-3">
                             <p className="text-xs text-slate-400">Delivery</p>
-                            <p className="text-white font-semibold">{q.deliveryDays} days</p>
+                            <p className="text-white font-semibold">
+                              {q.deliveryDays > 0 ? `${q.deliveryDays} days` : '—'}
+                            </p>
                           </div>
                           <div className="rounded-lg bg-slate-900 p-3">
                             <p className="text-xs text-slate-400">Valid Until</p>

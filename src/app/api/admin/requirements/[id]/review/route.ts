@@ -42,8 +42,41 @@ export async function POST(
     }
 
     if (action === 'approve') {
-      const isDirectSend = sentDirectlyToSupplier || sendTo === 'direct';
+      const requestedSendDirect =
+        sendTo === 'direct' ? true : sendTo === 'procurement' ? false : null;
+      const defaultDirectSend = Boolean(
+        (requirement as any).sentDirectlyToSupplier ||
+          ((requirement as any).isReorder && (requirement as any).preferredSupplierId)
+      );
+      const isDirectSend =
+        requestedSendDirect !== null
+          ? requestedSendDirect
+          : typeof sentDirectlyToSupplier === 'boolean'
+            ? sentDirectlyToSupplier
+            : defaultDirectSend;
       const requirementRef = formatRequirementReference(requirement.id);
+      const resolvedProcurementOfficerId = !isDirectSend ? (assignedProcurementOfficerId || null) : null;
+
+      if (isDirectSend && !(requirement as any).preferredSupplierId) {
+        return NextResponse.json(
+          { error: 'Direct send requires a preferred supplier on this requirement' },
+          { status: 400 }
+        );
+      }
+
+      if (resolvedProcurementOfficerId) {
+        const procurementOfficer = await prisma.user.findUnique({
+          where: { id: resolvedProcurementOfficerId },
+          select: { id: true, role: true },
+        });
+
+        if (!procurementOfficer || procurementOfficer.role !== 'PROCUREMENT_OFFICER') {
+          return NextResponse.json(
+            { error: 'Assigned procurement officer is invalid' },
+            { status: 400 }
+          );
+        }
+      }
 
       // Update requirement
       const updatedRequirement = await prisma.requirement.update({
@@ -55,20 +88,33 @@ export async function POST(
           adminReviewedAt: new Date(),
           adminNotes: adminNotes || null,
           sentDirectlyToSupplier: isDirectSend,
-          procurementAssigned: !isDirectSend && !!assignedProcurementOfficerId,
-          assignedProcurementOfficerId: !isDirectSend ? (assignedProcurementOfficerId || null) : null,
-          procurementAssignedAt: !isDirectSend && assignedProcurementOfficerId ? new Date() : null,
+          procurementAssigned: !isDirectSend && !!resolvedProcurementOfficerId,
+          assignedProcurementOfficerId: resolvedProcurementOfficerId,
+          procurementAssignedAt: !isDirectSend && resolvedProcurementOfficerId ? new Date() : null,
           procurementPriority: procurementPriority || 'NORMAL',
         } as any,
       });
 
       // If direct send to preferred supplier (reorder scenario)
       let supplierCard = null;
+      let directSupplierUserId: string | null = null;
       if (isDirectSend && (requirement as any).preferredSupplierId) {
+        const preferredSupplier = await prisma.supplier.findUnique({
+          where: { id: (requirement as any).preferredSupplierId },
+          select: { id: true, email: true, companyName: true, name: true },
+        });
+
+        if (!preferredSupplier) {
+          return NextResponse.json(
+            { error: 'Preferred supplier not found for direct send' },
+            { status: 404 }
+          );
+        }
+
         supplierCard = await prisma.supplierRequirementCard.create({
           data: {
             requirementId: params.id,
-            supplierId: (requirement as any).preferredSupplierId,
+            supplierId: preferredSupplier.id,
             status: 'SENT',
             sentBy: adminReviewedBy,
             sentAt: new Date(),
@@ -90,24 +136,53 @@ export async function POST(
               isReorder: (requirement as any).isReorder || false,
               originalTransactionId: (requirement as any).originalTransactionId,
             },
-            responseDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h for reorders
+            responseDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000),
           } as any,
         });
+
+        if (preferredSupplier.email) {
+          const supplierUser = await prisma.user.findFirst({
+            where: {
+              role: 'SUPPLIER',
+              email: preferredSupplier.email,
+            },
+            select: { id: true },
+          });
+          directSupplierUserId = supplierUser?.id || null;
+        }
 
         // Update supplier count
         await prisma.requirement.update({
           where: { id: params.id },
-          data: { suppliersSent: 1, suppliersSentAt: new Date() },
+          data: {
+            status: 'QUOTES_PENDING',
+            suppliersSent: 1,
+            suppliersSentAt: new Date(),
+            quoteDeadline: supplierCard.responseDeadline,
+          },
         });
+
+        if (directSupplierUserId) {
+          await prisma.notification.create({
+            data: {
+              userId: directSupplierUserId,
+              type: 'REQUIREMENT_CREATED',
+              title: 'Direct Reorder Request Received',
+              message: `Requirement ${requirementRef} was sent directly to you for quotation submission.`,
+              resourceType: 'requirement',
+              resourceId: requirement.id,
+            },
+          });
+        }
       }
 
       // Create ProcurementTask if officer assigned (non-direct)
       let procurementTask = null;
-      if (!isDirectSend && assignedProcurementOfficerId) {
+      if (!isDirectSend && resolvedProcurementOfficerId) {
         procurementTask = await prisma.procurementTask.create({
           data: {
             requirementId: params.id,
-            assignedTo: assignedProcurementOfficerId,
+            assignedTo: resolvedProcurementOfficerId,
             status: 'ASSIGNED',
             priority: procurementPriority || 'NORMAL',
             matchingCriteria: matchingInstructions || {
@@ -147,10 +222,10 @@ export async function POST(
       });
 
       if (!isDirectSend) {
-        if (assignedProcurementOfficerId) {
+        if (resolvedProcurementOfficerId) {
           await prisma.notification.create({
             data: {
-              userId: assignedProcurementOfficerId,
+              userId: resolvedProcurementOfficerId,
               type: 'REQUIREMENT_CREATED',
               title: 'New Requirement Assigned',
               message: `Requirement ${requirementRef} is ready for supplier matching.`,

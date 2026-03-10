@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
+import { formatAccountReference } from '@/lib/flow-references';
+import { getDemoAdminUsersApiPayload, shouldUseDemoFallback } from '@/lib/demo/fallback';
 
 function successResponse(data: any, status = 200) {
   return NextResponse.json({ status: 'success', data }, { status });
@@ -30,10 +32,12 @@ export async function GET(request: NextRequest) {
 
     if (role) {
       where.role = role;
+    } else {
+      where.role = { in: ['BUYER', 'SUPPLIER'] };
     }
 
     if (kycStatus) {
-      where.kycStatus = kycStatus;
+      where.kybStatus = kycStatus;
     }
 
     if (search) {
@@ -54,6 +58,7 @@ export async function GET(request: NextRequest) {
           role: true,
           companyName: true,
           status: true,
+          kybStatus: true,
           createdAt: true,
           _count: {
             select: {
@@ -71,12 +76,13 @@ export async function GET(request: NextRequest) {
     // Transform users to include transaction count
     const usersWithStats = users.map((user: any) => ({
       id: user.id,
+      accountNumber: formatAccountReference(user.id),
       name: user.name,
       email: user.email,
       role: user.role,
       companyName: user.companyName,
       verified: user.status === 'ACTIVE',
-      kycStatus: user.status === 'ACTIVE' ? 'VERIFIED' : 'PENDING',
+      kycStatus: user.kybStatus || 'PENDING',
       createdAt: user.createdAt,
       lastLogin: user.createdAt,
       transactionCount: user._count?.requirements || 0,
@@ -93,6 +99,20 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Failed to fetch users:', error);
+
+    if (shouldUseDemoFallback(error)) {
+      const page = Number(new URL(request.url).searchParams.get('page') || '1');
+      const limit = Number(new URL(request.url).searchParams.get('limit') || '10');
+      const searchParams = new URL(request.url).searchParams;
+      return NextResponse.json(
+        getDemoAdminUsersApiPayload(page, limit, {
+          role: searchParams.get('role'),
+          kycStatus: searchParams.get('kycStatus'),
+          search: searchParams.get('search'),
+        })
+      );
+    }
+
     return errorResponse('Internal server error', 500);
   }
 }

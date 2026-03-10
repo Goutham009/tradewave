@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Gavel, Search, CheckCircle, XCircle, Clock, Flag, Ban, FileText } from 'lucide-react';
 
 export default function AdminAppealsPage() {
@@ -10,11 +10,7 @@ export default function AdminAppealsPage() {
   const [stats, setStats] = useState({ pendingFlags: 0, pendingBlacklist: 0, totalPending: 0 });
   const [selectedAppeal, setSelectedAppeal] = useState<any>(null);
 
-  useEffect(() => {
-    fetchAppeals();
-  }, [filters]);
-
-  const fetchAppeals = async () => {
+  const fetchAppeals = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -32,7 +28,11 @@ export default function AdminAppealsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.type, filters.status]);
+
+  useEffect(() => {
+    fetchAppeals();
+  }, [fetchAppeals]);
 
   const handleReview = async (appealId: string, appealType: string, status: string, adminDecision: string) => {
     try {

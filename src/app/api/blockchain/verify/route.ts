@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
+import { verifyDocumentHash } from '@/lib/services/blockchainService';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { hash } = body;
+    const { hash, contractAddress: requestedContractAddress } = body;
 
     if (!hash) {
       return NextResponse.json(
@@ -26,24 +27,45 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (document) {
-      return NextResponse.json({
-        verified: true,
-        document: {
-          id: document.id,
-          documentType: document.documentType,
-          originalName: document.originalName,
-          transactionId: document.transactionId,
-          registeredAt: document.verifiedAt,
-          blockchainTxHash: document.blockchainTxHash,
-          contractAddress: document.contractAddress,
-        },
-      });
+    const contractAddress = requestedContractAddress || document?.contractAddress || undefined;
+
+    let onChainResult: { verified: boolean; details?: any } | null = null;
+    if (contractAddress) {
+      try {
+        onChainResult = await verifyDocumentHash(hash, contractAddress);
+      } catch (onChainError) {
+        console.error('On-chain document verification failed:', onChainError);
+      }
     }
 
+    const databaseVerified = Boolean(document);
+    const verified = databaseVerified || Boolean(onChainResult?.verified);
+
     return NextResponse.json({
-      verified: false,
-      message: 'Document hash not found in records',
+      verified,
+      source: {
+        database: databaseVerified,
+        blockchain: Boolean(onChainResult?.verified),
+      },
+      document: document
+        ? {
+            id: document.id,
+            documentType: document.documentType,
+            originalName: document.originalName,
+            transactionId: document.transactionId,
+            registeredAt: document.verifiedAt,
+            blockchainTxHash: document.blockchainTxHash,
+            contractAddress: document.contractAddress,
+          }
+        : null,
+      onChain: onChainResult
+        ? {
+            verified: onChainResult.verified,
+            contractAddress,
+            details: onChainResult.details || null,
+          }
+        : null,
+      message: verified ? 'Document verification successful' : 'Document hash not found in records',
     });
   } catch (error) {
     console.error('Failed to verify document:', error);

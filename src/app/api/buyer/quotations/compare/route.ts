@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 
 // GET /api/buyer/quotations/compare?requirementId=xxx - Get buyer-visible quotes for comparison
 export async function GET(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const role = session.user.role || '';
+    if (!['BUYER', 'ACCOUNT_MANAGER', 'ADMIN'].includes(role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const requirementId = searchParams.get('requirementId');
 
@@ -22,11 +34,22 @@ export async function GET(req: NextRequest) {
         deliveryLocation: true,
         deliveryDeadline: true,
         currency: true,
+        buyerId: true,
+        assignedAccountManagerId: true,
       },
     });
 
     if (!requirement) {
       return NextResponse.json({ error: 'Requirement not found' }, { status: 404 });
+    }
+
+    const canAccessAsBuyer = role === 'BUYER' && requirement.buyerId === session.user.id;
+    const canAccessAsAm =
+      role === 'ACCOUNT_MANAGER' && requirement.assignedAccountManagerId === session.user.id;
+    const canAccessAsAdmin = role === 'ADMIN';
+
+    if (!canAccessAsBuyer && !canAccessAsAm && !canAccessAsAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const quotations = await prisma.quotation.findMany({
@@ -86,7 +109,16 @@ export async function GET(req: NextRequest) {
     }));
 
     return NextResponse.json({
-      requirement,
+      requirement: {
+        id: requirement.id,
+        title: requirement.title,
+        category: requirement.category,
+        quantity: requirement.quantity,
+        unit: requirement.unit,
+        deliveryLocation: requirement.deliveryLocation,
+        deliveryDeadline: requirement.deliveryDeadline,
+        currency: requirement.currency,
+      },
       quotations: buyerQuotations,
       total: buyerQuotations.length,
     });

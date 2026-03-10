@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
+import { getDemoAdminTransactionsApiPayload, shouldUseDemoFallback } from '@/lib/demo/fallback';
 
 function successResponse(data: any, status = 200) {
   return NextResponse.json({ status: 'success', data }, { status });
@@ -68,8 +69,17 @@ export async function GET(request: NextRequest) {
 
     const stats = {
       total: allTransactions.length,
-      pending: allTransactions.filter(t => ['INITIATED', 'PAYMENT_PENDING', 'ESCROW_HELD'].includes(t.status)).length,
-      completed: allTransactions.filter(t => t.status === 'COMPLETED').length,
+      pending: allTransactions.filter(t => [
+        'INITIATED',
+        'PENDING_ADMIN_REVIEW',
+        'ESCROW_CREATED',
+        'PAYMENT_PENDING',
+        'PAYMENT_RECEIVED',
+        'PAYMENT_CONFIRMED',
+        'PAID',
+        'ESCROW_HELD',
+      ].includes(t.status)).length,
+      completed: allTransactions.filter(t => ['COMPLETED', 'FUNDS_RELEASED'].includes(t.status)).length,
       disputed: allTransactions.filter(t => t.status === 'DISPUTED').length,
       totalValue: allTransactions.reduce((sum, t) => sum + Number(t.amount), 0),
     };
@@ -99,6 +109,13 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Failed to fetch transactions:', error);
+
+    if (shouldUseDemoFallback(error)) {
+      const page = Number(new URL(request.url).searchParams.get('page') || '1');
+      const limit = Number(new URL(request.url).searchParams.get('limit') || '10');
+      return NextResponse.json(getDemoAdminTransactionsApiPayload(page, limit));
+    }
+
     return errorResponse('Internal server error', 500);
   }
 }

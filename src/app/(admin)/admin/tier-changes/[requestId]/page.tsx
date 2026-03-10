@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import { 
@@ -80,13 +80,7 @@ export default function TierChangeDetailPage() {
   const [processing, setProcessing] = useState(false);
   const [notes, setNotes] = useState('');
 
-  useEffect(() => {
-    if (requestId) {
-      fetchDetail();
-    }
-  }, [requestId]);
-
-  const fetchDetail = async () => {
+  const fetchDetail = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/admin/tier-changes/${requestId}`);
@@ -101,7 +95,13 @@ export default function TierChangeDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [requestId, router]);
+
+  useEffect(() => {
+    if (requestId) {
+      fetchDetail();
+    }
+  }, [requestId, fetchDetail]);
 
   const handleAction = async (action: string) => {
     setProcessing(true);

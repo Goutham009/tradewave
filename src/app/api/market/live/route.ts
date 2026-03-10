@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { cacheGetOrSet, checkRateLimit } from '@/lib/redis';
 
 type CommodityPrice = {
   commodity: string;
@@ -49,6 +50,12 @@ const FALLBACK_PRICES: CommodityPrice[] = [
 // In-memory cache to avoid hitting rate limits
 let cachedResponse: { data: CommodityPrice[]; source: string; timestamp: number } | null = null;
 const CACHE_TTL_MS = 120_000; // 2 minutes
+
+function getClientIp(request: NextRequest) {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || request.headers.get('x-real-ip')
+    || 'unknown';
+}
 
 // --- Strategy 1: metals-api.com (real LME settlement prices) ---
 async function fetchFromMetalsApi(): Promise<{ prices: CommodityPrice[]; source: string } | null> {
@@ -144,62 +151,77 @@ async function fetchFromYahoo(): Promise<{ prices: CommodityPrice[]; source: str
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const headers = {
     'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300',
   };
 
-  // Return cached data if still fresh
-  if (cachedResponse && Date.now() - cachedResponse.timestamp < CACHE_TTL_MS) {
+  const clientIp = getClientIp(request);
+  const rateLimit = await checkRateLimit(`rate:market:live:${clientIp}`, 120, 60);
+  if (!rateLimit.allowed) {
     return NextResponse.json(
       {
-        prices: cachedResponse.data,
-        updatedAt: new Date(cachedResponse.timestamp).toISOString(),
-        sourceLabel: cachedResponse.source,
-        fallback: false,
+        error: 'Too many requests. Please try again shortly.',
+        resetIn: rateLimit.resetIn,
       },
-      { headers }
+      {
+        status: 429,
+        headers: {
+          ...headers,
+          'Retry-After': String(rateLimit.resetIn),
+        },
+      }
     );
   }
 
-  // Try LME (metals-api.com) first, then Yahoo Finance, then fallback
-  const lmeResult = await fetchFromMetalsApi();
-  if (lmeResult) {
-    cachedResponse = { data: lmeResult.prices, source: lmeResult.source, timestamp: Date.now() };
-    return NextResponse.json(
-      {
-        prices: lmeResult.prices,
+  const payload = await cacheGetOrSet(
+    'market:live:prices:v1',
+    async () => {
+      // Return in-memory cached data if still fresh
+      if (cachedResponse && Date.now() - cachedResponse.timestamp < CACHE_TTL_MS) {
+        return {
+          prices: cachedResponse.data,
+          updatedAt: new Date(cachedResponse.timestamp).toISOString(),
+          sourceLabel: cachedResponse.source,
+          fallback: false,
+        };
+      }
+
+      // Try LME (metals-api.com) first, then Yahoo Finance, then fallback
+      const lmeResult = await fetchFromMetalsApi();
+      if (lmeResult) {
+        cachedResponse = { data: lmeResult.prices, source: lmeResult.source, timestamp: Date.now() };
+        return {
+          prices: lmeResult.prices,
+          updatedAt: new Date().toISOString(),
+          sourceLabel: lmeResult.source,
+          fallback: false,
+        };
+      }
+
+      const yahooResult = await fetchFromYahoo();
+      if (yahooResult) {
+        cachedResponse = { data: yahooResult.prices, source: yahooResult.source, timestamp: Date.now() };
+        return {
+          prices: yahooResult.prices,
+          updatedAt: new Date().toISOString(),
+          sourceLabel: yahooResult.source,
+          fallback: false,
+        };
+      }
+
+      // All sources failed — use fallback
+      console.error('All market data sources failed, using fallback');
+      cachedResponse = { data: FALLBACK_PRICES, source: 'Fallback snapshot', timestamp: Date.now() };
+      return {
+        prices: FALLBACK_PRICES,
         updatedAt: new Date().toISOString(),
-        sourceLabel: lmeResult.source,
-        fallback: false,
-      },
-      { headers }
-    );
-  }
-
-  const yahooResult = await fetchFromYahoo();
-  if (yahooResult) {
-    cachedResponse = { data: yahooResult.prices, source: yahooResult.source, timestamp: Date.now() };
-    return NextResponse.json(
-      {
-        prices: yahooResult.prices,
-        updatedAt: new Date().toISOString(),
-        sourceLabel: yahooResult.source,
-        fallback: false,
-      },
-      { headers }
-    );
-  }
-
-  // All sources failed — use fallback
-  console.error('All market data sources failed, using fallback');
-  return NextResponse.json(
-    {
-      prices: FALLBACK_PRICES,
-      updatedAt: new Date().toISOString(),
-      sourceLabel: 'Fallback snapshot',
-      fallback: true,
+        sourceLabel: 'Fallback snapshot',
+        fallback: true,
+      };
     },
-    { headers }
+    120
   );
+
+  return NextResponse.json(payload, { headers });
 }

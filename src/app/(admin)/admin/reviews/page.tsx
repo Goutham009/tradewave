@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { Star, Check, X, Eye, Filter, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -48,11 +48,7 @@ export default function AdminReviewsPage() {
   const [selectedReview, setSelectedReview] = useState<Review | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  useEffect(() => {
-    fetchReviews();
-  }, [pagination.page, statusFilter]);
-
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
@@ -75,7 +71,11 @@ export default function AdminReviewsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [pagination.page, pagination.limit, statusFilter]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
 
   const handleApprove = async (reviewId: string) => {
     setActionLoading(reviewId);

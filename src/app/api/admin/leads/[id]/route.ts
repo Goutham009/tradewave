@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import {
+  getDemoLeadByIdPayload,
+  isLikelyDemoIdentifier,
+  shouldUseDemoFallback,
+} from '@/lib/demo/fallback';
 
 // GET /api/admin/leads/[id] - Get lead details
 export async function GET(
@@ -23,12 +28,21 @@ export async function GET(
     });
 
     if (!lead) {
+      if (isLikelyDemoIdentifier(params.id, ['lead_demo_', 'lead-'])) {
+        return NextResponse.json(getDemoLeadByIdPayload(params.id));
+      }
+
       return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
     }
 
     return NextResponse.json({ lead });
   } catch (error) {
     console.error('Error fetching lead:', error);
+
+    if (shouldUseDemoFallback(error)) {
+      return NextResponse.json(getDemoLeadByIdPayload(params.id));
+    }
+
     return NextResponse.json({ error: 'Failed to fetch lead' }, { status: 500 });
   }
 }
@@ -59,14 +73,6 @@ export async function PATCH(
       lastContactedAt,
     } = body;
 
-    const lead = await prisma.lead.findUnique({
-      where: { id: params.id },
-    });
-
-    if (!lead) {
-      return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
-    }
-
     const updateData: any = {};
     if (status) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
@@ -76,6 +82,27 @@ export async function PATCH(
     if (callChecklist) updateData.callChecklist = callChecklist;
     if (lastContactedAt) updateData.lastContactedAt = new Date(lastContactedAt);
 
+    const lead = await prisma.lead.findUnique({
+      where: { id: params.id },
+    });
+
+    if (!lead) {
+      if (isLikelyDemoIdentifier(params.id, ['lead_demo_', 'lead-'])) {
+        const demoLeadPayload = getDemoLeadByIdPayload(params.id);
+        return NextResponse.json({
+          status: 'success',
+          lead: {
+            ...demoLeadPayload.lead,
+            ...updateData,
+            id: params.id,
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      }
+
+      return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+    }
+
     const updatedLead = await prisma.lead.update({
       where: { id: params.id },
       data: updateData,
@@ -84,6 +111,18 @@ export async function PATCH(
     return NextResponse.json({ status: 'success', lead: updatedLead });
   } catch (error) {
     console.error('Error updating lead:', error);
+
+    if (shouldUseDemoFallback(error) && isLikelyDemoIdentifier(params.id, ['lead_demo_', 'lead-'])) {
+      return NextResponse.json({
+        status: 'success',
+        lead: {
+          ...getDemoLeadByIdPayload(params.id).lead,
+          id: params.id,
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    }
+
     return NextResponse.json({ error: 'Failed to update lead' }, { status: 500 });
   }
 }

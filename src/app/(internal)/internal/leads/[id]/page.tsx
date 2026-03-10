@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +21,7 @@ import {
   MessageSquare,
   Shield,
   Target,
+  Loader2,
 } from 'lucide-react';
 
 interface LeadDetail {
@@ -44,102 +45,311 @@ interface LeadDetail {
   activity: { id: string; type: string; notes: string; date: string }[];
 }
 
-const MOCK_LEADS: LeadDetail[] = [
-  {
-    id: 'LEAD-001',
-    companyName: 'Global Imports Co',
-    contactPerson: 'David Brown',
-    title: 'Head of Procurement',
-    email: 'david@globalimports.com',
-    phone: '+1 234 567 8900',
-    website: 'https://globalimports.example',
-    industry: 'Import/Export',
-    companySize: '50-100',
-    location: 'New York, USA',
-    source: 'Website',
-    status: 'new',
-    assignedAt: '2024-01-20',
-    lastTouch: '2024-01-20',
-    potentialValue: 120000,
-    likelihood: 65,
-    requirements: ['Steel components', 'Logistics support', 'Flexible payment terms'],
-    activity: [
-      { id: 'ACT-01', type: 'Assigned', notes: 'Lead assigned to AM queue', date: '2024-01-20 09:30 AM' },
-    ],
-  },
-  {
-    id: 'LEAD-002',
-    companyName: 'Premium Exports Ltd',
-    contactPerson: 'Lisa Wang',
-    title: 'Operations Lead',
-    email: 'lisa@premiumexports.com',
-    phone: '+1 345 678 9012',
-    website: 'https://premiumexports.example',
-    industry: 'Textiles',
-    companySize: '100-200',
-    location: 'Chicago, USA',
-    source: 'Referral',
-    status: 'contacted',
-    assignedAt: '2024-01-18',
-    lastTouch: '2024-01-19',
-    potentialValue: 89000,
-    likelihood: 72,
-    requirements: ['Cotton fabric sourcing', 'Q2 supply plan', 'Quality certifications'],
-    activity: [
-      { id: 'ACT-02', type: 'Call', notes: 'Intro call completed, requested MOQ details', date: '2024-01-18 03:10 PM' },
-      { id: 'ACT-03', type: 'Email', notes: 'Sent follow-up deck + supplier shortlist', date: '2024-01-19 10:00 AM' },
-    ],
-  },
-  {
-    id: 'LEAD-003',
-    companyName: 'Metro Supplies',
-    contactPerson: 'James Miller',
-    title: 'COO',
-    email: 'james@metrosupplies.com',
-    phone: '+1 456 789 0123',
-    website: 'https://metrosupplies.example',
-    industry: 'Industrial',
-    companySize: '200-500',
-    location: 'Dallas, USA',
-    source: 'Trade Show',
-    status: 'qualified',
-    assignedAt: '2024-01-15',
-    lastTouch: '2024-01-18',
-    potentialValue: 140000,
-    likelihood: 86,
-    requirements: ['Industrial chemicals', 'Fast delivery SLA', 'Escrow payments'],
-    activity: [
-      { id: 'ACT-04', type: 'Meeting', notes: 'Qualified lead, ready for KYB initiation', date: '2024-01-17 02:00 PM' },
-      { id: 'ACT-05', type: 'KYB', notes: 'Requested KYB docs from contact', date: '2024-01-18 11:30 AM' },
-    ],
-  },
-];
-
-const STATUS_LABELS = {
-  new: 'New',
-  contacted: 'Contacted',
-  qualified: 'Qualified',
-  converted: 'Converted',
+type LiveLead = {
+  id: string;
+  email: string;
+  fullName: string;
+  companyName: string;
+  phoneNumber: string;
+  category: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  location: string;
+  timeline: string;
+  additionalReqs: string | null;
+  status: string;
+  notes: string | null;
+  assignedAt: string | null;
+  convertedUserId: string | null;
+  createdAt: string;
 };
 
-const STATUS_COLORS = {
-  new: 'bg-blue-500/20 text-blue-400',
-  contacted: 'bg-yellow-500/20 text-yellow-400',
-  qualified: 'bg-purple-500/20 text-purple-400',
-  converted: 'bg-green-500/20 text-green-400',
+type ConvertedUser = {
+  id: string;
+  name: string;
+  email: string;
+  accountNumber?: string;
+};
+
+type CreatedAccount = {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    accountNumber?: string;
+  };
+  tempPassword: string;
+};
+
+const LIVE_STATUS_LABELS: Record<string, string> = {
+  NEW_LEAD: 'New',
+  ASSIGNED_TO_AM: 'Assigned',
+  CONTACTED: 'Contacted',
+  CALL_SCHEDULED: 'Call Scheduled',
+  CALL_COMPLETED: 'Call Completed',
+  QUALIFIED: 'Qualified',
+  CONVERTED: 'Converted',
+};
+
+const LIVE_STATUS_COLORS: Record<string, string> = {
+  NEW_LEAD: 'bg-blue-500/20 text-blue-400',
+  ASSIGNED_TO_AM: 'bg-indigo-500/20 text-indigo-400',
+  CONTACTED: 'bg-yellow-500/20 text-yellow-400',
+  CALL_SCHEDULED: 'bg-orange-500/20 text-orange-400',
+  CALL_COMPLETED: 'bg-teal-500/20 text-teal-400',
+  QUALIFIED: 'bg-purple-500/20 text-purple-400',
+  CONVERTED: 'bg-green-500/20 text-green-400',
 };
 
 export default function LeadDetailPage() {
   const params = useParams();
+  const leadId = typeof params.id === 'string' ? params.id : '';
   const router = useRouter();
+
+  const [lead, setLead] = useState<LiveLead | null>(null);
+  const [convertedUser, setConvertedUser] = useState<ConvertedUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [savingLead, setSavingLead] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
+
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [createdAccount, setCreatedAccount] = useState<CreatedAccount | null>(null);
+
+  const [leadForm, setLeadForm] = useState({
+    productName: '',
+    category: '',
+    quantity: '',
+    unit: '',
+    location: '',
+    timeline: '',
+    additionalReqs: '',
+  });
+
   const [notes, setNotes] = useState('');
+  const [accountForm, setAccountForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    companyName: '',
+    country: '',
+    region: '',
+    role: 'BUYER',
+    notes: '',
+    sendWelcomeEmail: true,
+  });
 
-  const lead = useMemo(
-    () => MOCK_LEADS.find((item) => item.id === params.id) ?? MOCK_LEADS[0],
-    [params.id]
-  );
+  const hydrateForm = useCallback((nextLead: LiveLead, nextConvertedUser: ConvertedUser | null) => {
+    setLeadForm({
+      productName: nextLead.productName || '',
+      category: nextLead.category || '',
+      quantity: String(nextLead.quantity || ''),
+      unit: nextLead.unit || '',
+      location: nextLead.location || '',
+      timeline: nextLead.timeline || '',
+      additionalReqs: nextLead.additionalReqs || '',
+    });
 
-  const [status, setStatus] = useState<LeadDetail['status']>(lead.status);
+    setNotes(nextLead.notes || '');
+
+    if (!nextConvertedUser) {
+      setAccountForm((prev) => ({
+        ...prev,
+        name: nextLead.fullName || '',
+        email: nextLead.email || '',
+        phone: nextLead.phoneNumber || '',
+        companyName: nextLead.companyName || '',
+      }));
+    }
+  }, []);
+
+  const fetchLead = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`/api/am/leads/${leadId}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load lead details');
+      }
+
+      setLead(data.lead);
+      setConvertedUser(data.convertedUser || null);
+      hydrateForm(data.lead, data.convertedUser || null);
+    } catch (fetchError) {
+      console.error('Failed to fetch lead details:', fetchError);
+      setLead(null);
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to fetch lead details');
+    } finally {
+      setLoading(false);
+    }
+  }, [leadId, hydrateForm]);
+
+  useEffect(() => {
+    void fetchLead();
+  }, [fetchLead]);
+
+  const handleSaveLeadDetails = async () => {
+    if (!lead) return;
+
+    try {
+      setSavingLead(true);
+      setSaveError(null);
+
+      const response = await fetch(`/api/am/leads/${lead.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productName: leadForm.productName,
+          category: leadForm.category,
+          quantity: leadForm.quantity,
+          unit: leadForm.unit,
+          location: leadForm.location,
+          timeline: leadForm.timeline,
+          additionalReqs: leadForm.additionalReqs,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update lead details');
+      }
+
+      setLead(data.lead);
+      hydrateForm(data.lead, convertedUser);
+    } catch (saveLeadError) {
+      console.error('Failed to save lead details:', saveLeadError);
+      setSaveError(saveLeadError instanceof Error ? saveLeadError.message : 'Failed to save lead details');
+    } finally {
+      setSavingLead(false);
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    if (!lead) return;
+
+    try {
+      setSavingNotes(true);
+      setSaveError(null);
+
+      const response = await fetch(`/api/am/leads/${lead.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save notes');
+      }
+
+      setLead(data.lead);
+      setNotes(data.lead.notes || '');
+    } catch (notesError) {
+      console.error('Failed to save notes:', notesError);
+      setSaveError(notesError instanceof Error ? notesError.message : 'Failed to save notes');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const handleUpdateStatus = async (nextStatus: string) => {
+    if (!lead) return;
+
+    try {
+      setUpdatingStatus(true);
+      setSaveError(null);
+
+      const response = await fetch(`/api/am/leads/${lead.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: nextStatus,
+          lastContactedAt: new Date().toISOString(),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update lead status');
+      }
+
+      setLead(data.lead);
+    } catch (statusError) {
+      console.error('Failed to update lead status:', statusError);
+      setSaveError(statusError instanceof Error ? statusError.message : 'Failed to update lead status');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const handleCreateAccount = async () => {
+    if (!lead) return;
+
+    try {
+      setCreatingAccount(true);
+      setSaveError(null);
+
+      const response = await fetch(`/api/am/leads/${lead.id}/create-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(accountForm),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create account');
+      }
+
+      setCreatedAccount(data);
+      setConvertedUser(data.user || null);
+      setLead((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'CONVERTED',
+              convertedUserId: data.user?.id || prev.convertedUserId,
+            }
+          : prev
+      );
+    } catch (accountError) {
+      console.error('Failed to create account:', accountError);
+      setSaveError(accountError instanceof Error ? accountError.message : 'Failed to create account');
+    } finally {
+      setCreatingAccount(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-red-500" />
+      </div>
+    );
+  }
+
+  if (!lead) {
+    return (
+      <Card className="bg-slate-900 border-red-500/30">
+        <CardContent className="py-12 text-center">
+          <p className="text-lg font-medium text-white">Lead not found</p>
+          {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
+          <Button className="mt-4" onClick={() => router.push('/internal/leads')}>
+            Back to Leads
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const statusLabel = LIVE_STATUS_LABELS[lead.status] || lead.status.replace(/_/g, ' ');
+  const statusClass = LIVE_STATUS_COLORS[lead.status] || 'bg-slate-500/20 text-slate-400';
 
   return (
     <div className="space-y-6">
@@ -152,185 +362,208 @@ export default function LeadDetailPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-white">{lead.companyName}</h1>
-              <Badge className={STATUS_COLORS[status]}>{STATUS_LABELS[status]}</Badge>
-              <Badge variant="outline" className="text-xs">{lead.source}</Badge>
+              <Badge className={statusClass}>{statusLabel}</Badge>
             </div>
-            <p className="text-slate-400 mt-1">Assigned {lead.assignedAt} • Last touch {lead.lastTouch}</p>
+            <p className="text-slate-400 mt-1">{lead.fullName} • {lead.productName}</p>
           </div>
         </div>
+
         <div className="flex gap-2">
-          <Button variant="outline" className="border-slate-700 text-slate-300 hover:text-white">
-            <Mail className="h-4 w-4 mr-2" />
-            Send Email
-          </Button>
-          <Button variant="outline" className="border-slate-700 text-slate-300 hover:text-white">
-            <Phone className="h-4 w-4 mr-2" />
-            Call Lead
-          </Button>
-          {status !== 'converted' && (
-            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => setStatus('converted')}>
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Convert to User
+          {['NEW_LEAD', 'ASSIGNED_TO_AM'].includes(lead.status) && (
+            <Button
+              className="bg-yellow-600 hover:bg-yellow-700"
+              onClick={() => handleUpdateStatus('CONTACTED')}
+              disabled={updatingStatus}
+            >
+              {updatingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Mark Contacted'}
+            </Button>
+          )}
+          {['CONTACTED', 'CALL_SCHEDULED', 'CALL_COMPLETED'].includes(lead.status) && (
+            <Button
+              className="bg-purple-600 hover:bg-purple-700"
+              onClick={() => handleUpdateStatus('QUALIFIED')}
+              disabled={updatingStatus}
+            >
+              {updatingStatus ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Mark Qualified'}
             </Button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader>
-              <CardTitle className="text-white">Lead Overview</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-slate-300">
-                  <Building2 className="h-4 w-4 text-slate-500" />
-                  {lead.industry} • {lead.companySize} employees
-                </div>
-                <div className="flex items-center gap-2 text-slate-300">
-                  <Globe className="h-4 w-4 text-slate-500" />
-                  {lead.website}
-                </div>
-                <div className="flex items-center gap-2 text-slate-300">
-                  <Calendar className="h-4 w-4 text-slate-500" />
-                  {lead.location}
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-slate-300">
-                  <UserPlus className="h-4 w-4 text-slate-500" />
-                  {lead.contactPerson} • {lead.title}
-                </div>
-                <div className="flex items-center gap-2 text-slate-300">
-                  <Mail className="h-4 w-4 text-slate-500" />
-                  {lead.email}
-                </div>
-                <div className="flex items-center gap-2 text-slate-300">
-                  <Phone className="h-4 w-4 text-slate-500" />
-                  {lead.phone}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      {saveError && (
+        <Card className="bg-slate-900 border-red-500/30">
+          <CardContent className="py-3 text-sm text-red-300">{saveError}</CardContent>
+        </Card>
+      )}
 
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Target className="h-5 w-5 text-blue-400" />
-                Opportunity Snapshot
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 rounded-lg bg-slate-800">
-                <p className="text-sm text-slate-400">Potential Value</p>
-                <p className="text-2xl font-bold text-white">${lead.potentialValue.toLocaleString()}</p>
-              </div>
-              <div className="p-4 rounded-lg bg-slate-800">
-                <p className="text-sm text-slate-400">Conversion Likelihood</p>
-                <p className="text-2xl font-bold text-green-400">{lead.likelihood}%</p>
-              </div>
-              <div className="p-4 rounded-lg bg-slate-800">
-                <p className="text-sm text-slate-400">Status</p>
-                <p className="text-lg font-semibold text-white">{STATUS_LABELS[status]}</p>
-              </div>
-              <div className="md:col-span-3">
-                <p className="text-sm text-slate-400 mb-2">Key Requirements</p>
-                <div className="flex flex-wrap gap-2">
-                  {lead.requirements.map((req) => (
-                    <Badge key={req} variant="outline" className="text-xs border-slate-600 text-slate-300">
-                      {req}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-purple-400" />
-                Lead Activity Timeline
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {lead.activity.map((item) => (
-                  <div key={item.id} className="flex items-start gap-4">
-                    <div className="h-10 w-10 rounded-lg bg-slate-800 flex items-center justify-center">
-                      <Clock className="h-4 w-4 text-slate-400" />
-                    </div>
-                    <div>
-                      <p className="text-white font-medium">{item.type}</p>
-                      <p className="text-slate-400 text-sm">{item.notes}</p>
-                      <p className="text-xs text-slate-500 mt-1">{item.date}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-green-400" />
-                AM Notes
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Capture discovery call notes, objections, and next steps..."
-                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 min-h-28"
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-white">Editable Requirement Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Product Name</label>
+              <input
+                value={leadForm.productName}
+                onChange={(event) => setLeadForm((prev) => ({ ...prev, productName: event.target.value }))}
+                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
               />
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                Save Notes
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Category</label>
+                <input
+                  value={leadForm.category}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, category: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Timeline</label>
+                <input
+                  value={leadForm.timeline}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, timeline: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Quantity</label>
+                <input
+                  type="number"
+                  value={leadForm.quantity}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, quantity: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Unit</label>
+                <input
+                  value={leadForm.unit}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, unit: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Location</label>
+                <input
+                  value={leadForm.location}
+                  onChange={(event) => setLeadForm((prev) => ({ ...prev, location: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Additional Requirements</label>
+              <Textarea
+                value={leadForm.additionalReqs}
+                onChange={(event) => setLeadForm((prev) => ({ ...prev, additionalReqs: event.target.value }))}
+                className="min-h-24 bg-slate-800 border-slate-700 text-white"
+              />
+            </div>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleSaveLeadDetails}
+              disabled={savingLead}
+            >
+              {savingLead ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Save Requirement Updates
+            </Button>
+          </CardContent>
+        </Card>
 
-        <div className="space-y-4">
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader>
-              <CardTitle className="text-white text-sm">Lead Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white">
-                <Users className="h-4 w-4 mr-2" />
-                Schedule Demo
-              </Button>
-              <Button variant="outline" className="w-full border-slate-700 text-slate-300 hover:text-white">
-                <Shield className="h-4 w-4 mr-2" />
-                Request KYB Documents
-              </Button>
-              <Button variant="outline" className="w-full border-slate-700 text-slate-300 hover:text-white">
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Create Follow-up Task
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900 border-slate-800">
-            <CardHeader>
-              <CardTitle className="text-white text-sm">Progress Tracker</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {(['new', 'contacted', 'qualified', 'converted'] as LeadDetail['status'][]).map((step) => (
-                <div key={step} className="flex items-center gap-3">
-                  <div className={`h-3 w-3 rounded-full ${step === status ? 'bg-green-400' : 'bg-slate-700'}`} />
-                  <span className={`text-sm ${step === status ? 'text-white' : 'text-slate-500'}`}>
-                    {STATUS_LABELS[step]}
-                  </span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-white">AM Notes</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Capture discovery notes, objections, and action items"
+              className="min-h-28 bg-slate-800 border-slate-700 text-white"
+            />
+            <Button onClick={handleSaveNotes} disabled={savingNotes}>
+              {savingNotes ? 'Saving...' : 'Save Notes'}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
+
+      <Card className="bg-slate-900 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-white">Create User Account</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(convertedUser || createdAccount) ? (
+            <div className="rounded-lg border border-green-500/30 bg-green-900/20 p-4 text-green-200">
+              <p className="font-medium">Account is already created for this lead.</p>
+              <p className="text-sm mt-1">
+                {(createdAccount?.user.name || convertedUser?.name)} ({createdAccount?.user.email || convertedUser?.email})
+              </p>
+              {(createdAccount?.user.accountNumber || convertedUser?.accountNumber) && (
+                <p className="text-sm mt-1">Account #: <span className="font-mono">{createdAccount?.user.accountNumber || convertedUser?.accountNumber}</span></p>
+              )}
+              {createdAccount?.tempPassword && (
+                <p className="text-sm mt-1">Temp password: <span className="font-mono">{createdAccount.tempPassword}</span></p>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <input
+                  placeholder="Name"
+                  value={accountForm.name}
+                  onChange={(event) => setAccountForm((prev) => ({ ...prev, name: event.target.value }))}
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+                <input
+                  placeholder="Email"
+                  type="email"
+                  value={accountForm.email}
+                  onChange={(event) => setAccountForm((prev) => ({ ...prev, email: event.target.value }))}
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+                <input
+                  placeholder="Phone"
+                  value={accountForm.phone}
+                  onChange={(event) => setAccountForm((prev) => ({ ...prev, phone: event.target.value }))}
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+                <input
+                  placeholder="Company Name"
+                  value={accountForm.companyName}
+                  onChange={(event) => setAccountForm((prev) => ({ ...prev, companyName: event.target.value }))}
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+                <input
+                  placeholder="Country"
+                  value={accountForm.country}
+                  onChange={(event) => setAccountForm((prev) => ({ ...prev, country: event.target.value }))}
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+                <input
+                  placeholder="Region"
+                  value={accountForm.region}
+                  onChange={(event) => setAccountForm((prev) => ({ ...prev, region: event.target.value }))}
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white"
+                />
+              </div>
+
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleCreateAccount}
+                disabled={creatingAccount || !accountForm.name || !accountForm.email || !accountForm.companyName}
+              >
+                {creatingAccount ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+                Create Account
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

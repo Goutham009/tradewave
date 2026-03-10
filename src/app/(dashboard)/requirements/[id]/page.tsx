@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,8 @@ import {
   Shield,
   Send,
   Package,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 type QuotationSummary = {
@@ -43,7 +45,7 @@ type RequirementDetail = {
   priority: string;
   quantity: number;
   unit: string;
-  targetPrice: number;
+  targetPrice: number | null;
   currency: string;
   deliveryLocation: string;
   deliveryDeadline: string;
@@ -62,15 +64,15 @@ type SupplierRequirementCardDetail = {
   status: string;
   quantity: number;
   unit: string;
-  targetPrice: number;
+  targetPrice: number | null;
   currency: string;
   deliveryLocation: string;
   deliveryDeadline: string;
   paymentTerms: string;
   incoterms: string;
   certifications: string[];
-  matchScore: number;
-  daysLeft: number;
+  matchScore: number | null;
+  daysLeft: number | null;
   isDirect: boolean;
   quotationId?: string;
 };
@@ -214,70 +216,6 @@ const BUYER_REQUIREMENTS: Record<string, RequirementDetail> = {
   },
 };
 
-const SUPPLIER_REQUIREMENT_CARDS: Record<string, SupplierRequirementCardDetail> = {
-  'src-001': {
-    cardId: 'src-001',
-    requirementId: 'req-abc-001',
-    title: 'Industrial Steel Pipes - Grade 304',
-    category: 'Industrial Materials',
-    description: 'Need seamless Grade 304 pipes for industrial transfer systems.',
-    status: 'SENT',
-    quantity: 500,
-    unit: 'MT',
-    targetPrice: 1200,
-    currency: 'USD',
-    deliveryLocation: 'Mumbai Port (JNPT), India',
-    deliveryDeadline: '2026-05-15',
-    paymentTerms: '30% Advance, 70% on Delivery',
-    incoterms: 'CIF',
-    certifications: ['ISO 9001', 'CE Marking', 'MTC'],
-    matchScore: 95,
-    daysLeft: 3,
-    isDirect: false,
-  },
-  'src-002': {
-    cardId: 'src-002',
-    requirementId: 'req-abc-002',
-    title: 'Copper Wire - Industrial Grade',
-    category: 'Metals & Alloys',
-    description: 'Electrolytic tough pitch copper wire for electrical harness assemblies.',
-    status: 'VIEWED',
-    quantity: 200,
-    unit: 'MT',
-    targetPrice: 9000,
-    currency: 'USD',
-    deliveryLocation: 'Shanghai, China',
-    deliveryDeadline: '2026-06-01',
-    paymentTerms: 'LC at Sight',
-    incoterms: 'FOB',
-    certifications: ['ISO 9001'],
-    matchScore: 88,
-    daysLeft: 5,
-    isDirect: true,
-  },
-  'src-003': {
-    cardId: 'src-003',
-    requirementId: 'req-abc-003',
-    title: 'Aluminum Sheets - 5mm',
-    category: 'Metals & Alloys',
-    description: '5mm sheets with tight flatness tolerance for fabrication use.',
-    status: 'QUOTE_SUBMITTED',
-    quantity: 150,
-    unit: 'MT',
-    targetPrice: 2400,
-    currency: 'USD',
-    deliveryLocation: 'Rotterdam, Netherlands',
-    deliveryDeadline: '2026-04-20',
-    paymentTerms: '50% Advance, 50% on Delivery',
-    incoterms: 'CFR',
-    certifications: ['ISO 9001', 'CE Marking'],
-    matchScore: 82,
-    daysLeft: 0,
-    isDirect: false,
-    quotationId: 'QUO-S-003',
-  },
-};
-
 const getStatusBadge = (status: string) => {
   const variants: Record<string, { variant: any; label: string }> = {
     DRAFT: { variant: 'secondary', label: 'Draft' },
@@ -312,9 +250,199 @@ export default function RequirementDetailPage() {
 
   const requirementId = decodeURIComponent(params.id as string);
   const cardId = searchParams.get('card');
+  const [buyerRequirement, setBuyerRequirement] = useState<RequirementDetail | null>(null);
+  const [buyerLoading, setBuyerLoading] = useState(false);
+  const [buyerError, setBuyerError] = useState<string | null>(null);
+  const [supplierCard, setSupplierCard] = useState<SupplierRequirementCardDetail | null>(null);
+  const [supplierLoading, setSupplierLoading] = useState(false);
+  const [supplierError, setSupplierError] = useState<string | null>(null);
 
-  const supplierCard = cardId ? SUPPLIER_REQUIREMENT_CARDS[cardId] : null;
-  const requirement = BUYER_REQUIREMENTS[requirementId];
+  const loadBuyerRequirement = useCallback(async () => {
+    if (cardId) {
+      setBuyerRequirement(null);
+      setBuyerError(null);
+      return;
+    }
+
+    try {
+      setBuyerLoading(true);
+      setBuyerError(null);
+
+      const res = await fetch(`/api/requirements/${encodeURIComponent(requirementId)}`);
+      const payload = await res.json();
+
+      if (!res.ok || payload?.status !== 'success' || !payload?.data?.requirement) {
+        setBuyerRequirement(null);
+        setBuyerError(payload?.error || 'Failed to load requirement details');
+        return;
+      }
+
+      const req = payload.data.requirement;
+      const quotations: QuotationSummary[] = Array.isArray(req?.quotations)
+        ? req.quotations.map((quote: any) => ({
+            id: quote.id,
+            supplier: quote.supplier?.companyName || quote.supplier?.name || 'Supplier',
+            rating: quote.supplier?.overallRating ? Number(quote.supplier.overallRating) : 0,
+            unitPrice: Number(quote.unitPrice || quote.supplierPricePerUnit || 0),
+            total: Number(quote.total || quote.supplierTotalAmount || 0),
+            leadTime: quote.deliveryTimeline
+              ? `${quote.deliveryTimeline} days`
+              : quote.leadTime
+                ? `${quote.leadTime} days`
+                : 'N/A',
+            status: quote.status || 'SUBMITTED',
+          }))
+        : [];
+
+      const specifications =
+        req?.specifications && typeof req.specifications === 'object' && !Array.isArray(req.specifications)
+          ? (req.specifications as Record<string, string>)
+          : req?.technicalSpecs && typeof req.technicalSpecs === 'object' && !Array.isArray(req.technicalSpecs)
+            ? (req.technicalSpecs as Record<string, string>)
+            : {};
+
+      setBuyerRequirement({
+        id: req.id,
+        title: req.title || 'Untitled Requirement',
+        description: req.description || 'No description provided.',
+        category: req.category || 'N/A',
+        subcategory: req.subcategory || 'General',
+        status: req.status || 'DRAFT',
+        priority: req.priority || 'MEDIUM',
+        quantity: Number(req.quantity || 0),
+        unit: req.unit || 'units',
+        targetPrice: req.targetPrice !== null && req.targetPrice !== undefined ? Number(req.targetPrice) : null,
+        currency: req.currency || 'USD',
+        deliveryLocation: req.deliveryLocation || 'TBD',
+        deliveryDeadline: req.deliveryDeadline || new Date().toISOString(),
+        paymentTerms: req.paymentTerms || 'To be agreed',
+        createdAt: req.createdAt || new Date().toISOString(),
+        specifications,
+        quotations,
+      });
+    } catch {
+      setBuyerRequirement(null);
+      setBuyerError('Network error while loading requirement details.');
+    } finally {
+      setBuyerLoading(false);
+    }
+  }, [cardId, requirementId]);
+
+  useEffect(() => {
+    void loadBuyerRequirement();
+  }, [loadBuyerRequirement]);
+
+  const loadSupplierCard = useCallback(async () => {
+    if (!cardId) {
+      setSupplierCard(null);
+      setSupplierError(null);
+      return;
+    }
+
+    try {
+      setSupplierLoading(true);
+      setSupplierError(null);
+      const res = await fetch(`/api/supplier/requirements/${cardId}`);
+      const payload = await res.json();
+
+      if (!res.ok) {
+        setSupplierCard(null);
+        setSupplierError(payload?.error || 'Failed to load requirement invitation');
+        return;
+      }
+
+      const targetPrice =
+        payload?.requirement?.budgetMax !== null && payload?.requirement?.budgetMax !== undefined
+          ? Number(payload.requirement.budgetMax)
+          : payload?.requirement?.budgetMin !== null && payload?.requirement?.budgetMin !== undefined
+            ? Number(payload.requirement.budgetMin)
+            : null;
+
+      setSupplierCard({
+        cardId: payload.cardId,
+        requirementId: payload.requirementId,
+        title: payload.requirement?.title || 'Untitled Requirement',
+        category: payload.requirement?.category || 'N/A',
+        description: payload.requirement?.description || 'No description available.',
+        status: payload.status || 'SENT',
+        quantity: Number(payload.requirement?.quantity || 0),
+        unit: payload.requirement?.unit || 'units',
+        targetPrice,
+        currency: payload.requirement?.currency || 'USD',
+        deliveryLocation: payload.requirement?.deliveryLocation || 'TBD',
+        deliveryDeadline: payload.requirement?.deliveryDeadline || new Date().toISOString(),
+        paymentTerms: payload.requirement?.paymentTerms || 'To be agreed',
+        incoterms: payload.requirement?.incoterms || 'N/A',
+        certifications: Array.isArray(payload.requirement?.requiredCertifications)
+          ? payload.requirement.requiredCertifications
+          : [],
+        matchScore:
+          payload.matchInfo?.matchScore !== null && payload.matchInfo?.matchScore !== undefined
+            ? Number(payload.matchInfo.matchScore)
+            : null,
+        daysLeft: typeof payload.daysLeft === 'number' ? payload.daysLeft : null,
+        isDirect: Boolean(payload.isDirect),
+        quotationId: payload.quotationId || undefined,
+      });
+    } catch {
+      setSupplierCard(null);
+      setSupplierError('Network error while loading requirement invitation.');
+    } finally {
+      setSupplierLoading(false);
+    }
+  }, [cardId]);
+
+  useEffect(() => {
+    void loadSupplierCard();
+  }, [loadSupplierCard]);
+
+  const requirement = buyerRequirement || BUYER_REQUIREMENTS[requirementId];
+
+  if (!cardId && buyerLoading && !requirement) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!cardId && buyerError && !requirement) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center space-y-3">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto" />
+          <h2 className="text-lg font-semibold">Unable to load requirement</h2>
+          <p className="text-sm text-muted-foreground">{buyerError}</p>
+          <Link href="/requirements">
+            <Button variant="outline">Back to Requirements</Button>
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (cardId && supplierLoading && !supplierCard) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (cardId && supplierError && !supplierCard) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center space-y-3">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto" />
+          <h2 className="text-lg font-semibold">Unable to load requirement</h2>
+          <p className="text-sm text-muted-foreground">{supplierError}</p>
+          <Link href="/requirements">
+            <Button variant="outline">Back to Requirements</Button>
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (supplierCard && supplierCard.requirementId !== requirementId) {
     return (
@@ -330,7 +458,11 @@ export default function RequirementDetailPage() {
   }
 
   if (supplierCard) {
-    const totalAmount = supplierCard.quantity * supplierCard.targetPrice;
+    const totalAmount =
+      supplierCard.targetPrice !== null ? supplierCard.quantity * supplierCard.targetPrice : null;
+    const submittedQuoteHref = supplierCard.quotationId
+      ? `/quotations/${supplierCard.quotationId}?context=submitted`
+      : '/quotations?view=submitted';
 
     return (
       <div className="space-y-6">
@@ -347,10 +479,12 @@ export default function RequirementDetailPage() {
                 <h1 className="text-2xl font-bold">{supplierCard.title}</h1>
                 {getStatusBadge(supplierCard.status)}
                 {supplierCard.isDirect && <Badge className="bg-amber-500 text-white">Direct Reorder</Badge>}
-                <Badge variant="outline">
-                  <Star className="mr-1 h-3 w-3" />
-                  {supplierCard.matchScore}% Match
-                </Badge>
+                {supplierCard.matchScore !== null && (
+                  <Badge variant="outline">
+                    <Star className="mr-1 h-3 w-3" />
+                    {supplierCard.matchScore}% Match
+                  </Badge>
+                )}
               </div>
               <p className="text-muted-foreground">Card ID: {supplierCard.cardId}</p>
             </div>
@@ -363,7 +497,7 @@ export default function RequirementDetailPage() {
               </Button>
             </Link>
           ) : (
-            <Link href={`/quotations/${supplierCard.quotationId || 'QUO-S-003'}?context=submitted`}>
+            <Link href={submittedQuoteHref}>
               <Button variant="outline">
                 <MessageSquare className="mr-2 h-4 w-4" />
                 View Submitted Quote
@@ -394,13 +528,17 @@ export default function RequirementDetailPage() {
                   <div className="rounded-lg border p-3">
                     <p className="text-sm text-muted-foreground">Target Price (per {supplierCard.unit})</p>
                     <p className="font-semibold">
-                      {supplierCard.currency} {supplierCard.targetPrice.toLocaleString()}
+                      {supplierCard.targetPrice !== null
+                        ? `${supplierCard.currency} ${supplierCard.targetPrice.toLocaleString()}`
+                        : 'Not specified'}
                     </p>
                   </div>
                   <div className="rounded-lg border p-3">
                     <p className="text-sm text-muted-foreground">Estimated Total Amount</p>
                     <p className="font-semibold">
-                      {supplierCard.currency} {totalAmount.toLocaleString()}
+                      {totalAmount !== null
+                        ? `${supplierCard.currency} ${totalAmount.toLocaleString()}`
+                        : 'N/A'}
                     </p>
                   </div>
                   <div className="rounded-lg border p-3">
@@ -432,7 +570,11 @@ export default function RequirementDetailPage() {
                 </p>
                 <p className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-muted-foreground" />
-                  {supplierCard.daysLeft > 0 ? `${supplierCard.daysLeft} days left` : 'Deadline passed'}
+                  {supplierCard.daysLeft === null
+                    ? 'No deadline provided'
+                    : supplierCard.daysLeft > 0
+                      ? `${supplierCard.daysLeft} days left`
+                      : 'Deadline passed'}
                 </p>
               </CardContent>
             </Card>
@@ -471,20 +613,21 @@ export default function RequirementDetailPage() {
     );
   }
 
-  const targetTotalAmount = requirement.quantity * requirement.targetPrice;
+  const targetTotalAmount =
+    requirement.targetPrice !== null ? requirement.quantity * requirement.targetPrice : null;
   const lowestQuote = requirement.quotations.length
     ? Math.min(...requirement.quotations.map((quote) => quote.total))
     : null;
 
-  const savingsAmount = useMemo(() => {
-    if (lowestQuote === null) {
-      return 0;
-    }
-    return targetTotalAmount - lowestQuote;
-  }, [lowestQuote, targetTotalAmount]);
+  const savingsAmount =
+    targetTotalAmount !== null && lowestQuote !== null ? targetTotalAmount - lowestQuote : null;
 
-  const savingsPercent = targetTotalAmount > 0 ? Math.round((savingsAmount / targetTotalAmount) * 100) : 0;
-  const comparisonProgress = Math.max(0, Math.min(100, 100 + savingsPercent));
+  const savingsPercent =
+    savingsAmount !== null && targetTotalAmount !== null && targetTotalAmount > 0
+      ? Math.round((savingsAmount / targetTotalAmount) * 100)
+      : null;
+  const comparisonProgress =
+    savingsPercent !== null ? Math.max(0, Math.min(100, 100 + savingsPercent)) : 0;
 
   return (
     <div className="space-y-6">
@@ -552,7 +695,9 @@ export default function RequirementDetailPage() {
                   <div>
                     <h4 className="text-sm font-medium text-muted-foreground">Target Price (per {requirement.unit})</h4>
                     <p className="mt-1 font-semibold">
-                      {requirement.currency} {requirement.targetPrice.toLocaleString()}
+                      {requirement.targetPrice !== null
+                        ? `${requirement.currency} ${requirement.targetPrice.toLocaleString()}`
+                        : 'Not specified'}
                     </p>
                   </div>
                 </div>
@@ -561,7 +706,9 @@ export default function RequirementDetailPage() {
                   <div>
                     <h4 className="text-sm font-medium text-muted-foreground">Estimated Total Amount</h4>
                     <p className="mt-1 font-semibold">
-                      {requirement.currency} {targetTotalAmount.toLocaleString()}
+                      {targetTotalAmount !== null
+                        ? `${requirement.currency} ${targetTotalAmount.toLocaleString()}`
+                        : 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -682,7 +829,9 @@ export default function RequirementDetailPage() {
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Target Total Amount</span>
                   <span className="font-medium">
-                    {requirement.currency} {targetTotalAmount.toLocaleString()}
+                    {targetTotalAmount !== null
+                      ? `${requirement.currency} ${targetTotalAmount.toLocaleString()}`
+                      : 'N/A'}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -693,15 +842,23 @@ export default function RequirementDetailPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Savings</span>
-                  <span className={`font-medium ${savingsAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {requirement.currency} {Math.abs(savingsAmount).toLocaleString()} ({Math.abs(savingsPercent)}%)
+                  <span
+                    className={`font-medium ${
+                      savingsAmount === null || savingsAmount >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}
+                  >
+                    {savingsAmount === null
+                      ? 'N/A'
+                      : `${requirement.currency} ${Math.abs(savingsAmount).toLocaleString()} (${Math.abs(savingsPercent || 0)}%)`}
                   </span>
                 </div>
                 <Progress value={comparisonProgress} className="h-2 mt-2" />
                 <p className="text-xs text-muted-foreground text-center">
-                  {savingsAmount >= 0
-                    ? 'Best quote is below target total amount'
-                    : 'Best quote is above target total amount'}
+                  {savingsAmount === null
+                    ? 'Target price not set for this requirement yet'
+                    : savingsAmount >= 0
+                      ? 'Best quote is below target total amount'
+                      : 'Best quote is above target total amount'}
                 </p>
               </div>
             </CardContent>

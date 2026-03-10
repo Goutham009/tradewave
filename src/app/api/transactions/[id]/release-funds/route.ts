@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import { prisma } from '@/lib/db';
 import { emitToUser } from '@/lib/socket/server';
+import { sendPaymentReleasedEmail } from '@/lib/email/triggers';
 
 const PLATFORM_FEE_RATE = 0.02; // 2% platform fee
 
@@ -177,8 +178,7 @@ export async function POST(
       console.error('Socket emit error:', socketError);
     }
 
-    // TODO: Send email notifications
-    // await sendPaymentReleasedEmail(transactionId);
+    sendPaymentReleasedEmail(transactionId).catch(console.error);
 
     return NextResponse.json({
       success: true,

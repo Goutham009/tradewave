@@ -46,6 +46,14 @@ interface Dispute {
   requirementTitle: string;
 }
 
+const DEMO_DISPUTES: Dispute[] = [
+  { id: 'DSP-001', transactionId: 'TXN-2024-003', buyerName: 'Import Hub', supplierName: 'Global Supply', amount: 67200, currency: 'USD', reason: 'Product quality does not match specifications. Received defective units.', status: 'OPEN', priority: 'HIGH', createdAt: '2024-01-18', updatedAt: '2024-01-18', requirementTitle: 'Electronic Parts' },
+  { id: 'DSP-002', transactionId: 'TXN-2024-015', buyerName: 'Tech Corp', supplierName: 'Metals Ltd', amount: 34500, currency: 'USD', reason: 'Delivery delayed by 3 weeks without prior notice.', status: 'UNDER_REVIEW', priority: 'MEDIUM', createdAt: '2024-01-15', updatedAt: '2024-01-17', requirementTitle: 'Steel Components' },
+  { id: 'DSP-003', transactionId: 'TXN-2024-008', buyerName: 'Mega Industries', supplierName: 'Steel Inc', amount: 89000, currency: 'USD', reason: 'Quantity mismatch - received 800 units instead of 1000.', status: 'AWAITING_RESPONSE', priority: 'HIGH', createdAt: '2024-01-12', updatedAt: '2024-01-16', requirementTitle: 'Industrial Materials' },
+  { id: 'DSP-004', transactionId: 'TXN-2024-002', buyerName: 'Trade Co', supplierName: 'Electronics Co', amount: 12300, currency: 'USD', reason: 'Wrong product shipped.', status: 'RESOLVED', priority: 'LOW', createdAt: '2024-01-10', updatedAt: '2024-01-14', requirementTitle: 'Circuit Boards' },
+  { id: 'DSP-005', transactionId: 'TXN-2024-022', buyerName: 'Global Imports', supplierName: 'Plastics Ltd', amount: 156000, currency: 'USD', reason: 'Supplier not responding to communication. Need urgent intervention.', status: 'ESCALATED', priority: 'URGENT', createdAt: '2024-01-19', updatedAt: '2024-01-20', requirementTitle: 'Plastic Materials' },
+];
+
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   OPEN: { label: 'Open', color: 'bg-red-500/20 text-red-400' },
   UNDER_REVIEW: { label: 'Under Review', color: 'bg-yellow-500/20 text-yellow-400' },
@@ -81,20 +89,15 @@ export default function AdminDisputesPage() {
       
       const response = await fetch(`/api/admin/disputes?${params}`);
       const data = await response.json();
-      
-      if (data.status === 'success') {
+
+      if (response.ok && data.status === 'success') {
         setDisputes(data.data.disputes);
+      } else {
+        setDisputes(DEMO_DISPUTES);
       }
     } catch (error) {
       console.error('Failed to fetch disputes:', error);
-      // Mock data
-      setDisputes([
-        { id: 'DSP-001', transactionId: 'TXN-2024-003', buyerName: 'Import Hub', supplierName: 'Global Supply', amount: 67200, currency: 'USD', reason: 'Product quality does not match specifications. Received defective units.', status: 'OPEN', priority: 'HIGH', createdAt: '2024-01-18', updatedAt: '2024-01-18', requirementTitle: 'Electronic Parts' },
-        { id: 'DSP-002', transactionId: 'TXN-2024-015', buyerName: 'Tech Corp', supplierName: 'Metals Ltd', amount: 34500, currency: 'USD', reason: 'Delivery delayed by 3 weeks without prior notice.', status: 'UNDER_REVIEW', priority: 'MEDIUM', createdAt: '2024-01-15', updatedAt: '2024-01-17', requirementTitle: 'Steel Components' },
-        { id: 'DSP-003', transactionId: 'TXN-2024-008', buyerName: 'Mega Industries', supplierName: 'Steel Inc', amount: 89000, currency: 'USD', reason: 'Quantity mismatch - received 800 units instead of 1000.', status: 'AWAITING_RESPONSE', priority: 'HIGH', createdAt: '2024-01-12', updatedAt: '2024-01-16', requirementTitle: 'Industrial Materials' },
-        { id: 'DSP-004', transactionId: 'TXN-2024-002', buyerName: 'Trade Co', supplierName: 'Electronics Co', amount: 12300, currency: 'USD', reason: 'Wrong product shipped.', status: 'RESOLVED', priority: 'LOW', createdAt: '2024-01-10', updatedAt: '2024-01-14', requirementTitle: 'Circuit Boards' },
-        { id: 'DSP-005', transactionId: 'TXN-2024-022', buyerName: 'Global Imports', supplierName: 'Plastics Ltd', amount: 156000, currency: 'USD', reason: 'Supplier not responding to communication. Need urgent intervention.', status: 'ESCALATED', priority: 'URGENT', createdAt: '2024-01-19', updatedAt: '2024-01-20', requirementTitle: 'Plastic Materials' },
-      ]);
+      setDisputes(DEMO_DISPUTES);
     } finally {
       setLoading(false);
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { createNotification } from '@/lib/services/notificationService';
 
 // POST /api/buyer/negotiations - Start a negotiation thread
 export async function POST(req: NextRequest) {
@@ -16,15 +17,41 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const {
-      requirementId,
-      quotationIds, // Array of quotation IDs buyer wants to negotiate on
-      negotiationPoints, // PRICE, PAYMENT_TERMS, DELIVERY_TIMELINE, WARRANTY, etc.
-      buyerTargets, // { desiredPrice, budget, paymentTerms, deliveryTimeline }
-      buyerComments,
-    } = body;
+    const requirementId = typeof body?.requirementId === 'string' ? body.requirementId : '';
+    const rawQuotationIds: unknown[] = Array.isArray(body?.quotationIds) ? body.quotationIds : [];
+    const normalizedQuotationIds: string[] = Array.from(
+      new Set(
+        rawQuotationIds
+          .filter(
+            (quotationId: unknown): quotationId is string =>
+              typeof quotationId === 'string' && quotationId.trim().length > 0
+          )
+          .map((quotationId: string) => quotationId.trim())
+      )
+    );
+    const rawNegotiationPoints: unknown[] = Array.isArray(body?.negotiationPoints)
+      ? body.negotiationPoints
+      : [];
+    const normalizedNegotiationPoints: string[] =
+      Array.isArray(body?.negotiationPoints) && body.negotiationPoints.length > 0
+        ? Array.from(
+            new Set(
+              rawNegotiationPoints
+                .filter((point: unknown): point is string => typeof point === 'string' && point.trim().length > 0)
+                .map((point: string) => point.trim())
+            )
+          )
+        : ['PRICE'];
+    const normalizedBuyerTargets =
+      body?.buyerTargets && typeof body.buyerTargets === 'object' && !Array.isArray(body.buyerTargets)
+        ? body.buyerTargets
+        : null;
+    const normalizedBuyerComments =
+      typeof body?.buyerComments === 'string' && body.buyerComments.trim().length > 0
+        ? body.buyerComments.trim()
+        : null;
 
-    if (!requirementId || !quotationIds?.length) {
+    if (!requirementId || normalizedQuotationIds.length === 0) {
       return NextResponse.json(
         { error: 'requirementId and at least one quotationId are required' },
         { status: 400 }
@@ -45,16 +72,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const requestedQuotationIds = normalizedQuotationIds;
+
+    const eligibleQuotations = await prisma.quotation.findMany({
+      where: {
+        id: { in: requestedQuotationIds },
+        requirementId,
+        visibleToBuyer: true,
+        status: {
+          in: ['APPROVED_BY_ADMIN', 'VISIBLE_TO_BUYER', 'IN_NEGOTIATION', 'SHORTLISTED'],
+        },
+      },
+      select: {
+        id: true,
+        userId: true,
+        supplierId: true,
+      },
+    });
+
+    if (eligibleQuotations.length !== requestedQuotationIds.length) {
+      return NextResponse.json(
+        { error: 'One or more quotationIds are invalid for this requirement' },
+        { status: 400 }
+      );
+    }
+
+    const eligibleQuotationIds = eligibleQuotations.map((quotation) => quotation.id);
+
     const thread = await prisma.negotiationThread.create({
       data: {
         requirementId,
         buyerId: session.user.id,
         accountManagerId: requirement?.assignedAccountManagerId || null,
         status: 'ACTIVE',
-        quotationsInNegotiation: quotationIds,
-        negotiationPoints: negotiationPoints || ['PRICE'],
-        buyerTargets: buyerTargets || null,
-        buyerComments: buyerComments || null,
+        quotationsInNegotiation: eligibleQuotationIds,
+        negotiationPoints: normalizedNegotiationPoints,
+        buyerTargets: normalizedBuyerTargets,
+        buyerComments: normalizedBuyerComments,
         lastActivity: new Date(),
       },
     });
@@ -66,14 +120,20 @@ export async function POST(req: NextRequest) {
         senderId: session.user.id,
         senderRole: 'BUYER',
         messageType: 'TEXT',
-        content: buyerComments || `Negotiation started on ${quotationIds.length} quotation(s).`,
-        metadata: { quotationIds, negotiationPoints, buyerTargets },
+        content:
+          normalizedBuyerComments ||
+          `Negotiation started on ${eligibleQuotationIds.length} quotation(s).`,
+        metadata: {
+          quotationIds: eligibleQuotationIds,
+          negotiationPoints: normalizedNegotiationPoints,
+          buyerTargets: normalizedBuyerTargets,
+        },
       },
     });
 
     // Update quotations to IN_NEGOTIATION
     await prisma.quotation.updateMany({
-      where: { id: { in: quotationIds } },
+      where: { id: { in: eligibleQuotationIds } },
       data: {
         status: 'IN_NEGOTIATION',
         negotiationThreadId: thread.id,
@@ -87,8 +147,91 @@ export async function POST(req: NextRequest) {
       data: { status: 'NEGOTIATING' },
     });
 
-    // TODO: Notify AM about negotiation start
-    // TODO: Notify relevant suppliers through AM
+    if (requirement.assignedAccountManagerId) {
+      await createNotification({
+        userId: requirement.assignedAccountManagerId,
+        type: 'SYSTEM',
+        title: 'New Negotiation Started',
+        message: `Buyer started negotiation for requirement ${requirementId} across ${eligibleQuotationIds.length} quotation(s).`,
+        resourceType: 'negotiation',
+        resourceId: thread.id,
+        metadata: {
+          requirementId,
+          quotationIds: eligibleQuotationIds,
+          negotiationPoints: normalizedNegotiationPoints,
+        },
+        sendEmail: true,
+      });
+    }
+
+    const supplierIds = Array.from(
+      new Set(
+        eligibleQuotations
+          .map((quotation) => quotation.supplierId)
+          .filter((supplierId): supplierId is string => Boolean(supplierId))
+      )
+    );
+
+    const suppliers = supplierIds.length
+      ? await prisma.supplier.findMany({
+          where: { id: { in: supplierIds } },
+          select: {
+            id: true,
+            email: true,
+          },
+        })
+      : [];
+
+    const supplierEmails = suppliers
+      .map((supplier) => supplier.email)
+      .filter((email): email is string => Boolean(email));
+
+    const supplierUsers = supplierEmails.length
+      ? await prisma.user.findMany({
+          where: {
+            role: 'SUPPLIER',
+            email: { in: supplierEmails },
+          },
+          select: {
+            id: true,
+            email: true,
+          },
+        })
+      : [];
+
+    const supplierUserIdByEmail = new Map(supplierUsers.map((user) => [user.email, user.id]));
+    const supplierUserIdBySupplierId = new Map(
+      suppliers
+        .map((supplier) => [supplier.id, supplierUserIdByEmail.get(supplier.email)] as const)
+        .filter((entry): entry is [string, string] => Boolean(entry[1]))
+    );
+
+    const supplierUserIds = Array.from(
+      new Set(
+        eligibleQuotations
+          .map((quotation) => quotation.userId || supplierUserIdBySupplierId.get(quotation.supplierId))
+          .filter((userId): userId is string => Boolean(userId))
+      )
+    );
+
+    await Promise.all(
+      supplierUserIds.map((supplierUserId) =>
+        createNotification({
+          userId: supplierUserId,
+          type: 'SYSTEM',
+          title: 'Negotiation Requested by Buyer',
+          message: `A buyer has started negotiation for one of your quotations. The account manager will coordinate next steps.`,
+          resourceType: 'negotiation',
+          resourceId: thread.id,
+          metadata: {
+            requirementId,
+            quotationIds: eligibleQuotationIds,
+            accountManagerId: requirement.assignedAccountManagerId,
+          },
+          sendEmail: true,
+        })
+      )
+    );
 
     return NextResponse.json({
       status: 'success',
@@ -96,7 +239,7 @@ export async function POST(req: NextRequest) {
         id: thread.id,
         requirementId: thread.requirementId,
         status: thread.status,
-        quotationIds,
+        quotationIds: eligibleQuotationIds,
       },
     }, { status: 201 });
   } catch (error) {

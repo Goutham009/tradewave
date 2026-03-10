@@ -63,6 +63,7 @@ export default function BuyerReviewPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev =>
@@ -73,6 +74,7 @@ export default function BuyerReviewPage() {
   const handleSubmit = async () => {
     if (!overallRating || !description) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const res = await fetch(`/api/buyer/transactions/${params.id}/review`, {
         method: 'POST',
@@ -89,13 +91,15 @@ export default function BuyerReviewPage() {
           wouldRecommend: selectedTags.includes('WOULD_REORDER'),
         }),
       });
-      if (res.ok) {
+      const payload = await res.json().catch(() => ({}));
+
+      if (res.ok && payload?.status === 'success') {
         setSubmitted(true);
       } else {
-        setSubmitted(true); // Demo fallback
+        setSubmitError(payload?.error || 'Failed to submit review. Please try again.');
       }
     } catch {
-      setSubmitted(true); // Demo fallback
+      setSubmitError('Network error while submitting review. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -134,6 +138,14 @@ export default function BuyerReviewPage() {
 
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Rate Your Experience</h1>
       <p className="text-gray-600 mb-6">Help other buyers by sharing your experience with this supplier.</p>
+
+      {submitError && (
+        <Card className="mb-6 border-red-200 bg-red-50">
+          <CardContent className="py-3">
+            <p className="text-sm text-red-700">{submitError}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Overall Rating */}
       <Card className="mb-6">

@@ -18,92 +18,98 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Invalid credentials');
         }
 
-        // Demo mode - allow test accounts without database
-        const demoUsers: Record<string, any> = {
-          'admin@tradewave.io': {
-            id: 'demo-admin-001',
-            email: 'admin@tradewave.io',
-            name: 'Admin User',
-            password: 'password123',
-            role: 'ADMIN',
-            companyName: 'Tradewave',
-            walletAddress: null,
-          },
-          'admin@tradewave.com': {
-            id: 'demo-admin-002',
-            email: 'admin@tradewave.com',
-            name: 'Platform Admin',
-            password: 'admin123',
-            role: 'ADMIN',
-            companyName: 'Tradewave Platform',
-            walletAddress: null,
-          },
-          'demo@tradewave.io': {
-            id: 'demo-user-001',
-            email: 'demo@tradewave.io',
-            name: 'Demo User',
-            password: 'password123',
-            role: 'BUYER',
-            companyName: 'Demo Company Ltd',
-            walletAddress: null,
-          },
-          'supplier@tradewave.io': {
-            id: 'demo-supplier-001',
-            email: 'supplier@tradewave.io',
-            name: 'Demo Supplier',
-            password: 'password123',
-            role: 'SUPPLIER',
-            companyName: 'Premium Supplies Co.',
-            walletAddress: null,
-          },
-          'am1@tradewave.io': {
-            id: 'demo-am-001',
-            email: 'am1@tradewave.io',
-            name: 'Sarah Johnson',
-            password: 'password123',
-            role: 'ACCOUNT_MANAGER',
-            companyName: 'Tradewave',
-            walletAddress: null,
-          },
-          'am2@tradewave.io': {
-            id: 'demo-am-002',
-            email: 'am2@tradewave.io',
-            name: 'Michael Chen',
-            password: 'password123',
-            role: 'ACCOUNT_MANAGER',
-            companyName: 'Tradewave',
-            walletAddress: null,
-          },
-          'procurement1@tradewave.io': {
-            id: 'demo-proc-001',
-            email: 'procurement1@tradewave.io',
-            name: 'David Rodriguez',
-            password: 'password123',
-            role: 'PROCUREMENT_OFFICER',
-            companyName: 'Tradewave',
-            walletAddress: null,
-          },
-          'procurement2@tradewave.io': {
-            id: 'demo-proc-002',
-            email: 'procurement2@tradewave.io',
-            name: 'Emily Watson',
-            password: 'password123',
-            role: 'PROCUREMENT_OFFICER',
-            companyName: 'Tradewave',
-            walletAddress: null,
-          },
-        };
+        const demoAuthEnabled =
+          process.env.ENABLE_DEMO_AUTH === 'true' ||
+          (process.env.NODE_ENV !== 'production' && process.env.ENABLE_DEMO_AUTH !== 'false');
 
-        const demoUser = demoUsers[credentials.email];
-        if (demoUser && credentials.password === demoUser.password) {
-          return {
-            id: demoUser.id,
-            email: demoUser.email,
-            name: demoUser.name,
-            role: demoUser.role,
-            companyName: demoUser.companyName,
-            walletAddress: demoUser.walletAddress,
+        if (demoAuthEnabled) {
+          // Demo mode - allow test accounts without database
+          const demoUsers: Record<string, any> = {
+            'admin@tradewave.io': {
+              id: 'demo-admin-001',
+              email: 'admin@tradewave.io',
+              name: 'Admin User',
+              password: 'password123',
+              role: 'ADMIN',
+              companyName: 'Tradewave',
+              walletAddress: null,
+            },
+            'admin@tradewave.com': {
+              id: 'demo-admin-002',
+              email: 'admin@tradewave.com',
+              name: 'Platform Admin',
+              password: 'admin123',
+              role: 'ADMIN',
+              companyName: 'Tradewave Platform',
+              walletAddress: null,
+            },
+            'demo@tradewave.io': {
+              id: 'demo-user-001',
+              email: 'demo@tradewave.io',
+              name: 'Demo User',
+              password: 'password123',
+              role: 'BUYER',
+              companyName: 'Demo Company Ltd',
+              walletAddress: null,
+            },
+            'supplier@tradewave.io': {
+              id: 'demo-supplier-001',
+              email: 'supplier@tradewave.io',
+              name: 'Demo Supplier',
+              password: 'password123',
+              role: 'SUPPLIER',
+              companyName: 'Premium Supplies Co.',
+              walletAddress: null,
+            },
+            'am1@tradewave.io': {
+              id: 'demo-am-001',
+              email: 'am1@tradewave.io',
+              name: 'Sarah Johnson',
+              password: 'password123',
+              role: 'ACCOUNT_MANAGER',
+              companyName: 'Tradewave',
+              walletAddress: null,
+            },
+            'am2@tradewave.io': {
+              id: 'demo-am-002',
+              email: 'am2@tradewave.io',
+              name: 'Michael Chen',
+              password: 'password123',
+              role: 'ACCOUNT_MANAGER',
+              companyName: 'Tradewave',
+              walletAddress: null,
+            },
+            'procurement1@tradewave.io': {
+              id: 'demo-proc-001',
+              email: 'procurement1@tradewave.io',
+              name: 'David Rodriguez',
+              password: 'password123',
+              role: 'PROCUREMENT_OFFICER',
+              companyName: 'Tradewave',
+              walletAddress: null,
+            },
+            'procurement2@tradewave.io': {
+              id: 'demo-proc-002',
+              email: 'procurement2@tradewave.io',
+              name: 'Emily Watson',
+              password: 'password123',
+              role: 'PROCUREMENT_OFFICER',
+              companyName: 'Tradewave',
+              walletAddress: null,
+            },
           };
+
+          const demoUser = demoUsers[credentials.email];
+          if (demoUser && credentials.password === demoUser.password) {
+            return {
+              id: demoUser.id,
+              email: demoUser.email,
+              name: demoUser.name,
+              role: demoUser.role,
+              companyName: demoUser.companyName,
+              walletAddress: demoUser.walletAddress,
+            };
+          }
         }
 
         // Try database if not a demo user

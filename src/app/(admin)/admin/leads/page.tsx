@@ -37,6 +37,8 @@ interface Lead {
   status: string;
   notes: string | null;
   assignedTo: string | null;
+  assignedAccountManagerName?: string | null;
+  assignedAccountManagerEmail?: string | null;
   assignedAt: string | null;
   callScheduledAt: string | null;
   callCompletedAt: string | null;
@@ -66,6 +68,7 @@ export default function AdminLeadsPage() {
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
@@ -73,6 +76,7 @@ export default function AdminLeadsPage() {
   const fetchLeads = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const params = new URLSearchParams({ page: pagination.page.toString(), limit: pagination.limit.toString() });
       if (statusFilter) params.append('status', statusFilter);
 
@@ -83,59 +87,8 @@ export default function AdminLeadsPage() {
       setPagination(prev => ({ ...prev, ...data.pagination }));
     } catch (error) {
       console.error('Error fetching leads:', error);
-      // Demo data fallback
-      setLeads([
-        {
-          id: 'lead_demo_001',
-          email: 'john@abccorp.com',
-          fullName: 'John Doe',
-          companyName: 'ABC Corp',
-          phoneNumber: '+91 98765 43210',
-          category: 'Metals',
-          productName: 'Industrial Steel Pipes',
-          quantity: 500,
-          unit: 'MT',
-          location: 'Mumbai, India',
-          timeline: '1-3 months',
-          targetPrice: '$1200/MT',
-          additionalReqs: 'Need ISO 9001 certified suppliers. Quality inspection required.',
-          source: 'LANDING_PAGE_FORM',
-          leadScore: 'HIGH',
-          status: 'NEW_LEAD',
-          notes: null,
-          assignedTo: null,
-          assignedAt: null,
-          callScheduledAt: null,
-          callCompletedAt: null,
-          callNotes: null,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'lead_demo_002',
-          email: 'priya@techmfg.in',
-          fullName: 'Priya Sharma',
-          companyName: 'TechMfg Industries',
-          phoneNumber: '+91 98765 11111',
-          category: 'Electronics',
-          productName: 'PCB Assemblies',
-          quantity: 10000,
-          unit: 'Units',
-          location: 'Bangalore, India',
-          timeline: '2-4 weeks',
-          targetPrice: null,
-          additionalReqs: null,
-          source: 'LANDING_PAGE_FORM',
-          leadScore: 'MEDIUM',
-          status: 'ASSIGNED_TO_AM',
-          notes: null,
-          assignedTo: 'am_sarah_001',
-          assignedAt: new Date(Date.now() - 86400000).toISOString(),
-          callScheduledAt: new Date(Date.now() + 86400000).toISOString(),
-          callCompletedAt: null,
-          callNotes: null,
-          createdAt: new Date(Date.now() - 172800000).toISOString(),
-        },
-      ]);
+      setLeads([]);
+      setError(error instanceof Error ? error.message : 'Failed to fetch leads');
     } finally {
       setLoading(false);
     }
@@ -287,7 +240,7 @@ export default function AdminLeadsPage() {
 
                     {lead.assignedTo && (
                       <div className="mt-3 text-sm text-blue-400">
-                        Assigned to: {lead.assignedTo}
+                        Assigned to: {lead.assignedAccountManagerName || lead.assignedTo}
                       </div>
                     )}
 
@@ -306,6 +259,12 @@ export default function AdminLeadsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {error && (
+        <Card className="bg-slate-800 border-red-500/30">
+          <CardContent className="py-4 text-sm text-red-300">{error}</CardContent>
+        </Card>
       )}
 
       {pagination.pages > 1 && (

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,79 +10,44 @@ import {
   Plus, Search, FileText, Calendar, MapPin, DollarSign,
   Package,
   MoreHorizontal, Eye, Edit, Trash2, Clock, Star, Shield,
-  Send, CheckCircle2, ArrowDownLeft, ArrowUpRight,
+  Send, CheckCircle2, ArrowDownLeft, ArrowUpRight, Loader2, AlertCircle,
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// ── Mock data: My posted requirements (as buyer) ──
-const mockPostedRequirements = [
-  {
-    id: 'REQ-2024-001', title: 'Steel Components for Manufacturing', category: 'Raw Materials',
-    status: 'SOURCING', priority: 'HIGH', quantity: 5000, unit: 'kg', targetPrice: 4.8,
-    currency: 'USD', deliveryLocation: 'Mumbai, India', deliveryDeadline: '2024-02-15',
-    quotationsCount: 3, createdAt: '2024-01-10', type: 'posted' as const,
-  },
-  {
-    id: 'REQ-2024-002', title: 'Electronic Circuit Boards', category: 'Electronics',
-    status: 'QUOTATIONS_READY', priority: 'MEDIUM', quantity: 1000, unit: 'pcs', targetPrice: 13,
-    currency: 'USD', deliveryLocation: 'Bangalore, India', deliveryDeadline: '2024-02-28',
-    quotationsCount: 5, createdAt: '2024-01-08', type: 'posted' as const,
-  },
-  {
-    id: 'REQ-2024-003', title: 'Industrial Packaging Materials', category: 'Packaging',
-    status: 'DRAFT', priority: 'LOW', quantity: 10000, unit: 'units', targetPrice: 0.8,
-    currency: 'USD', deliveryLocation: 'Delhi, India', deliveryDeadline: '2024-03-15',
-    quotationsCount: 0, createdAt: '2024-01-12', type: 'posted' as const,
-  },
-  {
-    id: 'REQ-2024-004', title: 'Textile Fabric Rolls', category: 'Textiles',
-    status: 'UNDER_REVIEW', priority: 'URGENT', quantity: 2000, unit: 'meters', targetPrice: 6,
-    currency: 'USD', deliveryLocation: 'Chennai, India', deliveryDeadline: '2024-01-30',
-    quotationsCount: 2, createdAt: '2024-01-05', type: 'posted' as const,
-  },
-];
+type BuyerPostedRequirement = {
+  id: string;
+  title: string;
+  category: string;
+  status: string;
+  priority: string;
+  quantity: number;
+  unit: string;
+  targetPrice: number | null;
+  currency: string;
+  deliveryLocation: string;
+  deliveryDeadline: string;
+  quotationsCount: number;
+};
 
-// ── Mock data: Received requirement cards (as supplier) ──
-const mockReceivedRequirements = [
-  {
-    cardId: 'src-001', requirementId: 'req-abc-001', status: 'SENT',
-    sentAt: new Date(Date.now() - 2 * 86400000).toISOString(),
-    responseDeadline: new Date(Date.now() + 3 * 86400000).toISOString(),
-    daysLeft: 3, isDirect: false,
-    title: 'Industrial Steel Pipes - Grade 304', category: 'Industrial Materials',
-    quantity: 500, unit: 'MT', targetPrice: 1200,
-    currency: 'USD', deliveryLocation: 'Mumbai Port (JNPT), India',
-    deliveryDeadline: '2026-05-15',
-    certifications: ['ISO 9001', 'CE Marking', 'MTC'],
-    matchScore: 95, type: 'received' as const,
-  },
-  {
-    cardId: 'src-002', requirementId: 'req-abc-002', status: 'VIEWED',
-    sentAt: new Date(Date.now() - 5 * 86400000).toISOString(),
-    responseDeadline: new Date(Date.now() + 5 * 86400000).toISOString(),
-    daysLeft: 5, isDirect: true,
-    title: 'Copper Wire - Industrial Grade', category: 'Metals & Alloys',
-    quantity: 200, unit: 'MT', targetPrice: 9000,
-    currency: 'USD', deliveryLocation: 'Shanghai, China',
-    deliveryDeadline: '2026-06-01',
-    certifications: ['ISO 9001'],
-    matchScore: 88, type: 'received' as const,
-  },
-  {
-    cardId: 'src-003', requirementId: 'req-abc-003', status: 'QUOTE_SUBMITTED',
-    sentAt: new Date(Date.now() - 10 * 86400000).toISOString(),
-    responseDeadline: new Date(Date.now() - 2 * 86400000).toISOString(),
-    daysLeft: 0, isDirect: false,
-    title: 'Aluminum Sheets - 5mm', category: 'Metals & Alloys',
-    quantity: 150, unit: 'MT', targetPrice: 2400,
-    currency: 'USD', deliveryLocation: 'Rotterdam, Netherlands',
-    deliveryDeadline: '2026-04-20',
-    certifications: ['ISO 9001', 'CE Marking'],
-    matchScore: 82, type: 'received' as const,
-  },
-];
+type SupplierRequirementCard = {
+  cardId: string;
+  requirementId: string;
+  status: string;
+  daysLeft: number | null;
+  isDirect: boolean;
+  title: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  targetPrice: number | null;
+  currency: string;
+  deliveryLocation: string;
+  deliveryDeadline: string;
+  certifications: string[];
+  matchScore: number | null;
+};
 
 // ── Badge helpers ──
 const getStatusBadge = (status: string) => {
@@ -121,19 +86,152 @@ export default function RequirementsPage() {
   const [view, setView] = useState<'as_buyer' | 'as_supplier'>('as_buyer');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [postedRequirements, setPostedRequirements] = useState<BuyerPostedRequirement[]>([]);
+  const [postedLoading, setPostedLoading] = useState(false);
+  const [postedError, setPostedError] = useState<string | null>(null);
+  const [supplierCards, setSupplierCards] = useState<SupplierRequirementCard[]>([]);
+  const [supplierLoading, setSupplierLoading] = useState(false);
+  const [supplierError, setSupplierError] = useState<string | null>(null);
+  const [supplierKybRequired, setSupplierKybRequired] = useState(false);
+  const [supplierAccountRequired, setSupplierAccountRequired] = useState(false);
 
-  const newReceivedCount = mockReceivedRequirements.filter(c => c.status === 'SENT').length;
+  const loadPostedRequirements = useCallback(async () => {
+    try {
+      setPostedLoading(true);
+      setPostedError(null);
+
+      const res = await fetch('/api/requirements?limit=50');
+      const payload = await res.json();
+
+      if (!res.ok || payload?.status !== 'success') {
+        setPostedRequirements([]);
+        setPostedError(payload?.error || 'Failed to load your posted requirements');
+        return;
+      }
+
+      const items: BuyerPostedRequirement[] = Array.isArray(payload?.data?.requirements)
+        ? payload.data.requirements.map((req: any) => ({
+            id: req.id,
+            title: req.title,
+            category: req.category || 'N/A',
+            status: req.status || 'DRAFT',
+            priority: req.priority || 'MEDIUM',
+            quantity: Number(req.quantity || 0),
+            unit: req.unit || 'units',
+            targetPrice: req.targetPrice !== null && req.targetPrice !== undefined ? Number(req.targetPrice) : null,
+            currency: req.currency || 'USD',
+            deliveryLocation: req.deliveryLocation || 'TBD',
+            deliveryDeadline: req.deliveryDeadline || new Date().toISOString(),
+            quotationsCount: Number(req?._count?.quotations || 0),
+          }))
+        : [];
+
+      setPostedRequirements(items);
+    } catch {
+      setPostedRequirements([]);
+      setPostedError('Network error while loading your requirements');
+    } finally {
+      setPostedLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === 'as_buyer') {
+      void loadPostedRequirements();
+    }
+  }, [view, loadPostedRequirements]);
+
+  const loadSupplierRequirements = useCallback(async () => {
+    try {
+      setSupplierLoading(true);
+      setSupplierError(null);
+
+      const res = await fetch('/api/supplier/requirements');
+      const payload = await res.json();
+
+      if (!res.ok) {
+        setSupplierError(payload?.error || 'Failed to load supplier requirements');
+        setSupplierCards([]);
+        return;
+      }
+
+      setSupplierKybRequired(Boolean(payload?.kybRequired));
+      setSupplierAccountRequired(Boolean(payload?.supplierAccountRequired));
+
+      if (payload?.kybRequired || payload?.supplierAccountRequired) {
+        setSupplierCards([]);
+        return;
+      }
+
+      const cards: SupplierRequirementCard[] = Array.isArray(payload?.requirements)
+        ? payload.requirements.map((card: any) => ({
+            cardId: card.cardId,
+            requirementId: card.requirementId,
+            status: card.status,
+            daysLeft: typeof card.daysLeft === 'number' ? card.daysLeft : null,
+            isDirect: Boolean(card.isDirect),
+            title: card.requirement?.title || 'Untitled Requirement',
+            category: card.requirement?.category || 'N/A',
+            quantity: Number(card.requirement?.quantity || 0),
+            unit: card.requirement?.unit || 'units',
+            targetPrice:
+              card.requirement?.budgetMax !== null && card.requirement?.budgetMax !== undefined
+                ? Number(card.requirement.budgetMax)
+                : card.requirement?.budgetMin !== null && card.requirement?.budgetMin !== undefined
+                  ? Number(card.requirement.budgetMin)
+                  : null,
+            currency: card.requirement?.currency || 'USD',
+            deliveryLocation: card.requirement?.deliveryLocation || 'TBD',
+            deliveryDeadline: card.requirement?.deliveryDeadline || new Date().toISOString(),
+            certifications: Array.isArray(card.requirement?.requiredCertifications)
+              ? card.requirement.requiredCertifications
+              : [],
+            matchScore:
+              card.matchInfo?.matchScore !== null && card.matchInfo?.matchScore !== undefined
+                ? Number(card.matchInfo.matchScore)
+                : null,
+          }))
+        : [];
+
+      setSupplierCards(cards);
+    } catch {
+      setSupplierError('Network error while loading supplier requirements');
+      setSupplierCards([]);
+    } finally {
+      setSupplierLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === 'as_supplier') {
+      void loadSupplierRequirements();
+    }
+  }, [view, loadSupplierRequirements]);
+
+  const supplierCounts = {
+    all: supplierCards.length,
+    sent: supplierCards.filter((card) => card.status === 'SENT').length,
+    viewed: supplierCards.filter((card) => card.status === 'VIEWED').length,
+    quoted: supplierCards.filter((card) => card.status === 'QUOTE_SUBMITTED').length,
+  };
+
+  const newReceivedCount = supplierCounts.sent;
 
   // Filter posted requirements
-  const filteredPosted = mockPostedRequirements.filter(r => {
+  const filteredPosted = postedRequirements.filter((r) => {
     const s = r.title.toLowerCase().includes(searchQuery.toLowerCase()) || r.id.toLowerCase().includes(searchQuery.toLowerCase());
     return s && (statusFilter === 'all' || r.status === statusFilter);
   });
 
   // Filter received requirements
-  const filteredReceived = mockReceivedRequirements
-    .filter(c => statusFilter === 'all' || c.status === statusFilter)
-    .filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredReceived = supplierCards
+    .filter((card) => statusFilter === 'all' || card.status === statusFilter)
+    .filter(
+      (card) =>
+        !searchQuery ||
+        card.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        card.requirementId.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
   return (
     <div className="space-y-6">
@@ -196,10 +294,10 @@ export default function RequirementsPage() {
                 </>
               ) : (
                 <>
-                  <option value="all">All ({mockReceivedRequirements.length})</option>
-                  <option value="SENT">New ({mockReceivedRequirements.filter(c => c.status === 'SENT').length})</option>
-                  <option value="VIEWED">Viewed ({mockReceivedRequirements.filter(c => c.status === 'VIEWED').length})</option>
-                  <option value="QUOTE_SUBMITTED">Quote Sent ({mockReceivedRequirements.filter(c => c.status === 'QUOTE_SUBMITTED').length})</option>
+                  <option value="all">All ({supplierCounts.all})</option>
+                  <option value="SENT">New ({supplierCounts.sent})</option>
+                  <option value="VIEWED">Viewed ({supplierCounts.viewed})</option>
+                  <option value="QUOTE_SUBMITTED">Quote Sent ({supplierCounts.quoted})</option>
                 </>
               )}
             </select>
@@ -210,6 +308,30 @@ export default function RequirementsPage() {
       {/* As Buyer: Posted Requirements */}
       {view === 'as_buyer' && (
         <div className="grid gap-4">
+          {postedLoading && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <p className="mt-3 text-sm text-muted-foreground">Loading your requirements...</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {!postedLoading && postedError && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <AlertCircle className="h-12 w-12 text-red-500" />
+                <h3 className="mt-4 text-lg font-semibold">Unable to load requirements</h3>
+                <p className="mt-2 text-sm text-muted-foreground text-center max-w-md">{postedError}</p>
+                <Button className="mt-4" variant="outline" onClick={() => void loadPostedRequirements()}>
+                  Retry
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {!postedLoading && !postedError && (
+            <>
           {filteredPosted.map((req) => (
             <Card key={req.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-6">
@@ -228,11 +350,17 @@ export default function RequirementsPage() {
                       <div className="flex flex-wrap gap-4 pt-2 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <DollarSign className="h-4 w-4" />
-                          Target Price: {req.currency} {req.targetPrice?.toLocaleString()} / {req.unit}
+                          Target Price:{' '}
+                          {req.targetPrice !== null
+                            ? `${req.currency} ${req.targetPrice.toLocaleString()} / ${req.unit}`
+                            : 'Not specified'}
                         </span>
                         <span className="flex items-center gap-1">
                           <Package className="h-4 w-4" />
-                          Est. Total: {req.currency} {(req.quantity * req.targetPrice).toLocaleString()}
+                          Est. Total:{' '}
+                          {req.targetPrice !== null
+                            ? `${req.currency} ${(req.quantity * req.targetPrice).toLocaleString()}`
+                            : 'N/A'}
                         </span>
                         <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{req.deliveryLocation}</span>
                         <span className="flex items-center gap-1"><Calendar className="h-4 w-4" />Due: {new Date(req.deliveryDeadline).toLocaleDateString()}</span>
@@ -271,82 +399,144 @@ export default function RequirementsPage() {
               </CardContent>
             </Card>
           )}
+            </>
+          )}
         </div>
       )}
 
       {/* As Supplier: Received Requirements */}
       {view === 'as_supplier' && (
         <div className="grid gap-4">
-          {filteredReceived.map((card) => (
-            <Card key={card.cardId} className={`hover:shadow-md transition-shadow ${card.isDirect ? 'border-amber-300 bg-amber-50/30' : ''} ${card.status === 'SENT' ? 'border-blue-200' : ''}`}>
-              <CardContent className="p-5">
-                <div className="flex flex-col lg:flex-row lg:items-start gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      {getStatusBadge(card.status)}
-                      {card.isDirect && <Badge className="bg-amber-500 text-white">Direct Reorder</Badge>}
-                      {card.matchScore && <Badge variant="outline"><Star className="h-3 w-3 mr-1" />{card.matchScore}% Match</Badge>}
-                    </div>
-                    <h3 className="font-semibold text-base">{card.title}</h3>
-                    <p className="text-sm text-muted-foreground">{card.category}</p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <DollarSign className="h-3.5 w-3.5" />
-                        Target Price: {card.currency} {card.targetPrice.toLocaleString()} / {card.unit}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Package className="h-3.5 w-3.5" />
-                        Est. Total: {card.currency} {(card.quantity * card.targetPrice).toLocaleString()}
-                      </span>
-                      <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{card.deliveryLocation}</span>
-                      <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />Due: {new Date(card.deliveryDeadline).toLocaleDateString()}</span>
-                    </div>
-                    {card.certifications.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {card.certifications.map(cert => (
-                          <Badge key={cert} variant="outline" className="text-xs"><Shield className="h-3 w-3 mr-1" />{cert}</Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-2 shrink-0">
-                    <p className="text-lg font-bold">{card.quantity} {card.unit}</p>
-                    {card.daysLeft !== null && card.status !== 'QUOTE_SUBMITTED' && (
-                      <p className={`text-xs ${card.daysLeft <= 1 ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
-                        <Clock className="inline h-3 w-3 mr-1" />
-                        {card.daysLeft > 0 ? `${card.daysLeft} days left` : 'Deadline passed'}
-                      </p>
-                    )}
-                    <div className="flex gap-2 mt-1">
-                      <Link href={`/requirements/${card.requirementId}?card=${card.cardId}`}>
-                        <Button variant="outline" size="sm"><Eye className="mr-1 h-3.5 w-3.5" />View</Button>
-                      </Link>
-                      {card.status !== 'QUOTE_SUBMITTED' && card.daysLeft !== null && card.daysLeft > 0 && (
-                        <Link href={`/quotations/new?card=${card.cardId}&req=${card.requirementId}`}>
-                          <Button variant="gradient" size="sm"><Send className="mr-1 h-3.5 w-3.5" />Submit Quote</Button>
-                        </Link>
-                      )}
-                      {card.status === 'QUOTE_SUBMITTED' && (
-                        <Button variant="outline" size="sm" disabled><CheckCircle2 className="mr-1 h-3.5 w-3.5" />Quoted</Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+          {supplierLoading && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <p className="mt-3 text-sm text-muted-foreground">Loading requirement invitations...</p>
               </CardContent>
             </Card>
-          ))}
-          {filteredReceived.length === 0 && (
+          )}
+
+          {!supplierLoading && supplierError && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <AlertCircle className="h-12 w-12 text-red-500" />
+                <h3 className="mt-4 text-lg font-semibold">Unable to load requirements</h3>
+                <p className="mt-2 text-sm text-muted-foreground text-center max-w-md">{supplierError}</p>
+                <Button className="mt-4" variant="outline" onClick={() => void loadSupplierRequirements()}>
+                  Retry
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {!supplierLoading && !supplierError && supplierKybRequired && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Shield className="h-12 w-12 text-amber-500" />
+                <h3 className="mt-4 text-lg font-semibold">KYB Verification Required</h3>
+                <p className="mt-2 text-sm text-muted-foreground text-center max-w-md">
+                  Complete KYB verification to view requirement invitations and submit quotations.
+                </p>
+                <Link href="/kyb" className="mt-4">
+                  <Button variant="gradient">Go to KYB</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+
+          {!supplierLoading && !supplierError && !supplierKybRequired && supplierAccountRequired && (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <FileText className="h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold">No requirements yet</h3>
-                <p className="mt-2 text-sm text-muted-foreground max-w-sm text-center">
-                  {searchQuery || statusFilter !== 'all'
-                    ? 'Try adjusting your filters'
-                    : 'We\'ll notify you when buyers post requirements matching your products.'}
+                <h3 className="mt-4 text-lg font-semibold">Supplier profile missing</h3>
+                <p className="mt-2 text-sm text-muted-foreground text-center max-w-md">
+                  Your supplier profile is not linked yet. Contact support or your account manager to activate invitations.
                 </p>
               </CardContent>
             </Card>
+          )}
+
+          {!supplierLoading && !supplierError && !supplierKybRequired && !supplierAccountRequired && (
+            <>
+              {filteredReceived.map((card) => (
+                <Card key={card.cardId} className={`hover:shadow-md transition-shadow ${card.isDirect ? 'border-amber-300 bg-amber-50/30' : ''} ${card.status === 'SENT' ? 'border-blue-200' : ''}`}>
+                  <CardContent className="p-5">
+                    <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          {getStatusBadge(card.status)}
+                          {card.isDirect && <Badge className="bg-amber-500 text-white">Direct Reorder</Badge>}
+                          {card.matchScore && <Badge variant="outline"><Star className="h-3 w-3 mr-1" />{card.matchScore}% Match</Badge>}
+                        </div>
+                        <h3 className="font-semibold text-base">{card.title}</h3>
+                        <p className="text-sm text-muted-foreground">{card.category}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <DollarSign className="h-3.5 w-3.5" />
+                            Target Price:{' '}
+                            {card.targetPrice !== null
+                              ? `${card.currency} ${card.targetPrice.toLocaleString()} / ${card.unit}`
+                              : 'Not specified'}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Package className="h-3.5 w-3.5" />
+                            Est. Total:{' '}
+                            {card.targetPrice !== null
+                              ? `${card.currency} ${(card.quantity * card.targetPrice).toLocaleString()}`
+                              : 'N/A'}
+                          </span>
+                          <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{card.deliveryLocation}</span>
+                          <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />Due: {new Date(card.deliveryDeadline).toLocaleDateString()}</span>
+                        </div>
+                        {card.certifications.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {card.certifications.map((cert) => (
+                              <Badge key={cert} variant="outline" className="text-xs"><Shield className="h-3 w-3 mr-1" />{cert}</Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <p className="text-lg font-bold">{card.quantity} {card.unit}</p>
+                        {card.daysLeft !== null && card.status !== 'QUOTE_SUBMITTED' && (
+                          <p className={`text-xs ${card.daysLeft <= 1 ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
+                            <Clock className="inline h-3 w-3 mr-1" />
+                            {card.daysLeft > 0 ? `${card.daysLeft} days left` : 'Deadline passed'}
+                          </p>
+                        )}
+                        <div className="flex gap-2 mt-1">
+                          <Link href={`/requirements/${card.requirementId}?card=${card.cardId}`}>
+                            <Button variant="outline" size="sm"><Eye className="mr-1 h-3.5 w-3.5" />View</Button>
+                          </Link>
+                          {card.status !== 'QUOTE_SUBMITTED' && card.daysLeft !== null && card.daysLeft > 0 && (
+                            <Link href={`/quotations/new?card=${card.cardId}&req=${card.requirementId}`}>
+                              <Button variant="gradient" size="sm"><Send className="mr-1 h-3.5 w-3.5" />Submit Quote</Button>
+                            </Link>
+                          )}
+                          {card.status === 'QUOTE_SUBMITTED' && (
+                            <Button variant="outline" size="sm" disabled><CheckCircle2 className="mr-1 h-3.5 w-3.5" />Quoted</Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+
+              {filteredReceived.length === 0 && (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <FileText className="h-12 w-12 text-muted-foreground" />
+                    <h3 className="mt-4 text-lg font-semibold">No requirements yet</h3>
+                    <p className="mt-2 text-sm text-muted-foreground max-w-sm text-center">
+                      {searchQuery || statusFilter !== 'all'
+                        ? 'Try adjusting your filters'
+                        : 'We\'ll notify you when buyers post requirements matching your products.'}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
         </div>
       )}

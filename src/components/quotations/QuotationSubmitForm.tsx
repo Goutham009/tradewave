@@ -41,22 +41,16 @@ interface Requirement {
   };
 }
 
-interface Supplier {
-  id: string;
-  name: string;
-  companyName: string;
-}
-
 interface QuotationSubmitFormProps {
   requirement: Requirement;
-  supplier: Supplier;
+  supplierRequirementCardId: string;
   onSuccess?: (quotation: any) => void;
   onCancel?: () => void;
 }
 
 export default function QuotationSubmitForm({
   requirement,
-  supplier,
+  supplierRequirementCardId,
   onSuccess,
   onCancel,
 }: QuotationSubmitFormProps) {
@@ -64,6 +58,7 @@ export default function QuotationSubmitForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [submittedReferenceId, setSubmittedReferenceId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     unitPrice: '',
@@ -110,37 +105,40 @@ export default function QuotationSubmitForm({
     setError(null);
 
     try {
-      const response = await fetch('/api/quotations', {
+      const response = await fetch('/api/supplier/quotations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          requirementId: requirement.id,
-          supplierId: supplier.id,
-          unitPrice: parseFloat(formData.unitPrice),
+          supplierRequirementCardId,
+          pricePerUnit: parseFloat(formData.unitPrice),
           quantity: parseInt(formData.quantity),
-          leadTime: parseInt(formData.leadTime),
-          validDays: parseInt(formData.validDays),
-          shipping: parseFloat(formData.shipping) || 0,
-          insurance: parseFloat(formData.insurance) || 0,
-          customs: parseFloat(formData.customs) || 0,
-          taxes: parseFloat(formData.taxes) || 0,
+          currency: requirement.currency,
+          productionLeadTime: parseInt(formData.leadTime),
+          shippingLeadTime: 0,
           notes: formData.notes || null,
-          terms: formData.terms || null,
-          samples: formData.samples,
-          sampleCost: formData.samples ? parseFloat(formData.sampleCost) : null,
+          paymentTerms: formData.terms || null,
+          additionalTerms: formData.terms || null,
+          samplesAvailable: formData.samples,
+          sampleCost: formData.samples && formData.sampleCost ? parseFloat(formData.sampleCost) : null,
+          validUntil: new Date(
+            Date.now() + (parseInt(formData.validDays) || 14) * 24 * 60 * 60 * 1000
+          ).toISOString(),
         }),
       });
 
       const data = await response.json();
 
-      if (data.status === 'success') {
+      if (response.ok && data.status === 'success') {
+        const submittedQuotation = data.quotation || data.data?.quotation;
+        setSubmittedReferenceId(submittedQuotation?.referenceId || null);
         setSuccess(true);
         if (onSuccess) {
-          onSuccess(data.data.quotation);
+          onSuccess(submittedQuotation);
+        } else {
+          setTimeout(() => {
+            router.push('/quotations?view=submitted');
+          }, 1200);
         }
-        setTimeout(() => {
-          router.push('/quotations');
-        }, 2000);
       } else {
         setError(data.error || 'Failed to submit quotation');
       }
@@ -162,7 +160,12 @@ export default function QuotationSubmitForm({
           <p className="text-muted-foreground mt-2 text-center">
             Your quotation has been sent to the buyer. You&rsquo;ll be notified when they respond.
           </p>
-          <Button className="mt-6" onClick={() => router.push('/quotations')}>
+          {submittedReferenceId && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Reference: <span className="font-mono text-foreground">{submittedReferenceId}</span>
+            </p>
+          )}
+          <Button className="mt-6" onClick={() => router.push('/quotations?view=submitted')}>
             View My Quotations
           </Button>
         </CardContent>

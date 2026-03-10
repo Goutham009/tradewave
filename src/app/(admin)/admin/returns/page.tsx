@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Package, Clock, CheckCircle, XCircle, Truck, 
   Search, Eye, RefreshCw
@@ -37,11 +37,7 @@ export default function AdminReturnsPage() {
   const [filter, setFilter] = useState('REQUESTED');
   const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
 
-  useEffect(() => {
-    fetchReturns();
-  }, [filter]);
-
-  const fetchReturns = async () => {
+  const fetchReturns = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/admin/returns?status=${filter}`);
@@ -52,7 +48,11 @@ export default function AdminReturnsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    fetchReturns();
+  }, [fetchReturns]);
 
   const handleApprove = async (returnId: string, approve: boolean, rejectionReason?: string) => {
     try {

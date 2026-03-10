@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { 
@@ -71,11 +71,7 @@ export default function AdminTierChangesPage() {
   const [selectedSeverity, setSelectedSeverity] = useState('');
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchRequests();
-  }, [selectedStatus, selectedSeverity]);
-
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -94,7 +90,11 @@ export default function AdminTierChangesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedStatus, selectedSeverity]);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
 
   const handleAction = async (requestId: string, action: string, notes?: string) => {
     setProcessingId(requestId);

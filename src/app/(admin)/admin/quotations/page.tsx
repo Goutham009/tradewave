@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,6 @@ import {
   Search,
   Loader2,
   Download,
-  DollarSign,
   Clock,
   CheckCircle,
   RefreshCw,
@@ -21,6 +20,23 @@ import {
   User,
   AlertCircle,
 } from 'lucide-react';
+
+type AdminQuotationRow = {
+  id: string;
+  requirementId: string;
+  requirementTitle: string;
+  requirementQuantity: number;
+  requirementUnit: string;
+  requirementCreatedAt: string | null;
+  createdAt: string;
+  buyerName: string;
+  buyerCompany?: string;
+  buyerEmail: string;
+  category: string;
+  amount: number;
+  currency: string;
+  status: string;
+};
 
 interface RequirementWithQuotes {
   id: string;
@@ -40,14 +56,6 @@ interface RequirementWithQuotes {
   status: 'needs_review' | 'ready_to_send' | 'sent_to_buyer' | 'completed';
 }
 
-const MOCK_REQUIREMENTS: RequirementWithQuotes[] = [
-  { id: 'REQ-2024-004', title: 'Textile Raw Materials - Cotton', buyerName: 'Mike Chen', buyerCompany: 'Fashion Hub Ltd', category: 'Textiles', quantity: 2000, unit: 'kg', createdAt: '2024-01-10', quotationCount: 4, pendingCount: 3, verifiedCount: 1, sentCount: 0, lowestPrice: 6900, highestPrice: 7800, status: 'needs_review' },
-  { id: 'REQ-2024-005', title: 'Chemical Compounds - Industrial', buyerName: 'Sarah Lee', buyerCompany: 'Tech Solutions Inc', category: 'Chemicals', quantity: 100, unit: 'barrels', createdAt: '2024-01-08', quotationCount: 3, pendingCount: 0, verifiedCount: 3, sentCount: 0, lowestPrice: 2800, highestPrice: 3100, status: 'ready_to_send' },
-  { id: 'REQ-2024-001', title: 'Steel Components for Manufacturing', buyerName: 'John Smith', buyerCompany: 'Acme Corporation', category: 'Raw Materials', quantity: 1000, unit: 'units', createdAt: '2024-01-05', quotationCount: 1, pendingCount: 0, verifiedCount: 0, sentCount: 1, lowestPrice: 4800, highestPrice: 4800, status: 'sent_to_buyer' },
-  { id: 'REQ-2024-006', title: 'Electronic Components - PCB', buyerName: 'Lisa Wang', buyerCompany: 'TechParts Inc', category: 'Electronics', quantity: 5000, unit: 'pcs', createdAt: '2024-01-12', quotationCount: 2, pendingCount: 2, verifiedCount: 0, sentCount: 0, lowestPrice: 12500, highestPrice: 14200, status: 'needs_review' },
-  { id: 'REQ-2024-007', title: 'Packaging Materials - Cardboard', buyerName: 'Emma Davis', buyerCompany: 'PackRight Co', category: 'Packaging', quantity: 10000, unit: 'units', createdAt: '2024-01-15', quotationCount: 5, pendingCount: 1, verifiedCount: 4, sentCount: 0, lowestPrice: 8500, highestPrice: 11200, status: 'ready_to_send' },
-];
-
 const STATUS_CONFIG = {
   needs_review: { label: 'Needs Review', color: 'bg-yellow-500/20 text-yellow-400', icon: Clock },
   ready_to_send: { label: 'Ready to Send', color: 'bg-green-500/20 text-green-400', icon: CheckCircle },
@@ -55,39 +63,155 @@ const STATUS_CONFIG = {
   completed: { label: 'Completed', color: 'bg-emerald-500/20 text-emerald-400', icon: CheckCircle },
 };
 
+const REVIEW_PENDING_STATUSES = new Set(['SUBMITTED', 'PENDING', 'UNDER_REVIEW']);
+const VERIFIED_STATUSES = new Set(['VERIFIED', 'SHORTLISTED']);
+const BUYER_VISIBLE_STATUSES = new Set(['APPROVED_BY_ADMIN', 'VISIBLE_TO_BUYER', 'IN_NEGOTIATION']);
+
+function deriveRequirementStatus(statuses: string[]): RequirementWithQuotes['status'] {
+  if (statuses.includes('ACCEPTED')) {
+    return 'completed';
+  }
+
+  if (statuses.some((status) => BUYER_VISIBLE_STATUSES.has(status))) {
+    return 'sent_to_buyer';
+  }
+
+  if (statuses.some((status) => REVIEW_PENDING_STATUSES.has(status))) {
+    return 'needs_review';
+  }
+
+  if (statuses.some((status) => VERIFIED_STATUSES.has(status))) {
+    return 'ready_to_send';
+  }
+
+  return 'needs_review';
+}
+
 export default function AdminQuotationsPage() {
   const [requirements, setRequirements] = useState<RequirementWithQuotes[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setRequirements(MOCK_REQUIREMENTS);
+  const fetchRequirements = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch('/api/admin/quotations?limit=100');
+      const payload = await response.json();
+
+      if (!response.ok || payload?.status !== 'success') {
+        setRequirements([]);
+        setError(payload?.error || 'Failed to load quotations');
+        return;
+      }
+
+      const rows = Array.isArray(payload?.data?.quotations)
+        ? (payload.data.quotations as AdminQuotationRow[])
+        : [];
+
+      const grouped = new Map<string, RequirementWithQuotes>();
+      const statusesByRequirement = new Map<string, string[]>();
+
+      for (const row of rows) {
+        if (!row.requirementId) {
+          continue;
+        }
+
+        const existingStatuses = statusesByRequirement.get(row.requirementId) || [];
+        existingStatuses.push(row.status);
+        statusesByRequirement.set(row.requirementId, existingStatuses);
+      }
+
+      for (const row of rows) {
+        if (!row.requirementId) {
+          continue;
+        }
+
+        const amount = Number(row.amount || 0);
+        const statuses = statusesByRequirement.get(row.requirementId) || [row.status];
+        const existing = grouped.get(row.requirementId);
+        if (!existing) {
+          grouped.set(row.requirementId, {
+            id: row.requirementId,
+            title: row.requirementTitle || 'Untitled Requirement',
+            buyerName: row.buyerName || 'Unknown Buyer',
+            buyerCompany: row.buyerCompany || row.buyerName || 'Unknown Buyer',
+            category: row.category || 'N/A',
+            quantity: Number(row.requirementQuantity || 0),
+            unit: row.requirementUnit || '',
+            createdAt: row.requirementCreatedAt || row.createdAt || new Date().toISOString(),
+            quotationCount: 1,
+            pendingCount: REVIEW_PENDING_STATUSES.has(row.status) ? 1 : 0,
+            verifiedCount: VERIFIED_STATUSES.has(row.status) ? 1 : 0,
+            sentCount: BUYER_VISIBLE_STATUSES.has(row.status) || row.status === 'ACCEPTED' ? 1 : 0,
+            lowestPrice: amount,
+            highestPrice: amount,
+            status: deriveRequirementStatus(statuses),
+          });
+          continue;
+        }
+
+        existing.quotationCount += 1;
+        if (REVIEW_PENDING_STATUSES.has(row.status)) {
+          existing.pendingCount += 1;
+        }
+        if (VERIFIED_STATUSES.has(row.status)) {
+          existing.verifiedCount += 1;
+        }
+        if (BUYER_VISIBLE_STATUSES.has(row.status) || row.status === 'ACCEPTED') {
+          existing.sentCount += 1;
+        }
+
+        existing.lowestPrice = Math.min(existing.lowestPrice, amount);
+        existing.highestPrice = Math.max(existing.highestPrice, amount);
+        existing.status = deriveRequirementStatus(statuses);
+      }
+
+      setRequirements(Array.from(grouped.values()).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)));
+    } catch {
+      setRequirements([]);
+      setError('Network error while loading quotations');
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   }, []);
+
+  useEffect(() => {
+    void fetchRequirements();
+  }, [fetchRequirements]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
   };
 
-  const filteredRequirements = requirements.filter(req => {
-    const matchesSearch = req.title.toLowerCase().includes(search.toLowerCase()) ||
-      req.buyerName.toLowerCase().includes(search.toLowerCase()) ||
-      req.buyerCompany.toLowerCase().includes(search.toLowerCase()) ||
-      req.id.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredRequirements = useMemo(
+    () =>
+      requirements.filter((req) => {
+        const query = search.toLowerCase().trim();
+        const matchesSearch =
+          !query ||
+          req.title.toLowerCase().includes(query) ||
+          req.buyerName.toLowerCase().includes(query) ||
+          req.buyerCompany.toLowerCase().includes(query) ||
+          req.id.toLowerCase().includes(query);
+        const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      }),
+    [requirements, search, statusFilter]
+  );
 
-  const stats = {
-    total: requirements.reduce((sum, r) => sum + r.quotationCount, 0),
-    needsReview: requirements.filter(r => r.status === 'needs_review').length,
-    readyToSend: requirements.filter(r => r.status === 'ready_to_send').length,
-    sent: requirements.filter(r => r.status === 'sent_to_buyer').length,
-  };
+  const stats = useMemo(
+    () => ({
+      total: requirements.reduce((sum, r) => sum + r.quotationCount, 0),
+      needsReview: requirements.filter((r) => r.status === 'needs_review').length,
+      readyToSend: requirements.filter((r) => r.status === 'ready_to_send').length,
+      sent: requirements.filter((r) => r.status === 'sent_to_buyer').length,
+    }),
+    [requirements]
+  );
 
   return (
     <div className="p-6 space-y-6">
@@ -98,10 +222,10 @@ export default function AdminQuotationsPage() {
           <p className="text-slate-400">Review quotations by requirement and send best quotes to buyers</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => window.location.reload()} className="border-slate-600 text-slate-300">
+          <Button variant="outline" onClick={() => void fetchRequirements()} className="border-slate-600 text-slate-300">
             <RefreshCw className="mr-2 h-4 w-4" /> Refresh
           </Button>
-          <Button className="bg-red-600 hover:bg-red-700">
+          <Button className="bg-red-600 hover:bg-red-700" disabled>
             <Download className="mr-2 h-4 w-4" /> Export
           </Button>
         </div>
@@ -193,6 +317,16 @@ export default function AdminQuotationsPage() {
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-red-500" />
         </div>
+      ) : error ? (
+        <Card className="bg-slate-800 border-slate-700">
+          <CardContent className="p-12 text-center space-y-3">
+            <AlertCircle className="h-12 w-12 mx-auto text-red-400" />
+            <p className="text-slate-300">{error}</p>
+            <Button variant="outline" onClick={() => void fetchRequirements()} className="border-slate-600 text-slate-300">
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : filteredRequirements.length === 0 ? (
         <Card className="bg-slate-800 border-slate-700">
           <CardContent className="p-12 text-center">

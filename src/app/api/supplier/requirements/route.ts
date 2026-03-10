@@ -1,24 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 
 // GET /api/supplier/requirements - Get matched requirements for a supplier
 // Returns SupplierRequirementCards with requirement details
 export async function GET(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'SUPPLIER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const supplierEmail = session.user.email;
+    if (!supplierEmail) {
+      return NextResponse.json({ error: 'Supplier account email is missing' }, { status: 400 });
+    }
+
+    const supplier = await prisma.supplier.findUnique({
+      where: { email: supplierEmail },
+      select: { id: true },
+    });
+
+    if (!supplier) {
+      return NextResponse.json({
+        requirements: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+        counts: { new: 0, viewed: 0, quoted: 0 },
+        supplierAccountRequired: true,
+      });
+    }
+
     const { searchParams } = new URL(req.url);
-    const supplierId = searchParams.get('supplierId');
     const status = searchParams.get('status'); // SENT, VIEWED, QUOTE_SUBMITTED, DECLINED
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
 
-    if (!supplierId) {
-      return NextResponse.json({ error: 'supplierId is required' }, { status: 400 });
-    }
-
     // KYB check: user cannot receive requirements until KYB is completed
     // The API returns an empty list (not an error) so the UI just shows "no requirements yet"
     const user = await prisma.user.findFirst({
-      where: { id: supplierId },
+      where: { id: session.user.id },
       select: { kybStatus: true },
     });
 
@@ -32,7 +57,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Build filter
-    const where: any = { supplierId };
+    const where: any = { supplierId: supplier.id };
     if (status) {
       where.status = status;
     } else {
@@ -139,6 +164,7 @@ export async function GET(req: NextRequest) {
         viewed: cards.filter((c: any) => c.status === 'VIEWED').length,
         quoted: cards.filter((c: any) => c.status === 'QUOTE_SUBMITTED').length,
       },
+      supplierId: supplier.id,
     });
   } catch (error: any) {
     console.error('Error fetching supplier requirements:', error);

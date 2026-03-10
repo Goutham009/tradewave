@@ -29,9 +29,13 @@ import {
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   INITIATED: { label: 'Initiated', color: 'secondary' },
   PAYMENT_PENDING: { label: 'Payment Pending', color: 'warning' },
+  PAYMENT_CONFIRMED: { label: 'Payment Confirmed', color: 'info' },
+  CONFIRMED: { label: 'Confirmed', color: 'info' },
   PAID: { label: 'Paid', color: 'info' },
   PAYMENT_RECEIVED: { label: 'Payment Received', color: 'info' },
   ESCROW_HELD: { label: 'Escrow Held', color: 'info' },
+  PRODUCTION: { label: 'In Production', color: 'warning' },
+  QUALITY_INSPECTION: { label: 'Quality Inspection', color: 'warning' },
   SHIPPED: { label: 'Shipped', color: 'info' },
   DELIVERY_CONFIRMED: { label: 'Delivery Confirmed', color: 'success' },
   QUALITY_PENDING: { label: 'Quality Assessment', color: 'warning' },
@@ -70,6 +74,9 @@ export default function SupplierTransactionPage() {
   const [estimatedDelivery, setEstimatedDelivery] = useState('');
   const [shipmentNotes, setShipmentNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [productionProgress, setProductionProgress] = useState<number>(0);
+  const [productionNotes, setProductionNotes] = useState('');
+  const [productionActionLoading, setProductionActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTransaction();
@@ -93,6 +100,63 @@ export default function SupplierTransactionPage() {
     }
   };
 
+  const handleProductionAction = async (action: 'confirm_start' | 'update_progress' | 'mark_complete') => {
+    const supplierId = transaction?.supplierId || transaction?.supplier?.id;
+    if (!supplierId) {
+      setError('Unable to identify supplier account for this transaction');
+      return;
+    }
+
+    if (action === 'update_progress' && (productionProgress < 0 || productionProgress > 100)) {
+      setError('Production progress must be between 0 and 100');
+      return;
+    }
+
+    setProductionActionLoading(action);
+    setError(null);
+
+    try {
+      const payload: Record<string, unknown> = {
+        supplierId,
+        action,
+      };
+
+      if (action === 'confirm_start') {
+        payload.productionStartDate = new Date().toISOString();
+      }
+
+      if (action === 'update_progress') {
+        payload.progressPercentage = productionProgress;
+        payload.progressNotes = productionNotes || undefined;
+      }
+
+      if (action === 'mark_complete') {
+        payload.completionNotes = productionNotes || undefined;
+      }
+
+      const response = await fetch(`/api/supplier/transactions/${transactionId}/production`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+
+      if (response.ok && data.status === 'success') {
+        if (action === 'confirm_start') {
+          setProductionProgress(0);
+        }
+        setActionSuccess(data.message || 'Production updated successfully.');
+        await fetchTransaction();
+      } else {
+        setError(data.error || 'Failed to update production');
+      }
+    } catch {
+      setError('Network error');
+    } finally {
+      setProductionActionLoading(null);
+    }
+  };
+
   const refreshTransaction = async () => {
     setRefreshing(true);
     await fetchTransaction();
@@ -113,19 +177,28 @@ export default function SupplierTransactionPage() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/transactions/${transactionId}/shipment`, {
+      const supplierId = transaction?.supplierId || transaction?.supplier?.id;
+      if (!supplierId) {
+        setError('Unable to identify supplier account for this transaction');
+        setSubmitting(false);
+        return;
+      }
+
+      const response = await fetch(`/api/supplier/transactions/${transactionId}/shipment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          supplierId,
+          carrier: shippingProvider,
           trackingNumber,
           shippingProvider,
           estimatedDelivery: estimatedDelivery || undefined,
-          notes: shipmentNotes || undefined,
+          shipmentNotes: shipmentNotes || undefined,
         }),
       });
       const data = await response.json();
 
-      if (data.success) {
+      if (response.ok && data.status === 'success') {
         setActionSuccess('Shipment confirmed! The buyer has been notified.');
         setShowShipmentForm(false);
         setTrackingNumber('');
@@ -169,9 +242,12 @@ export default function SupplierTransactionPage() {
   if (!transaction) return null;
 
   const t = transaction;
-  const canShip = ['PAID', 'PAYMENT_RECEIVED', 'ESCROW_HELD'].includes(t.status);
+  const canStartProduction = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAID', 'ESCROW_HELD', 'CONFIRMED'].includes(t.status);
+  const canUpdateProduction = t.status === 'PRODUCTION';
+  const canShip = ['QUALITY_INSPECTION', 'QUALITY_APPROVED'].includes(t.status);
   const fundsReleased = t.status === 'FUNDS_RELEASED' || t.escrow?.status === 'RELEASED';
   const statusConfig = STATUS_CONFIG[t.status] || { label: t.status, color: 'secondary' };
+  const supplierOrderId = t.references?.supplierOrderId || t.references?.transactionReference || `${t.id.slice(0, 8)}...`;
 
   return (
     <div className="space-y-6">
@@ -229,7 +305,7 @@ export default function SupplierTransactionPage() {
           </Link>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold">Order {t.id.slice(0, 8)}...</h1>
+              <h1 className="text-2xl font-bold">Order {supplierOrderId}</h1>
               <Badge variant={statusConfig.color as any}>{statusConfig.label}</Badge>
             </div>
             <p className="text-muted-foreground">{t.requirement?.title}</p>
@@ -244,6 +320,108 @@ export default function SupplierTransactionPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Production Action Card */}
+          {(canStartProduction || canUpdateProduction) && (
+            <Card className="border-primary/50 bg-primary/5">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Package className="h-6 w-6 text-primary" />
+                  </div>
+                  <div className="flex-1 space-y-4">
+                    <div>
+                      <h3 className="font-semibold text-lg">
+                        {canStartProduction ? 'Start Production' : 'Production In Progress'}
+                      </h3>
+                      <p className="text-muted-foreground mt-1">
+                        {canStartProduction
+                          ? 'Payment is confirmed. Start production before shipment.'
+                          : 'Update production progress and mark complete when ready for shipment.'}
+                      </p>
+                    </div>
+
+                    {canUpdateProduction && (
+                      <>
+                        <div>
+                          <label className="text-sm font-medium">Production Progress (%)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={productionProgress}
+                            onChange={(e) => setProductionProgress(Number(e.target.value))}
+                            className="mt-1 w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">Production Notes</label>
+                          <Textarea
+                            value={productionNotes}
+                            onChange={(e) => setProductionNotes(e.target.value)}
+                            placeholder="Share production updates or completion notes"
+                            rows={3}
+                            className="mt-1"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                      {canStartProduction && (
+                        <Button
+                          onClick={() => handleProductionAction('confirm_start')}
+                          disabled={productionActionLoading === 'confirm_start'}
+                        >
+                          {productionActionLoading === 'confirm_start' ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Starting...
+                            </>
+                          ) : (
+                            'Start Production'
+                          )}
+                        </Button>
+                      )}
+
+                      {canUpdateProduction && (
+                        <Button
+                          variant="outline"
+                          onClick={() => handleProductionAction('update_progress')}
+                          disabled={productionActionLoading === 'update_progress'}
+                        >
+                          {productionActionLoading === 'update_progress' ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Updating...
+                            </>
+                          ) : (
+                            'Update Progress'
+                          )}
+                        </Button>
+                      )}
+
+                      {canUpdateProduction && (
+                        <Button
+                          onClick={() => handleProductionAction('mark_complete')}
+                          disabled={productionActionLoading === 'mark_complete'}
+                        >
+                          {productionActionLoading === 'mark_complete' ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Completing...
+                            </>
+                          ) : (
+                            'Mark Production Complete'
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Ship Order Action Card */}
           {canShip && !showShipmentForm && (
             <Card className="border-primary/50 bg-primary/5">
@@ -561,9 +739,13 @@ function getStatusMessage(status: string): string {
   const messages: Record<string, string> = {
     INITIATED: 'Waiting for buyer payment.',
     PAYMENT_PENDING: 'Buyer payment is processing.',
-    PAID: 'Payment confirmed! Ready to ship.',
-    PAYMENT_RECEIVED: 'Payment confirmed! Ready to ship.',
-    ESCROW_HELD: 'Funds held in escrow. Ready to ship.',
+    PAYMENT_CONFIRMED: 'Payment verified by admin. Start production.',
+    CONFIRMED: 'Order confirmed. Start production.',
+    PAID: 'Payment confirmed! Start production.',
+    PAYMENT_RECEIVED: 'Payment confirmed! Start production.',
+    ESCROW_HELD: 'Funds held in escrow. Start production.',
+    PRODUCTION: 'Production is in progress. Share updates and complete before shipment.',
+    QUALITY_INSPECTION: 'Production is complete. Final inspection can proceed before shipping.',
     SHIPPED: 'Shipment confirmed. Waiting for buyer to confirm delivery.',
     DELIVERY_CONFIRMED: 'Buyer confirmed delivery. Awaiting quality assessment.',
     QUALITY_PENDING: 'Quality assessment in progress.',

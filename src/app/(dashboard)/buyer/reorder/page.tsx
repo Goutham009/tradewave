@@ -30,6 +30,7 @@ export default function QuickReorderPage() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [deliveryDate, setDeliveryDate] = useState('2026-06-15');
   const [sameLocation, setSameLocation] = useState(true);
   const [newLocation, setNewLocation] = useState('');
@@ -54,6 +55,12 @@ export default function QuickReorderPage() {
   };
 
   const handleSubmit = async () => {
+    if (!transactionId) {
+      setSubmitError('Missing source order. Open reorder from an existing order record.');
+      return;
+    }
+
+    setSubmitError(null);
     setSubmitting(true);
     try {
       const res = await fetch('/api/buyer/reorder', {
@@ -70,11 +77,16 @@ export default function QuickReorderPage() {
         }),
       });
 
-      if (res.ok) {
+      const payload = await res.json().catch(() => ({}));
+
+      if (res.ok && payload?.status === 'success') {
         setSubmitted(true);
+      } else {
+        setSubmitError(payload?.error || 'Failed to create reorder. Please try again.');
       }
     } catch (error) {
       console.error('Reorder failed:', error);
+      setSubmitError('Network error while creating reorder. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -322,6 +334,12 @@ export default function QuickReorderPage() {
           </div>
 
           {/* Actions */}
+          {submitError && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {submitError}
+            </div>
+          )}
+
           <div className="flex gap-3 pt-4 border-t">
             <Button variant="outline" onClick={() => router.back()} className="flex-1">
               Cancel

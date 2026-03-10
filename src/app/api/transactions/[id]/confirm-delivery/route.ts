@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import prisma from '@/lib/db';
 import { getEscrowService } from '@/lib/blockchain/escrow';
+import { sendDeliveryConfirmedEmail, sendPaymentReleasedEmail } from '@/lib/email/triggers';
 
 export async function POST(
   request: NextRequest,
@@ -136,8 +137,11 @@ export async function POST(
       }
     }
 
-    // TODO: Send notification email to supplier
-    // await sendPaymentReleasedEmail(transaction.supplier.email, transaction);
+    sendDeliveryConfirmedEmail(transactionId).catch(console.error);
+
+    if (releaseResult) {
+      sendPaymentReleasedEmail(transactionId).catch(console.error);
+    }
 
     return NextResponse.json({
       success: true,

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { leadCaptureFormSchema } from '@/lib/validations/leadSchema';
+import { authOptions } from '@/lib/auth-options';
+import { getDemoLeadsApiPayload, shouldUseDemoFallback } from '@/lib/demo/fallback';
 
 // POST /api/leads - Create a new lead from enquiry form (single consolidated endpoint)
 export async function POST(req: NextRequest) {
@@ -120,16 +123,41 @@ export async function POST(req: NextRequest) {
 // GET /api/leads - List leads (admin/AM only)
 export async function GET(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const isAdmin = session.user.role === 'ADMIN';
+    const isAccountManager = session.user.role === 'ACCOUNT_MANAGER';
+    if (!isAdmin && !isAccountManager) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
     const assignedTo = searchParams.get('assignedTo');
+    const search = searchParams.get('search');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const skip = (page - 1) * limit;
 
     const where: any = {};
     if (status) where.status = status;
-    if (assignedTo) where.assignedTo = assignedTo;
+    if (search) {
+      where.OR = [
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { companyName: { contains: search, mode: 'insensitive' } },
+        { productName: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (isAdmin) {
+      if (assignedTo) where.assignedTo = assignedTo;
+    } else {
+      where.assignedTo = session.user.id;
+    }
 
     const [leads, total] = await Promise.all([
       prisma.lead.findMany({
@@ -141,8 +169,39 @@ export async function GET(req: NextRequest) {
       prisma.lead.count({ where }),
     ]);
 
+    const assignedAccountManagerIds = Array.from(
+      new Set(
+        leads
+          .map((lead) => lead.assignedTo)
+          .filter((leadAssignedTo): leadAssignedTo is string => Boolean(leadAssignedTo))
+      )
+    );
+
+    const accountManagers = assignedAccountManagerIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: assignedAccountManagerIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+
+    const accountManagerById = new Map(
+      accountManagers.map((accountManager) => [accountManager.id, accountManager])
+    );
+
+    const leadsWithAssignmentMeta = leads.map((lead) => {
+      const accountManager = lead.assignedTo
+        ? accountManagerById.get(lead.assignedTo)
+        : null;
+
+      return {
+        ...lead,
+        assignedAccountManagerName: accountManager?.name || null,
+        assignedAccountManagerEmail: accountManager?.email || null,
+      };
+    });
+
     return NextResponse.json({
-      leads,
+      leads: leadsWithAssignmentMeta,
       pagination: {
         page,
         limit,
@@ -152,6 +211,14 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error('Error fetching leads:', error);
+
+    if (shouldUseDemoFallback(error)) {
+      const { searchParams } = new URL(req.url);
+      const page = parseInt(searchParams.get('page') || '1');
+      const limit = parseInt(searchParams.get('limit') || '20');
+      return NextResponse.json(getDemoLeadsApiPayload(page, limit));
+    }
+
     return NextResponse.json(
       { error: 'Failed to fetch leads' },
       { status: 500 }

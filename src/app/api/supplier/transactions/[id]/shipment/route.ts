@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { createNotification } from '@/lib/services/notificationService';
 
 // POST /api/supplier/transactions/[id]/shipment - Supplier marks order as shipped
 export async function POST(
@@ -28,6 +29,15 @@ export async function POST(
 
     const transaction: any = await prisma.transaction.findUnique({
       where: { id: params.id },
+      include: {
+        requirement: {
+          select: {
+            assignedAccountManagerId: true,
+            title: true,
+            deliveryLocation: true,
+          },
+        },
+      },
     });
 
     if (!transaction) {
@@ -61,9 +71,59 @@ export async function POST(
       } as any,
     });
 
-    // TODO: Notify buyer about shipment
-    // TODO: Notify AM
-    // TODO: Create shipment record if Shipment model is used
+    await prisma.shipment.upsert({
+      where: { transactionId: params.id },
+      create: {
+        transactionId: params.id,
+        trackingNumber,
+        carrier: shippingProvider || carrier,
+        status: 'PICKED_UP',
+        originLocation: origin || 'Supplier Location',
+        currentLocation: origin || 'Supplier Location',
+        destinationLocation: transaction.destination || transaction.requirement?.deliveryLocation || 'Buyer Location',
+        estimatedDelivery: estimatedDelivery ? new Date(estimatedDelivery) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+      update: {
+        trackingNumber,
+        carrier: shippingProvider || carrier,
+        status: 'PICKED_UP',
+        currentLocation: origin || undefined,
+        estimatedDelivery: estimatedDelivery ? new Date(estimatedDelivery) : undefined,
+        lastUpdated: new Date(),
+      },
+    });
+
+    await createNotification({
+      userId: transaction.buyerId,
+      type: 'SHIPMENT_UPDATE',
+      title: 'Order Shipped',
+      message: `Your order has been shipped via ${shippingProvider || carrier}. Tracking number: ${trackingNumber}.`,
+      resourceType: 'transaction',
+      resourceId: params.id,
+      metadata: {
+        trackingNumber,
+        carrier: shippingProvider || carrier,
+        estimatedDelivery: estimatedDelivery || null,
+      },
+      sendEmail: true,
+    });
+
+    if (transaction.requirement?.assignedAccountManagerId) {
+      await createNotification({
+        userId: transaction.requirement.assignedAccountManagerId,
+        type: 'SHIPMENT_UPDATE',
+        title: 'Client Order Shipped',
+        message: `Transaction ${params.id} has been shipped. Tracking number: ${trackingNumber}.`,
+        resourceType: 'transaction',
+        resourceId: params.id,
+        metadata: {
+          trackingNumber,
+          carrier: shippingProvider || carrier,
+          estimatedDelivery: estimatedDelivery || null,
+        },
+        sendEmail: true,
+      });
+    }
 
     return NextResponse.json({
       status: 'success',

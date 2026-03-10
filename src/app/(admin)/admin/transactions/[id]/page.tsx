@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ReferenceChainCard, type FlowReferences } from '@/components/flow/ReferenceChainCard';
 import {
   ArrowLeft,
+  CheckCircle2,
   BellRing,
   Building2,
   ClipboardList,
@@ -30,13 +31,24 @@ type NotificationItem = {
 
 const STATUS_STYLES: Record<string, string> = {
   INITIATED: 'bg-slate-500/20 text-slate-300',
+  PENDING_ADMIN_REVIEW: 'bg-yellow-500/20 text-yellow-300',
+  APPROVED: 'bg-emerald-500/20 text-emerald-300',
+  ESCROW_CREATED: 'bg-cyan-500/20 text-cyan-300',
   PAYMENT_PENDING: 'bg-yellow-500/20 text-yellow-300',
   PAYMENT_RECEIVED: 'bg-blue-500/20 text-blue-300',
+  PAYMENT_CONFIRMED: 'bg-blue-500/20 text-blue-300',
+  PAID: 'bg-blue-500/20 text-blue-300',
   ESCROW_HELD: 'bg-cyan-500/20 text-cyan-300',
   PRODUCTION: 'bg-purple-500/20 text-purple-300',
+  QUALITY_PENDING: 'bg-purple-500/20 text-purple-300',
+  QUALITY_CHECK: 'bg-purple-500/20 text-purple-300',
+  QUALITY_APPROVED: 'bg-emerald-500/20 text-emerald-300',
   IN_TRANSIT: 'bg-indigo-500/20 text-indigo-300',
   DELIVERED: 'bg-emerald-500/20 text-emerald-300',
+  CONFIRMED: 'bg-emerald-500/20 text-emerald-300',
+  FUNDS_RELEASED: 'bg-green-500/20 text-green-300',
   COMPLETED: 'bg-green-500/20 text-green-300',
+  REFUNDED: 'bg-orange-500/20 text-orange-300',
   DISPUTED: 'bg-red-500/20 text-red-300',
   CANCELLED: 'bg-slate-500/20 text-slate-300',
 };
@@ -76,47 +88,94 @@ export default function AdminTransactionDetailPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const [confirmResult, setConfirmResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const fetchTransactionDetails = useMemo(
+    () =>
+      async function loadTransactionDetails() {
+        try {
+          setLoading(true);
+          setError(null);
+
+          const response = await fetch(`/api/transactions/${transactionId}`);
+          const data = await response.json();
+
+          if (data.status !== 'success') {
+            throw new Error(data.error || 'Failed to load transaction details');
+          }
+
+          const fetchedTransaction = data.data.transaction;
+          setTransaction(fetchedTransaction);
+
+          const notificationsResponse = await fetch('/api/notifications?limit=100');
+          const notificationsData = await notificationsResponse.json();
+
+          if (notificationsData.status === 'success') {
+            const relatedNotifications = filterNotificationsForTransaction(
+              fetchedTransaction,
+              notificationsData.data.notifications || []
+            );
+            setNotifications(relatedNotifications.slice(0, 8));
+          } else {
+            setNotifications([]);
+          }
+        } catch (fetchError) {
+          console.error('Failed to load admin transaction detail:', fetchError);
+          setError(fetchError instanceof Error ? fetchError.message : 'Unexpected error occurred');
+        } finally {
+          setLoading(false);
+        }
+      },
+    [transactionId]
+  );
 
   useEffect(() => {
-    const fetchTransactionDetails = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const response = await fetch(`/api/transactions/${transactionId}`);
-        const data = await response.json();
-
-        if (data.status !== 'success') {
-          throw new Error(data.error || 'Failed to load transaction details');
-        }
-
-        const fetchedTransaction = data.data.transaction;
-        setTransaction(fetchedTransaction);
-
-        const notificationsResponse = await fetch('/api/notifications?limit=100');
-        const notificationsData = await notificationsResponse.json();
-
-        if (notificationsData.status === 'success') {
-          const relatedNotifications = filterNotificationsForTransaction(
-            fetchedTransaction,
-            notificationsData.data.notifications || []
-          );
-          setNotifications(relatedNotifications.slice(0, 8));
-        } else {
-          setNotifications([]);
-        }
-      } catch (fetchError) {
-        console.error('Failed to load admin transaction detail:', fetchError);
-        setError(fetchError instanceof Error ? fetchError.message : 'Unexpected error occurred');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (transactionId) {
       void fetchTransactionDetails();
     }
-  }, [transactionId]);
+  }, [fetchTransactionDetails, transactionId]);
+
+  const handleConfirmPayment = async () => {
+    if (!transactionId) return;
+
+    try {
+      setConfirmingPayment(true);
+      setConfirmResult(null);
+
+      const response = await fetch(`/api/transactions/${transactionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'CONFIRM_PAYMENT' }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok || payload?.status !== 'success') {
+        setConfirmResult({ type: 'error', message: payload?.error || 'Failed to confirm payment' });
+        return;
+      }
+
+      const updated = payload?.data?.transaction;
+      if (updated) {
+        setTransaction((prev: any) =>
+          prev
+            ? {
+                ...prev,
+                status: updated.status,
+                paymentStatus: updated.paymentStatus,
+                paymentConfirmedAt: updated.paymentConfirmedAt,
+              }
+            : prev
+        );
+      }
+      setConfirmResult({ type: 'success', message: 'Payment verified and order confirmed successfully.' });
+      await fetchTransactionDetails();
+    } catch {
+      setConfirmResult({ type: 'error', message: 'Network error while confirming payment' });
+    } finally {
+      setConfirmingPayment(false);
+    }
+  };
 
   const references = useMemo(
     () => ((transaction?.references || {}) as FlowReferences),
@@ -172,8 +231,40 @@ export default function AdminTransactionDetailPage() {
           {transaction.escrow?.status && (
             <Badge className="bg-blue-500/20 text-blue-300">Escrow: {transaction.escrow.status}</Badge>
           )}
+          {['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAID', 'ESCROW_HELD'].includes(transaction.status) && (
+            <Button
+              size="sm"
+              onClick={handleConfirmPayment}
+              disabled={confirmingPayment}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {confirmingPayment ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Confirming...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Confirm Payment
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
+
+      {confirmResult && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            confirmResult.type === 'success'
+              ? 'border-green-500/30 bg-green-900/20 text-green-300'
+              : 'border-red-500/30 bg-red-900/20 text-red-300'
+          }`}
+        >
+          {confirmResult.message}
+        </div>
+      )}
 
       <ReferenceChainCard
         references={references}

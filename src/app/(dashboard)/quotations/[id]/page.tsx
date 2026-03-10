@@ -37,12 +37,119 @@ const getStatusBadge = (status: string) => {
     SUBMITTED: { variant: 'info', label: 'Submitted' },
     UNDER_REVIEW: { variant: 'info', label: 'Under Review' },
     SHORTLISTED: { variant: 'success', label: 'Shortlisted' },
+    APPROVED_BY_ADMIN: { variant: 'info', label: 'Approved by Admin' },
+    VISIBLE_TO_BUYER: { variant: 'info', label: 'Visible to Buyer' },
+    IN_NEGOTIATION: { variant: 'warning', label: 'In Negotiation' },
     ACCEPTED: { variant: 'success', label: 'Accepted' },
     REJECTED: { variant: 'destructive', label: 'Rejected' },
+    DECLINED: { variant: 'destructive', label: 'Declined' },
     EXPIRED: { variant: 'secondary', label: 'Expired' },
   };
   const config = variants[status] || { variant: 'secondary', label: status };
   return <Badge variant={config.variant}>{config.label}</Badge>;
+};
+
+const safeNumber = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeSpecifications = (specifications: unknown, technicalSpecs: unknown): Record<string, string> => {
+  if (specifications && typeof specifications === 'object' && !Array.isArray(specifications)) {
+    return Object.fromEntries(
+      Object.entries(specifications as Record<string, unknown>).map(([key, value]) => [key, String(value)])
+    );
+  }
+
+  if (typeof technicalSpecs === 'string' && technicalSpecs.trim()) {
+    return { 'Technical Specs': technicalSpecs };
+  }
+
+  return {};
+};
+
+const normalizeQuotation = (raw: any) => {
+  const supplierCertifications = Array.isArray(raw?.supplier?.certifications)
+    ? raw.supplier.certifications
+        .map((cert: any) => (typeof cert === 'string' ? cert : cert?.name))
+        .filter((cert: unknown): cert is string => Boolean(cert))
+    : [];
+
+  const supplierRating =
+    raw?.supplier?.rating !== undefined && raw?.supplier?.rating !== null
+      ? safeNumber(raw.supplier.rating)
+      : raw?.supplier?.overallRating !== undefined && raw?.supplier?.overallRating !== null
+        ? safeNumber(raw.supplier.overallRating)
+        : null;
+
+  const qualityScore =
+    raw?.supplier?.qualityScore !== undefined && raw?.supplier?.qualityScore !== null
+      ? safeNumber(raw.supplier.qualityScore)
+      : raw?.supplier?.qualityRating !== undefined && raw?.supplier?.qualityRating !== null
+        ? safeNumber(raw.supplier.qualityRating)
+        : null;
+
+  const quantity = raw?.quantity || raw?.pricing?.quantity || raw?.requirement?.quantity || 0;
+  const leadDays = raw?.deliveryTimeline || raw?.leadTime || 0;
+
+  return {
+    ...raw,
+    supplier: {
+      ...raw?.supplier,
+      rating: supplierRating,
+      responseRate:
+        raw?.supplier?.responseRate !== undefined && raw?.supplier?.responseRate !== null
+          ? safeNumber(raw.supplier.responseRate)
+          : null,
+      onTimeDelivery:
+        raw?.supplier?.onTimeDelivery !== undefined && raw?.supplier?.onTimeDelivery !== null
+          ? safeNumber(raw.supplier.onTimeDelivery)
+          : null,
+      qualityScore,
+      certifications: supplierCertifications,
+      verified: Boolean(raw?.supplier?.verified),
+      totalReviews: raw?.supplier?.totalReviews || 0,
+      yearsInBusiness: raw?.supplier?.yearsInBusiness || null,
+    },
+    requirement: {
+      ...raw?.requirement,
+      title: raw?.requirement?.title || 'Requirement',
+      unit: raw?.requirement?.unit || 'unit',
+      deliveryLocation: raw?.requirement?.deliveryLocation || 'TBD',
+      paymentTerms: raw?.requirement?.paymentTerms || null,
+    },
+    pricing: {
+      unitPrice: safeNumber(raw?.unitPrice),
+      quantity,
+      subtotal: safeNumber(raw?.subtotal),
+      shipping: safeNumber(raw?.shipping),
+      insurance: safeNumber(raw?.insurance),
+      platformFee: safeNumber(raw?.platformFee),
+      discount: 0,
+      total: safeNumber(raw?.total),
+      currency: raw?.currency || 'USD',
+      paymentTerms: raw?.paymentTerms || raw?.requirement?.paymentTerms || 'To be agreed',
+      paymentMethods: ['Escrow'],
+    },
+    delivery: {
+      estimatedDate: raw?.requirement?.deliveryDeadline || raw?.validUntil,
+      leadTime: leadDays > 0 ? `${leadDays} days` : 'TBD',
+      shippingMethod: 'To be confirmed',
+      incoterm: raw?.requirement?.incoterms || 'N/A',
+      origin: raw?.supplier?.location || 'TBD',
+      destination: raw?.requirement?.deliveryLocation || 'TBD',
+      additionalFees: [],
+    },
+    product: {
+      name: raw?.requirement?.title || 'Quoted Product',
+      moq: quantity,
+      sampleAvailable: Boolean(raw?.samples),
+      sampleCost: safeNumber(raw?.sampleCost),
+      specifications: normalizeSpecifications(raw?.requirement?.specifications, raw?.requirement?.technicalSpecs),
+    },
+    terms: raw?.terms || raw?.additionalTerms || 'No additional terms provided.',
+    reviews: Array.isArray(raw?.reviews) ? raw.reviews : [],
+  };
 };
 
 export default function QuotationDetailPage() {
@@ -63,26 +170,66 @@ export default function QuotationDetailPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [negotiationNote, setNegotiationNote] = useState('');
-  const [negotiationEvents, setNegotiationEvents] = useState(() =>
-    isSubmittedContext
-      ? [
-          { id: 'n1', author: 'Buyer', message: 'Can you improve delivery timeline by 4 days?', at: '2026-02-15' },
-          { id: 'n2', author: 'You', message: 'Yes, we can ship 3 days earlier if quantity remains unchanged.', at: '2026-02-16' },
-        ]
-      : [
-          { id: 'n1', author: 'Account Manager', message: 'Supplier can offer a 3% reduction if dispatch stays at 21 days.', at: '2026-02-15' },
-          { id: 'n2', author: 'Supplier', message: 'Open to discussing payment terms between advance, LC, or credit arrangement.', at: '2026-02-16' },
-        ]
-  );
+  const [negotiationEvents, setNegotiationEvents] = useState<
+    Array<{ id: string; author: string; message: string; at: string }>
+  >([]);
+  const [negotiationThreadId, setNegotiationThreadId] = useState<string | null>(null);
+  const [negotiationLoading, setNegotiationLoading] = useState(false);
+  const [negotiationSending, setNegotiationSending] = useState(false);
+
+  const fetchNegotiationThread = useCallback(async (threadId: string) => {
+    try {
+      setNegotiationLoading(true);
+      const response = await fetch(`/api/negotiations/${encodeURIComponent(threadId)}`);
+      const payload = await response.json();
+
+      if (!response.ok || payload?.status !== 'success' || !payload?.thread) {
+        setError(payload?.error || 'Failed to load negotiation messages');
+        return;
+      }
+
+      const mappedEvents = Array.isArray(payload.thread.messages)
+        ? payload.thread.messages.map((message: any) => ({
+            id: message.id,
+            author:
+              message.senderRole === 'ACCOUNT_MANAGER'
+                ? 'Account Manager'
+                : message.senderRole === 'SUPPLIER'
+                  ? 'Supplier'
+                  : message.senderRole === 'BUYER'
+                    ? 'Buyer'
+                    : 'System',
+            message: message.content,
+            at: message.createdAt,
+          }))
+        : [];
+
+      setNegotiationEvents(mappedEvents);
+    } catch {
+      setError('Network error while loading negotiation messages');
+    } finally {
+      setNegotiationLoading(false);
+    }
+  }, []);
 
   const fetchQuotation = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const response = await fetch(`/api/quotations/${quotationId}`);
       const data = await response.json();
       
       if (data.status === 'success') {
-        setQuotation(data.data.quotation);
+        const normalized = normalizeQuotation(data.data.quotation);
+        setQuotation(normalized);
+
+        if (normalized.negotiationThreadId) {
+          setNegotiationThreadId(normalized.negotiationThreadId);
+          void fetchNegotiationThread(normalized.negotiationThreadId);
+        } else {
+          setNegotiationThreadId(null);
+          setNegotiationEvents([]);
+        }
       } else {
         setError(data.error || 'Failed to fetch quotation');
       }
@@ -91,7 +238,7 @@ export default function QuotationDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [quotationId]);
+  }, [fetchNegotiationThread, quotationId]);
 
   useEffect(() => {
     void fetchQuotation();
@@ -171,29 +318,106 @@ export default function QuotationDetailPage() {
 
   const q = quotation;
   const canTakeAction =
-    !isSubmittedContext && ['PENDING', 'SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED'].includes(q.status) && !q.isExpired;
+    !isSubmittedContext &&
+    ['PENDING', 'SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'APPROVED_BY_ADMIN', 'VISIBLE_TO_BUYER', 'IN_NEGOTIATION'].includes(q.status) &&
+    !q.isExpired;
   const backHref = isSubmittedContext
     ? '/quotations?view=submitted'
     : requirementId
       ? `/buyer/quotations/compare?requirementId=${requirementId}`
       : '/quotations';
 
-  const handleAddNegotiationNote = () => {
+  const handleAddNegotiationNote = async () => {
     const value = negotiationNote.trim();
     if (!value) {
       return;
     }
 
-    setNegotiationEvents((prev) => [
-      ...prev,
-      {
-        id: `n-${Date.now()}`,
-        author: 'You',
-        message: value,
-        at: new Date().toISOString(),
-      },
-    ]);
-    setNegotiationNote('');
+    setNegotiationSending(true);
+    setError(null);
+
+    try {
+      if (!negotiationThreadId) {
+        if (isSubmittedContext) {
+          setError('Negotiation has not been started by the buyer yet.');
+          return;
+        }
+
+        const startResponse = await fetch('/api/buyer/negotiations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requirementId: q.requirement.id,
+            quotationIds: [q.id],
+            negotiationPoints: ['PRICE'],
+            buyerComments: value,
+          }),
+        });
+
+        const startPayload = await startResponse.json();
+        if (
+          !startResponse.ok ||
+          startPayload?.status !== 'success' ||
+          !startPayload?.thread?.id
+        ) {
+          setError(startPayload?.error || 'Failed to start negotiation');
+          return;
+        }
+
+        const createdThreadId = startPayload.thread.id as string;
+        setNegotiationThreadId(createdThreadId);
+        setQuotation((prev: any) =>
+          prev
+            ? {
+                ...prev,
+                negotiationThreadId: createdThreadId,
+                status: 'IN_NEGOTIATION',
+              }
+            : prev
+        );
+        await fetchNegotiationThread(createdThreadId);
+        setActionSuccess('Negotiation started successfully.');
+        setNegotiationNote('');
+        return;
+      }
+
+      const response = await fetch(`/api/negotiations/${encodeURIComponent(negotiationThreadId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: value,
+          messageType: 'TEXT',
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || payload?.status !== 'success') {
+        setError(payload?.error || 'Failed to send negotiation update');
+        return;
+      }
+
+      setNegotiationEvents((prev) => [
+        ...prev,
+        {
+          id: payload.message.id,
+          author:
+            payload.message.senderRole === 'ACCOUNT_MANAGER'
+              ? 'Account Manager'
+              : payload.message.senderRole === 'SUPPLIER'
+                ? 'Supplier'
+                : payload.message.senderRole === 'BUYER'
+                  ? 'Buyer'
+                  : 'System',
+          message: payload.message.content,
+          at: payload.message.createdAt,
+        },
+      ]);
+      setNegotiationNote('');
+    } catch {
+      setError('Network error while sending negotiation update');
+    } finally {
+      setNegotiationSending(false);
+    }
   };
 
   return (
@@ -269,6 +493,21 @@ export default function QuotationDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {negotiationThreadId ? (
+                <p className="text-xs text-muted-foreground">Thread ID: {negotiationThreadId}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No thread started yet. Send a message to start negotiation.
+                </p>
+              )}
+
+              {negotiationLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading negotiation updates...
+                </div>
+              )}
+
               <div className="space-y-3">
                 {negotiationEvents.map((event) => (
                   <div key={event.id} className="rounded-lg border p-3">
@@ -281,6 +520,12 @@ export default function QuotationDetailPage() {
                     <p className="text-sm mt-1">{event.message}</p>
                   </div>
                 ))}
+
+                {!negotiationLoading && negotiationEvents.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No negotiation updates yet.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Add negotiation update</label>
@@ -291,7 +536,11 @@ export default function QuotationDetailPage() {
                   rows={3}
                 />
               </div>
-              <Button variant="outline" onClick={handleAddNegotiationNote}>
+              <Button
+                variant="outline"
+                onClick={() => void handleAddNegotiationNote()}
+                disabled={!negotiationNote.trim() || negotiationSending}
+              >
                 Send Negotiation Update
               </Button>
             </CardContent>
@@ -352,15 +601,21 @@ export default function QuotationDetailPage() {
 
               <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{q.supplier.responseRate}%</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {q.supplier.responseRate !== null ? `${q.supplier.responseRate}%` : 'N/A'}
+                  </p>
                   <p className="text-xs text-muted-foreground">Response Rate</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-blue-600">{q.supplier.onTimeDelivery}%</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {q.supplier.onTimeDelivery !== null ? `${q.supplier.onTimeDelivery}%` : 'N/A'}
+                  </p>
                   <p className="text-xs text-muted-foreground">On-Time Delivery</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-purple-600">{q.supplier.qualityScore}</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {q.supplier.qualityScore !== null ? q.supplier.qualityScore : 'N/A'}
+                  </p>
                   <p className="text-xs text-muted-foreground">Quality Score</p>
                 </div>
               </div>
@@ -393,6 +648,10 @@ export default function QuotationDetailPage() {
                     <span className="font-medium">{String(value)}</span>
                   </div>
                 ))}
+
+                {Object.keys(q.product.specifications || {}).length === 0 && (
+                  <p className="text-sm text-muted-foreground">No structured specifications available.</p>
+                )}
               </div>
               
               <div className="flex items-center gap-4 mt-4 pt-4 border-t text-sm">
@@ -575,6 +834,10 @@ export default function QuotationDetailPage() {
                     <p className="mt-2 text-xs text-muted-foreground">{review.date}</p>
                   </div>
                 ))}
+
+                {q.reviews.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No supplier reviews available yet.</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -648,12 +911,22 @@ export default function QuotationDetailPage() {
 
               <div className="pt-4 border-t">
                 {isSubmittedContext ? (
-                  <Button variant="outline" className="w-full" onClick={handleAddNegotiationNote}>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => void handleAddNegotiationNote()}
+                    disabled={!negotiationNote.trim() || negotiationSending}
+                  >
                     <MessageSquare className="mr-2 h-4 w-4" />
                     Send Negotiation Update
                   </Button>
                 ) : (
-                  <Button variant="outline" className="w-full" onClick={handleAddNegotiationNote}>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => void handleAddNegotiationNote()}
+                    disabled={!negotiationNote.trim() || negotiationSending}
+                  >
                     <MessageSquare className="mr-2 h-4 w-4" />
                     Add Negotiation Message
                   </Button>

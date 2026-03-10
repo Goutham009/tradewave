@@ -23,6 +23,7 @@ import {
 
 interface User {
   id: string;
+  accountNumber?: string;
   name: string;
   email: string;
   role: string;
@@ -34,21 +35,11 @@ interface User {
   transactionCount: number;
 }
 
-const getMockUsers = (): User[] => [
-  { id: '1', name: 'John Doe', email: 'john@example.com', role: 'BUYER', companyName: 'Acme Corp', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-15', lastLogin: '2024-01-20', transactionCount: 15 },
-  { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'SUPPLIER', companyName: 'Steel Inc', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-10', lastLogin: '2024-01-19', transactionCount: 42 },
-  { id: '3', name: 'Bob Wilson', email: 'bob@example.com', role: 'BUYER', companyName: 'Trade Co', verified: false, kycStatus: 'PENDING', createdAt: '2024-01-18', lastLogin: '2024-01-18', transactionCount: 0 },
-  { id: '4', name: 'Alice Brown', email: 'alice@example.com', role: 'SUPPLIER', companyName: 'Metals Ltd', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-05', lastLogin: '2024-01-20', transactionCount: 28 },
-  { id: '5', name: 'Charlie Davis', email: 'charlie@example.com', role: 'BUYER', companyName: 'Import Hub', verified: false, kycStatus: 'REJECTED', createdAt: '2024-01-12', lastLogin: null, transactionCount: 0 },
-  { id: '6', name: 'Sarah Johnson', email: 'sarah@example.com', role: 'SUPPLIER', companyName: 'Global Exports', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-08', lastLogin: '2024-01-21', transactionCount: 35 },
-  { id: '7', name: 'Michael Chen', email: 'michael@example.com', role: 'BUYER', companyName: 'Pacific Trading', verified: true, kycStatus: 'VERIFIED', createdAt: '2024-01-02', lastLogin: '2024-01-20', transactionCount: 67 },
-  { id: '8', name: 'Emily Watson', email: 'emily@example.com', role: 'SUPPLIER', companyName: 'Premium Goods Co', verified: false, kycStatus: 'PENDING', createdAt: '2024-01-19', lastLogin: '2024-01-19', transactionCount: 0 },
-];
-
 export default function AdminUsersPage() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [kycFilter, setKycFilter] = useState<string | null>(null);
@@ -59,6 +50,7 @@ export default function AdminUsersPage() {
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '10',
@@ -69,16 +61,16 @@ export default function AdminUsersPage() {
       const response = await fetch(`/api/admin/users?${params}`);
       const data = await response.json();
       
-      if (data.status === 'success' && data.data.users?.length > 0) {
+      if (data.status === 'success') {
         setUsers(data.data.users);
         setTotalPages(data.data.pagination?.pages || 1);
       } else {
-        // Use mock data when no users returned
-        setUsers(getMockUsers());
+        throw new Error(data.error || 'Failed to fetch users');
       }
     } catch (error) {
       console.error('Failed to fetch users:', error);
-      setUsers(getMockUsers());
+      setUsers([]);
+      setError(error instanceof Error ? error.message : 'Failed to fetch users');
     } finally {
       setLoading(false);
     }
@@ -223,6 +215,7 @@ export default function AdminUsersPage() {
                 <thead>
                   <tr className="border-b border-slate-700">
                     <th className="text-left p-4 text-sm font-medium text-slate-400">User</th>
+                    <th className="text-left p-4 text-sm font-medium text-slate-400">Account #</th>
                     <th className="text-left p-4 text-sm font-medium text-slate-400">Role</th>
                     <th className="text-left p-4 text-sm font-medium text-slate-400">KYC Status</th>
                     <th className="text-left p-4 text-sm font-medium text-slate-400">Verified</th>
@@ -247,6 +240,7 @@ export default function AdminUsersPage() {
                           )}
                         </div>
                       </td>
+                      <td className="p-4 text-sm text-slate-300 font-mono">{user.accountNumber || '—'}</td>
                       <td className="p-4">{getRoleBadge(user.role)}</td>
                       <td className="p-4">{getKYCBadge(user.kycStatus)}</td>
                       <td className="p-4">
@@ -270,6 +264,12 @@ export default function AdminUsersPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {error && (
+            <div className="border-t border-slate-700 px-4 py-3 text-sm text-red-400">
+              {error}
             </div>
           )}
 

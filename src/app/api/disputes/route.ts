@@ -230,19 +230,10 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('Error fetching disputes:', error);
-    
-    // Return empty disputes on any database error (demo mode fallback)
-    return NextResponse.json({
-      success: true,
-      disputes: [],
-      pagination: {
-        page: 1,
-        limit: 20,
-        total: 0,
-        pages: 0
-      },
-      demo: true,
-      message: 'Database unavailable - showing demo mode'
-    });
+
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch disputes' },
+      { status: 500 }
+    );
   }
 }

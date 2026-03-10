@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 
 // GET /api/supplier/requirements/[id] - Get requirement detail for supplier
 // [id] is the SupplierRequirementCard ID
@@ -8,6 +10,29 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'SUPPLIER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const supplierEmail = session.user.email;
+    if (!supplierEmail) {
+      return NextResponse.json({ error: 'Supplier account email is missing' }, { status: 400 });
+    }
+
+    const supplier = await prisma.supplier.findUnique({
+      where: { email: supplierEmail },
+      select: { id: true },
+    });
+
+    if (!supplier) {
+      return NextResponse.json({ error: 'Supplier profile not found' }, { status: 404 });
+    }
+
     const card: any = await prisma.supplierRequirementCard.findUnique({
       where: { id: params.id },
       include: {
@@ -44,6 +69,10 @@ export async function GET(
       return NextResponse.json({ error: 'Requirement card not found' }, { status: 404 });
     }
 
+    if (card.supplierId !== supplier.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     // Mark as viewed if first time
     if (card.status === 'SENT') {
       await prisma.supplierRequirementCard.update({
@@ -54,6 +83,11 @@ export async function GET(
 
     const req_data = card.requirement;
     const visibleInfo = card.visibleInfo as any;
+    const submittedQuotation = await prisma.quotation.findFirst({
+      where: { supplierRequirementCardId: card.id },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
     const daysLeft = card.responseDeadline
       ? Math.max(0, Math.ceil((new Date(card.responseDeadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
       : null;
@@ -67,6 +101,7 @@ export async function GET(
       responseDeadline: card.responseDeadline,
       daysLeft,
       isExpired: card.responseDeadline ? new Date(card.responseDeadline) < new Date() : false,
+      quotationId: submittedQuotation?.id || null,
       isDirect: visibleInfo?.isDirect || false,
       requirement: {
         title: req_data.title,

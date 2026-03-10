@@ -1,81 +1,115 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import QuotationSubmitForm from '@/components/quotations/QuotationSubmitForm';
 
-const REQUIREMENT_LOOKUP = {
-  'req-abc-001': {
-    id: 'req-abc-001',
-    title: 'Industrial Steel Pipes - Grade 304',
-    description: 'Need seamless Grade 304 pipes for industrial transfer systems.',
-    category: 'Industrial Materials',
-    quantity: 500,
-    unit: 'MT',
-    targetPrice: 1200,
-    currency: 'USD',
-    deliveryLocation: 'Mumbai Port (JNPT), India',
-    deliveryDeadline: '2026-05-15',
-  },
-  'req-abc-002': {
-    id: 'req-abc-002',
-    title: 'Copper Wire - Industrial Grade',
-    description: 'Electrolytic tough pitch copper wire for electrical harness assemblies.',
-    category: 'Metals & Alloys',
-    quantity: 200,
-    unit: 'MT',
-    targetPrice: 9000,
-    currency: 'USD',
-    deliveryLocation: 'Shanghai, China',
-    deliveryDeadline: '2026-06-01',
-  },
-  'req-abc-003': {
-    id: 'req-abc-003',
-    title: 'Aluminum Sheets - 5mm',
-    description: '5mm sheets with tight flatness tolerance for fabrication use.',
-    category: 'Metals & Alloys',
-    quantity: 150,
-    unit: 'MT',
-    targetPrice: 2400,
-    currency: 'USD',
-    deliveryLocation: 'Rotterdam, Netherlands',
-    deliveryDeadline: '2026-04-20',
-  },
-} as const;
+type QuotationRequirement = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  targetPrice: number | null;
+  currency: string;
+  deliveryLocation: string;
+  deliveryDeadline: string;
+};
 
-const SUPPLIER_CONTEXT = {
-  id: 'sup-demo-001',
-  name: 'Supplier User',
-  companyName: 'Demo Supplier Co.',
+type SupplierRequirementDetailResponse = {
+  cardId: string;
+  requirementId: string;
+  daysLeft: number | null;
+  isExpired: boolean;
+  requirement: {
+    title: string;
+    description: string;
+    category: string;
+    quantity: number;
+    unit: string;
+    budgetMin: number | null;
+    budgetMax: number | null;
+    currency: string;
+    deliveryLocation: string;
+    deliveryDeadline: string;
+  };
 };
 
 export default function NewQuotationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const requirementId = searchParams.get('req') || '';
   const cardId = searchParams.get('card') || '';
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [requirement, setRequirement] = useState<QuotationRequirement | null>(null);
+  const [cardContext, setCardContext] = useState<SupplierRequirementDetailResponse | null>(null);
 
-  const requirement = useMemo(() => {
-    if (!requirementId) {
-      return null;
+  const fetchRequirementCard = useCallback(async () => {
+    if (!cardId) {
+      setError('Missing supplier requirement card ID. Open this page from your requirement invitation.');
+      setLoading(false);
+      return;
     }
-    return REQUIREMENT_LOOKUP[requirementId as keyof typeof REQUIREMENT_LOOKUP] || null;
-  }, [requirementId]);
 
-  if (!requirement) {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`/api/supplier/requirements/${cardId}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to load requirement invitation');
+        return;
+      }
+
+      const payload = data as SupplierRequirementDetailResponse;
+      setCardContext(payload);
+      setRequirement({
+        id: payload.requirementId,
+        title: payload.requirement.title,
+        description: payload.requirement.description,
+        category: payload.requirement.category,
+        quantity: payload.requirement.quantity,
+        unit: payload.requirement.unit,
+        targetPrice: payload.requirement.budgetMax ?? payload.requirement.budgetMin ?? null,
+        currency: payload.requirement.currency,
+        deliveryLocation: payload.requirement.deliveryLocation,
+        deliveryDeadline: payload.requirement.deliveryDeadline,
+      });
+    } catch {
+      setError('Network error while loading requirement invitation.');
+    } finally {
+      setLoading(false);
+    }
+  }, [cardId]);
+
+  useEffect(() => {
+    void fetchRequirementCard();
+  }, [fetchRequirementCard]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!requirement || error) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Requirement not found</CardTitle>
+          <CardTitle>Requirement not available</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            We could not find the requirement to create a quotation. Please return to the requirements page and try again.
+            {error || 'We could not load the requirement invitation. Please return to your requirements and try again.'}
           </p>
           <Link href="/requirements">
             <Button variant="outline">Back to Requirements</Button>
@@ -95,14 +129,22 @@ export default function NewQuotationPage() {
         <div>
           <h1 className="text-2xl font-bold">Submit Quotation</h1>
           <p className="text-muted-foreground">
-            Card: {cardId || 'N/A'} • Requirement: {requirement.id}
+            Card: {cardContext?.cardId || cardId} • Requirement: {cardContext?.requirementId || requirement.id}
           </p>
         </div>
       </div>
 
+      {cardContext?.isExpired && (
+        <Card>
+          <CardContent className="py-4 text-sm text-red-600">
+            This invitation deadline has passed. Contact procurement/admin if you need reactivation.
+          </CardContent>
+        </Card>
+      )}
+
       <QuotationSubmitForm
         requirement={requirement}
-        supplier={SUPPLIER_CONTEXT}
+        supplierRequirementCardId={cardId}
         onCancel={() => router.back()}
         onSuccess={() => router.push('/quotations?view=submitted')}
       />

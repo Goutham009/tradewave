@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
 import { formatQuotationReference, formatRequirementReference } from '@/lib/flow-references';
+import { getDemoQuotationsApiPayload, shouldUseDemoFallback } from '@/lib/demo/fallback';
 
 // Standard response helpers
 function successResponse(data: any, status = 200) {
@@ -146,6 +147,11 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Failed to fetch quotations:', error);
+
+    if (shouldUseDemoFallback(error)) {
+      return NextResponse.json(getDemoQuotationsApiPayload());
+    }
+
     return errorResponse('Internal server error', 500);
   }
 }
@@ -185,10 +191,28 @@ export async function POST(request: NextRequest) {
       sampleCost,
     } = body;
 
+    let effectiveSupplierId = supplierId as string | undefined;
+    if (session.user.role === 'SUPPLIER') {
+      if (!session.user.email) {
+        return errorResponse('Supplier account email is missing', 400);
+      }
+
+      const supplierProfile = await prisma.supplier.findUnique({
+        where: { email: session.user.email },
+        select: { id: true },
+      });
+
+      if (!supplierProfile) {
+        return errorResponse('Supplier profile not found', 404);
+      }
+
+      effectiveSupplierId = supplierProfile.id;
+    }
+
     // Validation
     const errors: string[] = [];
     if (!requirementId) errors.push('requirementId is required');
-    if (!supplierId) errors.push('supplierId is required');
+    if (!effectiveSupplierId) errors.push('supplierId is required');
     if (!unitPrice || unitPrice <= 0) errors.push('unitPrice must be positive');
     if (!quantity || quantity <= 0) errors.push('quantity must be positive');
     if (!leadTime || leadTime <= 0) errors.push('leadTime (days) is required');
@@ -196,6 +220,8 @@ export async function POST(request: NextRequest) {
     if (errors.length > 0) {
       return errorResponse('Validation failed', 400, { errors });
     }
+
+    const resolvedSupplierId = effectiveSupplierId as string;
 
     // Verify requirement exists and is open for quotations
     const requirement = await prisma.requirement.findUnique({
@@ -212,7 +238,7 @@ export async function POST(request: NextRequest) {
 
     // Verify supplier exists
     const supplier = await prisma.supplier.findUnique({
-      where: { id: supplierId },
+      where: { id: resolvedSupplierId },
     });
 
     if (!supplier) {
@@ -223,7 +249,7 @@ export async function POST(request: NextRequest) {
     const existingQuotation = await prisma.quotation.findFirst({
       where: {
         requirementId,
-        supplierId,
+        supplierId: resolvedSupplierId,
         status: { in: ['PENDING', 'SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED'] },
       },
     });
@@ -250,7 +276,7 @@ export async function POST(request: NextRequest) {
     const quotation = await prisma.quotation.create({
       data: {
         requirementId,
-        supplierId,
+        supplierId: resolvedSupplierId,
         userId: session.user.id,
         unitPrice,
         quantity,

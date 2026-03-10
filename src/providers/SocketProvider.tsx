@@ -31,37 +31,53 @@ export function SocketProvider({ children }: SocketProviderProps) {
       return;
     }
 
-    // Initialize socket connection
-    const socketInstance = io(process.env.NEXT_PUBLIC_APP_URL || window.location.origin, {
-      path: '/api/socketio',
-      transports: ['websocket', 'polling'],
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+    let isMounted = true;
+    let socketInstance: Socket | null = null;
 
-    socketInstance.on('connect', () => {
-      console.log('Socket connected:', socketInstance.id);
-      setIsConnected(true);
-      
-      // Join user's room for personal notifications
-      socketInstance.emit('join_room', session.user.id);
-    });
+    const bootstrapAndConnect = async () => {
+      try {
+        await fetch('/api/socketio');
+      } catch {
+        // Best-effort bootstrap for environments without socket support.
+      }
 
-    socketInstance.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
-      setIsConnected(false);
-    });
+      if (!isMounted) return;
 
-    socketInstance.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-      setIsConnected(false);
-    });
+      // Initialize socket connection
+      socketInstance = io(process.env.NEXT_PUBLIC_APP_URL || window.location.origin, {
+        path: '/api/socketio',
+        transports: ['websocket', 'polling'],
+        autoConnect: true,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+      });
 
-    setSocket(socketInstance);
+      socketInstance.on('connect', () => {
+        console.log('Socket connected:', socketInstance?.id);
+        setIsConnected(true);
+
+        // Join user's room for personal notifications
+        socketInstance?.emit('join_room', session.user.id);
+      });
+
+      socketInstance.on('disconnect', (reason) => {
+        console.log('Socket disconnected:', reason);
+        setIsConnected(false);
+      });
+
+      socketInstance.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+        setIsConnected(false);
+      });
+
+      setSocket(socketInstance);
+    };
+
+    void bootstrapAndConnect();
 
     return () => {
+      isMounted = false;
       if (socketInstance) {
         socketInstance.emit('leave_room', session.user.id);
         socketInstance.disconnect();

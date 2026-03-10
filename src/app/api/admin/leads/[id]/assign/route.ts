@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { createNotification } from '@/lib/services/notificationService';
 
 // PATCH /api/admin/leads/[id]/assign - Assign AM to a lead
 export async function PATCH(
@@ -28,6 +29,18 @@ export async function PATCH(
       );
     }
 
+    const accountManager = await prisma.user.findUnique({
+      where: { id: assignedTo },
+      select: { id: true, role: true, name: true },
+    });
+
+    if (!accountManager || accountManager.role !== 'ACCOUNT_MANAGER') {
+      return NextResponse.json(
+        { error: 'Assigned user must be an account manager' },
+        { status: 400 }
+      );
+    }
+
     const lead = await prisma.lead.findUnique({
       where: { id: params.id },
     });
@@ -48,8 +61,16 @@ export async function PATCH(
       },
     });
 
-    // TODO: Send notification email to assigned AM
-    // TODO: Send notification to AM dashboard
+    // Notify the assigned AM via in-app notification + email
+    createNotification({
+      userId: assignedTo,
+      type: 'SYSTEM',
+      title: 'New Lead Assigned to You',
+      message: `A new lead "${lead.fullName || lead.email}" (${lead.companyName || 'N/A'}) has been assigned to you. Please review and schedule a call.`,
+      resourceType: 'lead',
+      resourceId: params.id,
+      sendEmail: true,
+    }).catch(console.error);
 
     return NextResponse.json({
       status: 'success',

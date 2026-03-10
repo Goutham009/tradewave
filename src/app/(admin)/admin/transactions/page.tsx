@@ -42,16 +42,51 @@ interface Transaction {
   requirementTitle: string;
 }
 
+const DEMO_TRANSACTIONS: Transaction[] = [
+  { id: 'TXN-2024-001', buyerName: 'Acme Corp', supplierName: 'Steel Inc', amount: 45000, currency: 'USD', status: 'COMPLETED', escrowStatus: 'RELEASED', createdAt: '2024-01-15', requirementTitle: 'Steel Components' },
+  { id: 'TXN-2024-002', buyerName: 'Trade Co', supplierName: 'Metals Ltd', amount: 28500, currency: 'USD', status: 'IN_TRANSIT', escrowStatus: 'HELD', createdAt: '2024-01-18', requirementTitle: 'Aluminum Sheets' },
+  { id: 'TXN-2024-003', buyerName: 'Import Hub', supplierName: 'Global Supply', amount: 67200, currency: 'USD', status: 'DISPUTED', escrowStatus: 'HELD', createdAt: '2024-01-12', requirementTitle: 'Electronic Parts' },
+  { id: 'TXN-2024-004', buyerName: 'Mega Industries', supplierName: 'Steel Inc', amount: 125000, currency: 'USD', status: 'ESCROW_HELD', escrowStatus: 'HELD', createdAt: '2024-01-20', requirementTitle: 'Construction Materials' },
+  { id: 'TXN-2024-005', buyerName: 'Tech Solutions', supplierName: 'Electronics Co', amount: 18900, currency: 'USD', status: 'PAYMENT_PENDING', escrowStatus: 'PENDING', createdAt: '2024-01-19', requirementTitle: 'Circuit Boards' },
+];
+
+const DEMO_TRANSACTION_STATS = {
+  total: 3421,
+  pending: 47,
+  completed: 3198,
+  disputed: 23,
+  totalValue: 15420000,
+};
+
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   INITIATED: { label: 'Initiated', color: 'bg-slate-500/20 text-slate-400' },
+  PENDING_ADMIN_REVIEW: { label: 'Pending Admin Review', color: 'bg-yellow-500/20 text-yellow-400' },
+  ESCROW_CREATED: { label: 'Escrow Created', color: 'bg-cyan-500/20 text-cyan-400' },
   PAYMENT_PENDING: { label: 'Payment Pending', color: 'bg-yellow-500/20 text-yellow-400' },
+  PAYMENT_RECEIVED: { label: 'Payment Received', color: 'bg-blue-500/20 text-blue-400' },
+  PAYMENT_CONFIRMED: { label: 'Payment Confirmed', color: 'bg-blue-500/20 text-blue-400' },
+  CONFIRMED: { label: 'Confirmed', color: 'bg-emerald-500/20 text-emerald-400' },
   ESCROW_HELD: { label: 'Escrow Held', color: 'bg-blue-500/20 text-blue-400' },
+  PRODUCTION: { label: 'Production', color: 'bg-purple-500/20 text-purple-400' },
+  SHIPPED: { label: 'Shipped', color: 'bg-indigo-500/20 text-indigo-400' },
+  QUALITY_PENDING: { label: 'Quality Pending', color: 'bg-amber-500/20 text-amber-400' },
+  QUALITY_APPROVED: { label: 'Quality Approved', color: 'bg-emerald-500/20 text-emerald-400' },
   IN_TRANSIT: { label: 'In Transit', color: 'bg-purple-500/20 text-purple-400' },
   DELIVERED: { label: 'Delivered', color: 'bg-cyan-500/20 text-cyan-400' },
+  FUNDS_RELEASED: { label: 'Funds Released', color: 'bg-emerald-500/20 text-emerald-400' },
   COMPLETED: { label: 'Completed', color: 'bg-green-500/20 text-green-400' },
+  REFUNDED: { label: 'Refunded', color: 'bg-orange-500/20 text-orange-400' },
   DISPUTED: { label: 'Disputed', color: 'bg-red-500/20 text-red-400' },
   CANCELLED: { label: 'Cancelled', color: 'bg-slate-500/20 text-slate-400' },
 };
+
+const QUICK_FILTER_STATUSES = [
+  'PAYMENT_PENDING',
+  'PAYMENT_RECEIVED',
+  'CONFIRMED',
+  'IN_TRANSIT',
+  'COMPLETED',
+];
 
 export default function AdminTransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -80,29 +115,21 @@ export default function AdminTransactionsPage() {
       
       const response = await fetch(`/api/admin/transactions?${params}`);
       const data = await response.json();
-      
-      if (data.status === 'success') {
+
+      if (response.ok && data.status === 'success') {
         setTransactions(data.data.transactions);
         setTotalPages(data.data.pagination?.pages || 1);
         setStats((prev) => data.data.stats || prev);
+      } else {
+        setTransactions(DEMO_TRANSACTIONS);
+        setStats(DEMO_TRANSACTION_STATS);
+        setTotalPages(1);
       }
     } catch (error) {
       console.error('Failed to fetch transactions:', error);
-      // Mock data
-      setTransactions([
-        { id: 'TXN-2024-001', buyerName: 'Acme Corp', supplierName: 'Steel Inc', amount: 45000, currency: 'USD', status: 'COMPLETED', escrowStatus: 'RELEASED', createdAt: '2024-01-15', requirementTitle: 'Steel Components' },
-        { id: 'TXN-2024-002', buyerName: 'Trade Co', supplierName: 'Metals Ltd', amount: 28500, currency: 'USD', status: 'IN_TRANSIT', escrowStatus: 'HELD', createdAt: '2024-01-18', requirementTitle: 'Aluminum Sheets' },
-        { id: 'TXN-2024-003', buyerName: 'Import Hub', supplierName: 'Global Supply', amount: 67200, currency: 'USD', status: 'DISPUTED', escrowStatus: 'HELD', createdAt: '2024-01-12', requirementTitle: 'Electronic Parts' },
-        { id: 'TXN-2024-004', buyerName: 'Mega Industries', supplierName: 'Steel Inc', amount: 125000, currency: 'USD', status: 'ESCROW_HELD', escrowStatus: 'HELD', createdAt: '2024-01-20', requirementTitle: 'Construction Materials' },
-        { id: 'TXN-2024-005', buyerName: 'Tech Solutions', supplierName: 'Electronics Co', amount: 18900, currency: 'USD', status: 'PAYMENT_PENDING', escrowStatus: 'PENDING', createdAt: '2024-01-19', requirementTitle: 'Circuit Boards' },
-      ]);
-      setStats({
-        total: 3421,
-        pending: 47,
-        completed: 3198,
-        disputed: 23,
-        totalValue: 15420000,
-      });
+      setTransactions(DEMO_TRANSACTIONS);
+      setStats(DEMO_TRANSACTION_STATS);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
@@ -257,17 +284,24 @@ export default function AdminTransactionsPage() {
               >
                 All
               </Button>
-              {Object.entries(STATUS_CONFIG).slice(0, 5).map(([status, config]) => (
-                <Button
-                  key={status}
-                  variant={statusFilter === status ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setStatusFilter(status)}
-                  className={statusFilter === status ? 'bg-red-600' : 'border-slate-600 text-slate-300'}
-                >
-                  {config.label}
-                </Button>
-              ))}
+              {QUICK_FILTER_STATUSES.map((status) => {
+                const config = STATUS_CONFIG[status];
+                if (!config) {
+                  return null;
+                }
+
+                return (
+                  <Button
+                    key={status}
+                    variant={statusFilter === status ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setStatusFilter(status)}
+                    className={statusFilter === status ? 'bg-red-600' : 'border-slate-600 text-slate-300'}
+                  >
+                    {config.label}
+                  </Button>
+                );
+              })}
             </div>
           </div>
         </CardContent>

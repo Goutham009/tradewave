@@ -15,7 +15,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!['PROCUREMENT_OFFICER', 'ADMIN'].includes(session.user.role || '')) {
+    if (!['PROCUREMENT_OFFICER', 'PROCUREMENT_TEAM', 'ADMIN'].includes(session.user.role || '')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -62,9 +62,56 @@ export async function POST(
     const requirementRef = formatRequirementReference(requirement.id);
     const responseDeadline = new Date(Date.now() + (responseDeadlineDays || 3) * 24 * 60 * 60 * 1000);
 
+    const supplierProfiles = await prisma.supplier.findMany({
+      where: { id: { in: supplierIds } },
+      select: { id: true, email: true, companyName: true },
+    });
+
+    const supplierEmails = supplierProfiles.map((supplier) => supplier.email).filter(Boolean);
+    const supplierUsers = supplierEmails.length
+      ? await prisma.user.findMany({
+          where: {
+            role: 'SUPPLIER',
+            email: { in: supplierEmails },
+          },
+          select: { id: true, email: true, kybStatus: true },
+        })
+      : [];
+
+    const supplierUserByEmail = new Map(
+      supplierUsers.map((user) => [user.email, user])
+    );
+
+    const eligibleSupplierIds = supplierProfiles
+      .filter((supplier) => {
+        const supplierUser = supplierUserByEmail.get(supplier.email || '');
+        return supplierUser?.kybStatus === 'COMPLETED';
+      })
+      .map((supplier) => supplier.id);
+
+    const skippedSuppliers = supplierProfiles
+      .filter((supplier) => !eligibleSupplierIds.includes(supplier.id))
+      .map((supplier) => ({
+        supplierId: supplier.id,
+        companyName: supplier.companyName,
+      }));
+
+    if (eligibleSupplierIds.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'No KYB-approved suppliers selected',
+          suppliersSkippedDueToKyb: skippedSuppliers.length,
+          skippedSuppliers,
+          message:
+            'All selected suppliers are missing approved supplier user accounts or KYB completion. Select KYB-approved suppliers and retry.',
+        },
+        { status: 400 }
+      );
+    }
+
     // Create SupplierRequirementCard for each supplier
     const cards = [];
-    for (const supplierId of supplierIds) {
+    for (const supplierId of eligibleSupplierIds) {
       try {
         const card = await prisma.supplierRequirementCard.create({
           data: {
@@ -105,6 +152,19 @@ export async function POST(
         // Skip if already exists (unique constraint)
         if (e.code !== 'P2002') throw e;
       }
+    }
+
+    if (cards.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'No new supplier invitations were created',
+          message:
+            'Selected suppliers were already invited previously. Choose different suppliers or update the existing invitation flow.',
+          suppliersSkippedDueToKyb: skippedSuppliers.length,
+          skippedSuppliers,
+        },
+        { status: 409 }
+      );
     }
 
     // Update requirement status
@@ -155,30 +215,17 @@ export async function POST(
       ],
     });
 
-    // Notify mapped supplier users (if user account email matches supplier profile email)
-    const supplierProfiles = await prisma.supplier.findMany({
-      where: { id: { in: supplierIds } },
-      select: { id: true, email: true, companyName: true },
-    });
+    const eligibleSupplierUsers = supplierUsers.filter(
+      (user) => user.kybStatus === 'COMPLETED'
+    );
 
-    const supplierEmails = supplierProfiles.map((supplier) => supplier.email).filter(Boolean);
-    const supplierUsers = supplierEmails.length
-      ? await prisma.user.findMany({
-          where: {
-            role: 'SUPPLIER',
-            email: { in: supplierEmails },
-          },
-          select: { id: true, email: true },
-        })
-      : [];
-
-    if (supplierUsers.length > 0) {
+    if (eligibleSupplierUsers.length > 0) {
       const supplierCompanyByEmail = new Map(
         supplierProfiles.map((supplier) => [supplier.email, supplier.companyName])
       );
 
       await prisma.notification.createMany({
-        data: supplierUsers.map((user) => ({
+        data: eligibleSupplierUsers.map((user) => ({
           userId: user.id,
           type: 'REQUIREMENT_CREATED',
           title: 'New Requirement to Quote',
@@ -193,6 +240,8 @@ export async function POST(
       status: 'success',
       requirementReference: requirementRef,
       cardsSent: cards.length,
+      suppliersSkippedDueToKyb: skippedSuppliers.length,
+      skippedSuppliers,
       responseDeadline,
       cards: cards.map(c => ({ id: c.id, supplierId: c.supplierId, status: c.status })),
     });
@@ -213,7 +262,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (!['PROCUREMENT_OFFICER', 'ADMIN'].includes(session.user.role || '')) {
+    if (!['PROCUREMENT_OFFICER', 'PROCUREMENT_TEAM', 'ADMIN'].includes(session.user.role || '')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -239,6 +288,26 @@ export async function GET(
       orderBy: { overallRating: 'desc' },
     });
 
+    const supplierEmails = suppliers
+      .map((supplier) => supplier.email)
+      .filter((email): email is string => Boolean(email));
+
+    const supplierUsers = supplierEmails.length
+      ? await prisma.user.findMany({
+          where: {
+            role: 'SUPPLIER',
+            email: { in: supplierEmails },
+          },
+          select: {
+            id: true,
+            email: true,
+            kybStatus: true,
+          },
+        })
+      : [];
+
+    const supplierUserByEmail = new Map(supplierUsers.map((user) => [user.email, user]));
+
     // Calculate match score for each supplier
     const matchedSuppliers = suppliers.map(supplier => {
       let matchScore = 50; // Base score
@@ -257,6 +326,11 @@ export async function GET(
       // Cap at 100
       matchScore = Math.min(matchScore, 100);
 
+      const linkedSupplierUser = supplier.email
+        ? supplierUserByEmail.get(supplier.email)
+        : null;
+      const supplierKybStatus = linkedSupplierUser?.kybStatus || 'PENDING';
+
       return {
         id: supplier.id,
         name: supplier.name,
@@ -269,6 +343,9 @@ export async function GET(
         yearsInBusiness: supplier.yearsInBusiness,
         certifications: supplier.certifications.filter(c => c.verified).map(c => c.name),
         matchScore,
+        supplierUserId: linkedSupplierUser?.id || null,
+        supplierUserKybStatus: supplierKybStatus,
+        canInvite: supplierKybStatus === 'COMPLETED',
       };
     }).sort((a, b) => b.matchScore - a.matchScore);
 

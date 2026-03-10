@@ -11,6 +11,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    if (session.user.role !== 'BUYER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await request.json();
     const {
       transactionId,
@@ -54,6 +58,16 @@ export async function POST(request: NextRequest) {
     // Verify the buyer owns this transaction
     if (transaction.buyerId !== session.user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const reorderEligibleStatuses = new Set(['COMPLETED', 'FUNDS_RELEASED']);
+    if (!reorderEligibleStatuses.has(transaction.status)) {
+      return NextResponse.json(
+        {
+          error: `Reorder can only be created from completed orders. Current status: ${transaction.status}`,
+        },
+        { status: 400 }
+      );
     }
 
     const origReq = transaction.quotation?.requirement;
@@ -112,6 +126,7 @@ export async function POST(request: NextRequest) {
         originalRequirementId: origReq.id,
         originalTransactionId: transactionId,
         preferredSupplierId: supplier?.id || null,
+        sentDirectlyToSupplier: sendDirectToSupplier,
         // Buyer context
         buyerIsExisting: true,
         buyerTotalOrders: totalOrders,

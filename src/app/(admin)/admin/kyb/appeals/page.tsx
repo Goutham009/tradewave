@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { FileText, Clock, CheckCircle, XCircle, Eye, AlertTriangle } from 'lucide-react';
 
 interface Appeal {
@@ -38,11 +38,7 @@ export default function AdminKYBAppealsPage() {
   const [processing, setProcessing] = useState(false);
   const [decision, setDecision] = useState({ decision: '', adminDecision: '' });
 
-  useEffect(() => {
-    fetchAppeals();
-  }, [filter]);
-
-  const fetchAppeals = async () => {
+  const fetchAppeals = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -55,7 +51,11 @@ export default function AdminKYBAppealsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    fetchAppeals();
+  }, [fetchAppeals]);
 
   const handleReview = async () => {
     if (!selectedAppeal || !decision.decision) return;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -74,11 +74,7 @@ export default function AdminSuppliersPage() {
     totalRevenue: 0,
   });
 
-  useEffect(() => {
-    fetchSuppliers();
-  }, [page]);
-
-  const fetchSuppliers = async () => {
+  const fetchSuppliers = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/admin/suppliers?page=${page}&limit=10`);
@@ -113,7 +109,11 @@ export default function AdminSuppliersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page]);
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, [fetchSuppliers]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {

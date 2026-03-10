@@ -1,15 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { formatQuotationReference, formatRequirementReference } from '@/lib/flow-references';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
 
 // POST /api/supplier/quotations - Supplier submits a quote for a requirement
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'SUPPLIER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const supplierEmail = session.user.email;
+    if (!supplierEmail) {
+      return NextResponse.json({ error: 'Supplier account email is missing' }, { status: 400 });
+    }
+
+    const supplier = await prisma.supplier.findUnique({
+      where: { email: supplierEmail },
+      select: { id: true },
+    });
+
+    if (!supplier) {
+      return NextResponse.json({ error: 'Supplier profile not found' }, { status: 404 });
+    }
+
     const body = await req.json();
     const {
       supplierRequirementCardId,
-      supplierId,
-      userId,
       // Pricing
       pricePerUnit,
       quantity,
@@ -44,9 +67,9 @@ export async function POST(req: NextRequest) {
       documents,
     } = body;
 
-    if (!supplierRequirementCardId || !supplierId || !pricePerUnit || !quantity) {
+    if (!supplierRequirementCardId || !pricePerUnit || !quantity) {
       return NextResponse.json(
-        { error: 'supplierRequirementCardId, supplierId, pricePerUnit, and quantity are required' },
+        { error: 'supplierRequirementCardId, pricePerUnit, and quantity are required' },
         { status: 400 }
       );
     }
@@ -65,7 +88,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Requirement card not found' }, { status: 404 });
     }
 
-    if (card.supplierId !== supplierId) {
+    if (card.supplierId !== supplier.id) {
       return NextResponse.json({ error: 'This requirement was not sent to you' }, { status: 403 });
     }
 
@@ -98,8 +121,8 @@ export async function POST(req: NextRequest) {
     const quotation = await prisma.quotation.create({
       data: {
         requirementId: card.requirementId,
-        supplierId,
-        userId: userId || null,
+        supplierId: supplier.id,
+        userId: session.user.id,
         supplierRequirementCardId: card.id,
         // Supplier's pricing (before admin margin)
         supplierPricePerUnit: unitPriceNum,
@@ -179,18 +202,14 @@ export async function POST(req: NextRequest) {
             },
           ]
         : []),
-      ...(userId
-        ? [
-            {
-              userId,
-              type: 'QUOTATION_RECEIVED' as const,
-              title: 'Quotation Submitted Successfully',
-              message: `Your quotation ${quotationRef} for ${requirementRef} was submitted and is pending admin review.`,
-              resourceType: 'quotation',
-              resourceId: quotation.id,
-            },
-          ]
-        : []),
+      {
+        userId: session.user.id,
+        type: 'QUOTATION_RECEIVED' as const,
+        title: 'Quotation Submitted Successfully',
+        message: `Your quotation ${quotationRef} for ${requirementRef} was submitted and is pending admin review.`,
+        resourceType: 'quotation',
+        resourceId: quotation.id,
+      },
     ];
 
     if (notifications.length > 0) {
@@ -229,17 +248,40 @@ export async function POST(req: NextRequest) {
 // GET /api/supplier/quotations - Get supplier's submitted quotations
 export async function GET(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.role !== 'SUPPLIER') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const supplierEmail = session.user.email;
+    if (!supplierEmail) {
+      return NextResponse.json({ error: 'Supplier account email is missing' }, { status: 400 });
+    }
+
+    const supplier = await prisma.supplier.findUnique({
+      where: { email: supplierEmail },
+      select: { id: true },
+    });
+
+    if (!supplier) {
+      return NextResponse.json({
+        quotations: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+        counts: {},
+        supplierAccountRequired: true,
+      });
+    }
+
     const { searchParams } = new URL(req.url);
-    const supplierId = searchParams.get('supplierId');
     const status = searchParams.get('status');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
 
-    if (!supplierId) {
-      return NextResponse.json({ error: 'supplierId is required' }, { status: 400 });
-    }
-
-    const where: any = { supplierId };
+    const where: any = { supplierId: supplier.id };
     if (status) {
       where.status = status;
     }
@@ -298,7 +340,7 @@ export async function GET(req: NextRequest) {
     // Count by status
     const statusCounts = await prisma.quotation.groupBy({
       by: ['status'],
-      where: { supplierId },
+      where: { supplierId: supplier.id },
       _count: { id: true },
     });
 
@@ -311,6 +353,7 @@ export async function GET(req: NextRequest) {
       quotations: formattedQuotations,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       counts,
+      supplierId: supplier.id,
     });
   } catch (error: any) {
     console.error('Error fetching supplier quotations:', error);

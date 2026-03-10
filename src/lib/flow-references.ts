@@ -21,6 +21,10 @@ export function formatTransactionReference(transactionId: string): string {
   return `TXN-${sanitizeIdSuffix(transactionId)}`;
 }
 
+export function formatAccountReference(userId: string): string {
+  return `ACC-${sanitizeIdSuffix(userId)}`;
+}
+
 export function buildOrderReferences(transactionId: string): {
   internalOrderId: string;
   buyerOrderId: string;

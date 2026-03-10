@@ -1,43 +1,66 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import {
+  AlertTriangle,
   ArrowLeft,
   Building2,
   Calendar,
   Clock,
   FileText,
+  Loader2,
   Mail,
+  RefreshCw,
   Users,
 } from 'lucide-react';
 
-type OutreachStatus = 'INVITED' | 'VIEWED_RFQ' | 'QUOTATION_SUBMITTED' | 'DECLINED';
+type OutreachStatus = 'INVITED' | 'VIEWED_RFQ' | 'QUOTATION_SUBMITTED' | 'DECLINED' | 'EXPIRED';
 
 type SupplierOutreach = {
   id: string;
+  supplierId: string;
   supplierName: string;
   contactEmail: string;
   region: string;
   invitedAt: string;
-  respondedAt?: string;
+  respondedAt: string | null;
   status: OutreachStatus;
-  quotedAmount?: number;
+  quotedAmount: number | null;
 };
 
 type ProcurementRequirement = {
   id: string;
+  requirementReference: string;
   buyerCompany: string;
   productType: string;
+  category: string;
   quantity: number;
   unit: string;
+  deliveryLocation: string;
+  deliveryDeadline: string;
   procurementOwner: string;
   createdAt: string;
-  status: 'INVITATIONS_SENT' | 'AWAITING_QUOTATIONS' | 'QUOTATIONS_RECEIVED';
+  status: 'pending_match' | 'suppliers_contacted' | 'quotes_received';
+  rawStatus: string;
+  suppliersInvited: number;
+  quotationsReceived: number;
   suppliers: SupplierOutreach[];
+};
+
+type MatchedSupplierCandidate = {
+  id: string;
+  name: string;
+  companyName: string;
+  tier: string;
+  matchScore: number;
+  canInvite: boolean;
+  supplierUserKybStatus?: string;
 };
 
 const STATUS_STYLE: Record<OutreachStatus, string> = {
@@ -45,76 +68,19 @@ const STATUS_STYLE: Record<OutreachStatus, string> = {
   VIEWED_RFQ: 'bg-yellow-500/20 text-yellow-400',
   QUOTATION_SUBMITTED: 'bg-green-500/20 text-green-400',
   DECLINED: 'bg-red-500/20 text-red-400',
+  EXPIRED: 'bg-slate-500/30 text-slate-300',
 };
 
-const REQUIREMENT_STATUS_STYLE: Record<ProcurementRequirement['status'], string> = {
-  INVITATIONS_SENT: 'bg-purple-500/20 text-purple-400',
-  AWAITING_QUOTATIONS: 'bg-yellow-500/20 text-yellow-400',
-  QUOTATIONS_RECEIVED: 'bg-green-500/20 text-green-400',
+const REQUIREMENT_STATUS_STYLE: Record<
+  ProcurementRequirement['status'],
+  { label: string; className: string }
+> = {
+  pending_match: { label: 'Pending Match', className: 'bg-purple-500/20 text-purple-400' },
+  suppliers_contacted: { label: 'Awaiting Quotations', className: 'bg-yellow-500/20 text-yellow-400' },
+  quotes_received: { label: 'Quotations Received', className: 'bg-green-500/20 text-green-400' },
 };
 
-const MOCK_REQUIREMENTS: Record<string, ProcurementRequirement> = {
-  'REQ-2024-001': {
-    id: 'REQ-2024-001',
-    buyerCompany: 'TechCorp Industries',
-    productType: 'Industrial Sensors',
-    quantity: 5000,
-    unit: 'pieces',
-    procurementOwner: 'Sarah Johnson',
-    createdAt: '2024-02-21T09:30:00Z',
-    status: 'AWAITING_QUOTATIONS',
-    suppliers: [
-      {
-        id: 'sup-001',
-        supplierName: 'SensorTech Solutions',
-        contactEmail: 'rfq@sensortech.com',
-        region: 'Shenzhen, China',
-        invitedAt: '2024-02-21T11:00:00Z',
-        respondedAt: '2024-02-21T14:30:00Z',
-        status: 'VIEWED_RFQ',
-      },
-      {
-        id: 'sup-002',
-        supplierName: 'Precision Components Ltd',
-        contactEmail: 'procurement@precisioncomponents.com',
-        region: 'Seoul, South Korea',
-        invitedAt: '2024-02-21T11:10:00Z',
-        respondedAt: '2024-02-22T09:10:00Z',
-        status: 'QUOTATION_SUBMITTED',
-        quotedAmount: 178000,
-      },
-      {
-        id: 'sup-003',
-        supplierName: 'Global Sensor Manufacturing',
-        contactEmail: 'sales@globalsensor.jp',
-        region: 'Tokyo, Japan',
-        invitedAt: '2024-02-21T11:20:00Z',
-        status: 'INVITED',
-      },
-      {
-        id: 'sup-004',
-        supplierName: 'SmartSense Technologies',
-        contactEmail: 'rfq@smartsense.in',
-        region: 'Mumbai, India',
-        invitedAt: '2024-02-21T11:25:00Z',
-        respondedAt: '2024-02-22T13:05:00Z',
-        status: 'QUOTATION_SUBMITTED',
-        quotedAmount: 181500,
-      },
-      {
-        id: 'sup-005',
-        supplierName: 'EuroSensor GmbH',
-        contactEmail: 'quotes@eurosensor.de',
-        region: 'Munich, Germany',
-        invitedAt: '2024-02-21T11:40:00Z',
-        respondedAt: '2024-02-22T08:15:00Z',
-        status: 'DECLINED',
-      },
-    ],
-  },
-};
-
-function formatCurrency(amount?: number) {
+function formatCurrency(amount?: number | null) {
   if (!amount) return '-';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -127,34 +93,327 @@ export default function ProcurementRequirementDetailPage() {
   const params = useParams();
   const router = useRouter();
   const requirementId = params.id as string;
+  const [requirement, setRequirement] = useState<ProcurementRequirement | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [matching, setMatching] = useState(false);
+  const [matchResult, setMatchResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [matchedSuppliers, setMatchedSuppliers] = useState<MatchedSupplierCandidate[]>([]);
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>([]);
+  const [supplierSearchQuery, setSupplierSearchQuery] = useState('');
 
-  const requirement = useMemo<ProcurementRequirement>(() => {
-    if (MOCK_REQUIREMENTS[requirementId]) {
-      return MOCK_REQUIREMENTS[requirementId];
+  const fetchRequirement = useCallback(async (manualRefresh = false) => {
+    try {
+      if (manualRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+
+      const response = await fetch(`/api/procurement/requirements/${requirementId}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load procurement requirement detail');
+      }
+
+      setRequirement(data.requirement || null);
+    } catch (fetchError) {
+      console.error('Failed to fetch procurement detail:', fetchError);
+      setRequirement(null);
+      setError(
+        fetchError instanceof Error
+          ? fetchError.message
+          : 'Failed to load procurement requirement detail'
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    return {
-      id: requirementId,
-      buyerCompany: 'Buyer Company',
-      productType: 'Unmapped Requirement',
-      quantity: 0,
-      unit: 'units',
-      procurementOwner: 'Unassigned',
-      createdAt: new Date().toISOString(),
-      status: 'INVITATIONS_SENT',
-      suppliers: [],
-    };
   }, [requirementId]);
 
-  const stats = {
-    invited: requirement.suppliers.length,
-    viewed: requirement.suppliers.filter((supplier) => supplier.status === 'VIEWED_RFQ').length,
-    submitted: requirement.suppliers.filter((supplier) => supplier.status === 'QUOTATION_SUBMITTED').length,
-    declined: requirement.suppliers.filter((supplier) => supplier.status === 'DECLINED').length,
+  const fetchMatchedSuppliers = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/procurement/requirements/${requirementId}/match-suppliers`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setMatchedSuppliers([]);
+        setSelectedSupplierIds([]);
+        return;
+      }
+
+      const suppliers = Array.isArray(data?.suppliers) ? data.suppliers : [];
+      const eligibleSupplierIds = suppliers
+        .filter((supplier: MatchedSupplierCandidate) => supplier.canInvite)
+        .slice(0, 10)
+        .map((supplier: MatchedSupplierCandidate) => supplier.id);
+
+      setMatchedSuppliers(suppliers);
+      setSelectedSupplierIds((previousSelection) => {
+        if (previousSelection.length === 0) {
+          return eligibleSupplierIds;
+        }
+
+        return previousSelection.filter((supplierId) =>
+          suppliers.some(
+            (supplier: MatchedSupplierCandidate) =>
+              supplier.id === supplierId && supplier.canInvite
+          )
+        );
+      });
+    } catch {
+      setMatchedSuppliers([]);
+      setSelectedSupplierIds([]);
+    }
+  }, [requirementId]);
+
+  useEffect(() => {
+    void fetchRequirement();
+    void fetchMatchedSuppliers();
+  }, [fetchMatchedSuppliers, fetchRequirement]);
+
+  const handleAutoMatchSuppliers = async () => {
+    const eligibleSupplierIds = selectedSupplierIds.filter((supplierId) =>
+      matchedSuppliers.some((supplier) => supplier.id === supplierId && supplier.canInvite)
+    );
+
+    if (eligibleSupplierIds.length === 0) {
+      setMatchResult({
+        type: 'error',
+        message: 'Select at least one KYB-approved supplier to continue.',
+      });
+      return;
+    }
+
+    try {
+      setMatching(true);
+      setMatchResult(null);
+
+      const response = await fetch(`/api/procurement/requirements/${requirementId}/match-suppliers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ supplierIds: eligibleSupplierIds }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setMatchResult({
+          type: 'error',
+          message: data?.error || 'Failed to send supplier invitations',
+        });
+        return;
+      }
+
+      setMatchResult({
+        type: 'success',
+        message: `Sent requirement to ${data?.cardsSent || eligibleSupplierIds.length} supplier(s).`,
+      });
+
+      await Promise.all([fetchRequirement(true), fetchMatchedSuppliers()]);
+    } catch {
+      setMatchResult({ type: 'error', message: 'Network error while sending invitations.' });
+    } finally {
+      setMatching(false);
+    }
   };
+
+  const filteredMatchedSuppliers = useMemo(() => {
+    const query = supplierSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return matchedSuppliers;
+    }
+
+    return matchedSuppliers.filter((supplier) =>
+      [supplier.companyName, supplier.name, supplier.tier]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [matchedSuppliers, supplierSearchQuery]);
+
+  const eligibleVisibleSupplierIds = filteredMatchedSuppliers
+    .filter((supplier) => supplier.canInvite)
+    .map((supplier) => supplier.id);
+
+  const allEligibleVisibleSelected =
+    eligibleVisibleSupplierIds.length > 0 &&
+    eligibleVisibleSupplierIds.every((supplierId) => selectedSupplierIds.includes(supplierId));
+
+  const toggleSupplierSelection = (supplierId: string, checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+      setSelectedSupplierIds((prev) => (prev.includes(supplierId) ? prev : [...prev, supplierId]));
+      return;
+    }
+
+    setSelectedSupplierIds((prev) => prev.filter((id) => id !== supplierId));
+  };
+
+  const toggleSelectAllVisibleEligible = (checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+      setSelectedSupplierIds((prev) => {
+        const merged = new Set([...prev, ...eligibleVisibleSupplierIds]);
+        return Array.from(merged);
+      });
+      return;
+    }
+
+    setSelectedSupplierIds((prev) =>
+      prev.filter((supplierId) => !eligibleVisibleSupplierIds.includes(supplierId))
+    );
+  };
+
+  const stats = useMemo(
+    () => ({
+      invited: requirement?.suppliersInvited || requirement?.suppliers.length || 0,
+      viewed:
+        requirement?.suppliers.filter((supplier) => supplier.status === 'VIEWED_RFQ').length || 0,
+      submitted:
+        requirement?.suppliers.filter((supplier) => supplier.status === 'QUOTATION_SUBMITTED').length ||
+        requirement?.quotationsReceived ||
+        0,
+      declined:
+        requirement?.suppliers.filter(
+          (supplier) => supplier.status === 'DECLINED' || supplier.status === 'EXPIRED'
+        ).length || 0,
+    }),
+    [requirement]
+  );
+
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center text-slate-400">
+        <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+        Loading requirement details...
+      </div>
+    );
+  }
+
+  if (!requirement) {
+    return (
+      <div className="space-y-4 p-6 text-center">
+        <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500" />
+        <p className="text-white">{error || 'Requirement not found'}</p>
+        <div className="flex justify-center gap-3">
+          <Button variant="outline" className="border-slate-600 text-slate-300" onClick={() => router.push('/admin/procurement')}>
+            Back to Procurement
+          </Button>
+          <Button className="bg-red-600 hover:bg-red-700" onClick={() => void fetchRequirement(true)}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-6">
+      {error && (
+        <div className="rounded-lg border border-red-500/30 bg-red-900/20 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
+      {matchResult && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            matchResult.type === 'success'
+              ? 'border-green-500/30 bg-green-900/20 text-green-300'
+              : 'border-red-500/30 bg-red-900/20 text-red-300'
+          }`}
+        >
+          {matchResult.message}
+        </div>
+      )}
+
+      {requirement.status === 'pending_match' && (
+        <Card className="border-slate-700 bg-slate-800">
+          <CardHeader>
+            <CardTitle className="text-white">Supplier Matching</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm text-slate-300">
+                {matchedSuppliers.filter((supplier) => supplier.canInvite).length} KYB-approved suppliers available.
+              </p>
+              <Input
+                value={supplierSearchQuery}
+                onChange={(event) => setSupplierSearchQuery(event.target.value)}
+                placeholder="Filter suppliers by name, company, or tier"
+                className="md:max-w-sm bg-slate-900 border-slate-700 text-white"
+              />
+            </div>
+
+            <div className="rounded-lg border border-slate-700 overflow-hidden">
+              <div className="grid grid-cols-12 border-b border-slate-700 bg-slate-900/70 px-3 py-2 text-xs uppercase tracking-wide text-slate-400">
+                <div className="col-span-1">
+                  <Checkbox
+                    checked={allEligibleVisibleSelected}
+                    onCheckedChange={toggleSelectAllVisibleEligible}
+                  />
+                </div>
+                <div className="col-span-5">Supplier</div>
+                <div className="col-span-2">Tier</div>
+                <div className="col-span-2">Match</div>
+                <div className="col-span-2">KYB</div>
+              </div>
+              {filteredMatchedSuppliers.length === 0 ? (
+                <div className="px-3 py-6 text-sm text-slate-400 text-center">No matched suppliers found.</div>
+              ) : (
+                filteredMatchedSuppliers.map((supplier) => (
+                  <div
+                    key={supplier.id}
+                    className="grid grid-cols-12 items-center border-b border-slate-700/60 px-3 py-2 text-sm last:border-b-0"
+                  >
+                    <div className="col-span-1">
+                      <Checkbox
+                        checked={selectedSupplierIds.includes(supplier.id)}
+                        onCheckedChange={(checked) => toggleSupplierSelection(supplier.id, checked)}
+                        disabled={!supplier.canInvite}
+                      />
+                    </div>
+                    <div className="col-span-5">
+                      <p className="text-white font-medium">{supplier.companyName || supplier.name}</p>
+                      <p className="text-xs text-slate-400">{supplier.name}</p>
+                    </div>
+                    <div className="col-span-2 text-slate-300">{supplier.tier}</div>
+                    <div className="col-span-2 text-slate-300">{supplier.matchScore}%</div>
+                    <div className="col-span-2">
+                      <Badge className={supplier.canInvite ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}>
+                        {supplier.canInvite ? 'Approved' : supplier.supplierUserKybStatus || 'Pending'}
+                      </Badge>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-slate-400">
+                Selected: {selectedSupplierIds.length} supplier(s)
+              </p>
+              <Button
+                onClick={handleAutoMatchSuppliers}
+                disabled={matching || selectedSupplierIds.length === 0}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {matching ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending Invitations...
+                  </>
+                ) : (
+                  `Send to Selected Suppliers (${selectedSupplierIds.length})`
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={() => router.push('/admin/procurement')} className="text-slate-400">
@@ -162,20 +421,33 @@ export default function ProcurementRequirementDetailPage() {
             Back to Procurement
           </Button>
           <div>
-            <p className="font-mono text-xs text-slate-500">{requirement.id}</p>
+            <p className="font-mono text-xs text-slate-500">{requirement.requirementReference}</p>
             <h1 className="text-2xl font-bold text-white">Supplier Outreach Status</h1>
             <p className="text-slate-400">{requirement.buyerCompany} • {requirement.productType}</p>
           </div>
         </div>
-        <Badge className={REQUIREMENT_STATUS_STYLE[requirement.status]}>
-          {requirement.status.replace(/_/g, ' ')}
-        </Badge>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            className="border-slate-600 text-slate-300"
+            onClick={() => {
+              void Promise.all([fetchRequirement(true), fetchMatchedSuppliers()]);
+            }}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Badge className={REQUIREMENT_STATUS_STYLE[requirement.status].className}>
+            {REQUIREMENT_STATUS_STYLE[requirement.status].label}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card className="border-slate-700 bg-slate-800">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-400">Suppliers Invited</p>
+            <p className="text-xs text-slate-400">Suppliers Contacted</p>
             <p className="text-2xl font-bold text-blue-400">{stats.invited}</p>
           </CardContent>
         </Card>
@@ -193,7 +465,7 @@ export default function ProcurementRequirementDetailPage() {
         </Card>
         <Card className="border-slate-700 bg-slate-800">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-400">Declined</p>
+            <p className="text-xs text-slate-400">Declined / Expired</p>
             <p className="text-2xl font-bold text-red-400">{stats.declined}</p>
           </CardContent>
         </Card>
@@ -203,10 +475,14 @@ export default function ProcurementRequirementDetailPage() {
         <CardHeader>
           <CardTitle className="text-white">Requirement Summary</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <div>
             <p className="text-xs text-slate-400">Product</p>
             <p className="text-white">{requirement.productType}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400">Category</p>
+            <p className="text-white">{requirement.category}</p>
           </div>
           <div>
             <p className="text-xs text-slate-400">Quantity</p>
@@ -218,6 +494,14 @@ export default function ProcurementRequirementDetailPage() {
               <Users className="h-4 w-4 text-slate-500" />
               {requirement.procurementOwner}
             </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400">Delivery</p>
+            <p className="text-white">{requirement.deliveryLocation}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400">Deadline</p>
+            <p className="text-white">{new Date(requirement.deliveryDeadline).toLocaleDateString()}</p>
           </div>
           <div>
             <p className="text-xs text-slate-400">Created</p>

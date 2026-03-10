@@ -56,19 +56,8 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // KYB check: user cannot accept quotes until KYB is completed
-    const buyer = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { kybStatus: true },
-    });
-
-    if (!buyer || buyer.kybStatus !== 'COMPLETED') {
-      return NextResponse.json({
-        error: 'KYB verification required',
-        message: 'You must complete KYB verification before accepting quotes. Go to your dashboard to start KYB.',
-        kybStatus: buyer?.kybStatus || 'PENDING',
-      }, { status: 403 });
-    }
+    // Important: acceptance is allowed here; KYB/good-standing is enforced during
+    // admin transaction creation in /api/admin/transactions/create.
 
     // Update accepted quotation
     await prisma.quotation.update({

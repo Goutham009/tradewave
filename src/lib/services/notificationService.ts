@@ -1,5 +1,7 @@
 import prisma from '@/lib/db';
 import { emitToUser, SOCKET_EVENTS, NOTIFICATION_TYPES } from '@/lib/socket/server';
+import { sendEmail } from '@/lib/email/service';
+import type { EmailTemplateName } from '@/lib/email/service';
 
 export interface NotificationPayload {
   userId: string;
@@ -58,10 +60,24 @@ export async function createNotification(payload: NotificationPayload): Promise<
   }
 }
 
-// Send email notification (stub - integrate with SendGrid/Resend)
+// Map notification types to email template names
+const NOTIFICATION_TYPE_TO_TEMPLATE: Record<string, EmailTemplateName> = {
+  [NOTIFICATION_TYPES.QUOTATION_RECEIVED]: 'quote_received',
+  [NOTIFICATION_TYPES.QUOTATION_ACCEPTED]: 'quote_accepted',
+  [NOTIFICATION_TYPES.QUOTATION_EXPIRING]: 'quote_received',
+  [NOTIFICATION_TYPES.TRANSACTION_CREATED]: 'transaction_created',
+  PAYMENT_RECEIVED: 'payment_received',
+  [NOTIFICATION_TYPES.FUNDS_RELEASED]: 'payment_released',
+  [NOTIFICATION_TYPES.DELIVERY_CONFIRMED]: 'delivery_confirmed',
+  [NOTIFICATION_TYPES.SHIPMENT_UPDATE]: 'delivery_update',
+  [NOTIFICATION_TYPES.DISPUTE_OPENED]: 'dispute_opened',
+  [NOTIFICATION_TYPES.QUALITY_APPROVED]: 'transaction_updated',
+  [NOTIFICATION_TYPES.NEW_REQUIREMENT_MATCH]: 'transaction_updated',
+};
+
+// Send email notification via the Resend-powered email service
 async function sendEmailNotification(payload: NotificationPayload): Promise<void> {
   try {
-    // Get user email
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       select: { email: true, name: true },
@@ -69,17 +85,23 @@ async function sendEmailNotification(payload: NotificationPayload): Promise<void
 
     if (!user?.email) return;
 
-    // TODO: Integrate with email provider (SendGrid, Resend, etc.)
-    console.log(`[EMAIL] Sending to ${user.email}: ${payload.title}`);
-    
-    // Example SendGrid integration:
-    // await sendgrid.send({
-    //   to: user.email,
-    //   from: process.env.SENDGRID_FROM_EMAIL,
-    //   subject: payload.title,
-    //   text: payload.message,
-    //   html: generateEmailTemplate(payload),
-    // });
+    const template: EmailTemplateName =
+      NOTIFICATION_TYPE_TO_TEMPLATE[payload.type] || 'transaction_updated';
+
+    await sendEmail({
+      to: user.email,
+      subject: payload.title,
+      template,
+      data: {
+        name: user.name || 'there',
+        title: payload.title,
+        message: payload.message,
+        resourceType: payload.resourceType,
+        resourceId: payload.resourceId,
+        ...payload.metadata,
+      },
+      userId: payload.userId,
+    });
   } catch (error) {
     console.error('Failed to send email notification:', error);
   }

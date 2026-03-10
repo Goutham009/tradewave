@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
+import { cacheGetOrSet, checkRateLimit } from '@/lib/redis';
 
 function successResponse(data: any, status = 200) {
   return NextResponse.json({ status: 'success', data }, { status });
@@ -23,103 +24,128 @@ export async function GET(request: NextRequest) {
       return errorResponse('Forbidden - Admin access required', 403);
     }
 
-    // Fetch dashboard statistics
-    const [
-      totalUsers,
-      totalSuppliers,
-      verifiedSuppliers,
-      totalTransactions,
-      transactions,
-      openDisputes,
-    ] = await Promise.all([
-      prisma.user.count(),
-      prisma.supplier.count(),
-      prisma.supplier.count({ where: { verified: true } }),
-      prisma.transaction.count(),
-      prisma.transaction.findMany({
-        select: {
-          amount: true,
-          status: true,
-          createdAt: true,
-        },
-      }),
-      prisma.transaction.count({ where: { status: 'DISPUTED' } }),
-    ]);
+    const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || request.headers.get('x-real-ip')
+      || 'unknown';
+    const rateLimit = await checkRateLimit(`rate:admin:dashboard:${session.user.id}:${ipAddress}`, 120, 60);
 
-    // Calculate GMV and revenue
-    const totalGMV = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
-    
-    // Monthly stats (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
-    const monthlyTransactions = transactions.filter(
-      t => new Date(t.createdAt) >= thirtyDaysAgo
-    );
-    const monthlyGMV = monthlyTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
-    
-    // Platform fee is typically 2-3%
-    const platformFeeRate = 0.03;
-    const platformRevenue = totalGMV * platformFeeRate;
-    const monthlyRevenue = monthlyGMV * platformFeeRate;
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { status: 'error', error: 'Too many requests. Please try again shortly.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rateLimit.resetIn),
+          },
+        }
+      );
+    }
 
-    // Pending transactions
-    const pendingTransactions = transactions.filter(
-      t => ['INITIATED', 'PAYMENT_PENDING', 'ESCROW_HELD'].includes(t.status)
-    ).length;
+    const dashboardData = await cacheGetOrSet(
+      'admin:dashboard:overview:v1',
+      async () => {
+        // Fetch dashboard statistics
+        const [
+          totalUsers,
+          totalSuppliers,
+          verifiedSuppliers,
+          totalTransactions,
+          transactions,
+          openDisputes,
+        ] = await Promise.all([
+          prisma.user.count(),
+          prisma.supplier.count(),
+          prisma.supplier.count({ where: { verified: true } }),
+          prisma.transaction.count(),
+          prisma.transaction.findMany({
+            select: {
+              amount: true,
+              status: true,
+              createdAt: true,
+            },
+          }),
+          prisma.transaction.count({ where: { status: 'DISPUTED' } }),
+        ]);
 
-    // Active users (users who logged in last 30 days) - simplified
-    const activeUsers = Math.floor(totalUsers * 0.7); // Estimate
+        // Calculate GMV and revenue
+        const totalGMV = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
 
-    // Get recent activity
-    const recentTransactions = await prisma.transaction.findMany({
-      take: 5,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        buyer: { select: { name: true, email: true } },
-        supplier: { select: { companyName: true } },
+        // Monthly stats (last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const monthlyTransactions = transactions.filter(
+          t => new Date(t.createdAt) >= thirtyDaysAgo
+        );
+        const monthlyGMV = monthlyTransactions.reduce((sum, t) => sum + Number(t.amount), 0);
+
+        // Platform fee is typically 2-3%
+        const platformFeeRate = 0.03;
+        const platformRevenue = totalGMV * platformFeeRate;
+        const monthlyRevenue = monthlyGMV * platformFeeRate;
+
+        // Pending transactions
+        const pendingTransactions = transactions.filter(
+          t => ['INITIATED', 'PAYMENT_PENDING', 'ESCROW_HELD'].includes(t.status)
+        ).length;
+
+        // Active users (users who logged in last 30 days) - simplified
+        const activeUsers = Math.floor(totalUsers * 0.7); // Estimate
+
+        // Get recent activity
+        const recentTransactions = await prisma.transaction.findMany({
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            buyer: { select: { name: true, email: true } },
+            supplier: { select: { companyName: true } },
+          },
+        });
+
+        const recentUsers = await prisma.user.findMany({
+          take: 3,
+          orderBy: { createdAt: 'desc' },
+          select: { name: true, email: true, createdAt: true },
+        });
+
+        const recentActivity = [
+          ...recentUsers.map(u => ({
+            id: `user-${u.email}`,
+            type: 'USER',
+            description: `New user registered: ${u.email}`,
+            timestamp: getRelativeTime(u.createdAt),
+            status: 'success',
+          })),
+          ...recentTransactions.map(t => ({
+            id: `txn-${t.id}`,
+            type: 'TRANSACTION',
+            description: `Transaction ${t.id.slice(0, 12)} - ${t.status}`,
+            timestamp: getRelativeTime(t.createdAt),
+            status: t.status === 'COMPLETED' ? 'success' : t.status === 'DISPUTED' ? 'warning' : 'pending',
+          })),
+        ].slice(0, 10);
+
+        const stats = {
+          totalUsers,
+          activeUsers,
+          totalSuppliers,
+          verifiedSuppliers,
+          totalTransactions,
+          pendingTransactions,
+          totalGMV,
+          monthlyGMV,
+          totalDisputes: openDisputes + 18, // Add some resolved ones
+          openDisputes,
+          platformRevenue,
+          monthlyRevenue,
+        };
+
+        return { stats, recentActivity };
       },
-    });
+      180
+    );
 
-    const recentUsers = await prisma.user.findMany({
-      take: 3,
-      orderBy: { createdAt: 'desc' },
-      select: { name: true, email: true, createdAt: true },
-    });
-
-    const recentActivity = [
-      ...recentUsers.map(u => ({
-        id: `user-${u.email}`,
-        type: 'USER',
-        description: `New user registered: ${u.email}`,
-        timestamp: getRelativeTime(u.createdAt),
-        status: 'success',
-      })),
-      ...recentTransactions.map(t => ({
-        id: `txn-${t.id}`,
-        type: 'TRANSACTION',
-        description: `Transaction ${t.id.slice(0, 12)} - ${t.status}`,
-        timestamp: getRelativeTime(t.createdAt),
-        status: t.status === 'COMPLETED' ? 'success' : t.status === 'DISPUTED' ? 'warning' : 'pending',
-      })),
-    ].slice(0, 10);
-
-    const stats = {
-      totalUsers,
-      activeUsers,
-      totalSuppliers,
-      verifiedSuppliers,
-      totalTransactions,
-      pendingTransactions,
-      totalGMV,
-      monthlyGMV,
-      totalDisputes: openDisputes + 18, // Add some resolved ones
-      openDisputes,
-      platformRevenue,
-      monthlyRevenue,
-    };
-
-    return successResponse({ stats, recentActivity });
+    return successResponse(dashboardData);
   } catch (error) {
     console.error('Failed to fetch admin dashboard:', error);
     return errorResponse('Internal server error', 500);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,11 +43,14 @@ const PAYMENT_METHODS = [
 
 export default function CreateRequirementPage() {
   const params = useParams();
+  const leadId = typeof params.id === 'string' ? params.id : '';
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [createdReq, setCreatedReq] = useState<any>(null);
+  const [leadError, setLeadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Pre-filled from lead data
   const [leadData, setLeadData] = useState<any>(null);
@@ -81,46 +84,31 @@ export default function CreateRequirementPage() {
     internalNotes: '',
   });
 
-  useEffect(() => {
-    fetchLeadData();
-  }, [params.id]);
-
-  const fetchLeadData = async () => {
+  const fetchLeadData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/admin/leads/${params.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setLeadData(data.lead);
-        prefillFromLead(data.lead);
-      } else {
-        loadDemoLead();
+      setLeadError(null);
+
+      const res = await fetch(`/api/admin/leads/${leadId}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to load lead details');
       }
-    } catch {
-      loadDemoLead();
+
+      setLeadData(data.lead);
+      prefillFromLead(data.lead);
+    } catch (error) {
+      console.error('Error loading lead details:', error);
+      setLeadData(null);
+      setLeadError(error instanceof Error ? error.message : 'Failed to load lead details');
     } finally {
       setLoading(false);
     }
-  };
+  }, [leadId]);
 
-  const loadDemoLead = () => {
-    const demo = {
-      id: params.id,
-      fullName: 'John Doe',
-      companyName: 'ABC Corp',
-      email: 'john@abccorp.com',
-      category: 'Metals',
-      productName: 'Industrial Steel Pipes',
-      quantity: 500,
-      unit: 'MT',
-      location: 'Mumbai, India',
-      timeline: '1-3 months',
-      targetPrice: '1200',
-      additionalReqs: 'Need ISO 9001 certified suppliers. Quality inspection required.',
-      convertedUserId: 'usr_demo_001',
-    };
-    setLeadData(demo);
-    prefillFromLead(demo);
-  };
+  useEffect(() => {
+    void fetchLeadData();
+  }, [fetchLeadData]);
 
   const prefillFromLead = (lead: any) => {
     const deadlineDays = lead.timeline?.includes('7 days') ? 7
@@ -172,29 +160,37 @@ export default function CreateRequirementPage() {
     if (!form.title || !form.description || !form.category || !form.quantity || !form.deliveryLocation || !form.deliveryDeadline) {
       return;
     }
+
+    if (!leadData?.convertedUserId) {
+      setSubmitError('Create the user account first before submitting a requirement.');
+      return;
+    }
+
     setSubmitting(true);
+    setSubmitError(null);
+
     try {
       const res = await fetch('/api/am/requirements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          buyerId: leadData?.convertedUserId || 'usr_demo_001',
-          createdByUserId: 'am_sarah_001',
+          buyerId: leadData.convertedUserId,
           ...form,
           preferredGeographies: form.preferredGeographies ? form.preferredGeographies.split(',').map((g: string) => g.trim()) : [],
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setCreatedReq(data.requirement);
-        setSubmitted(true);
-      } else {
-        setCreatedReq({ id: 'req_demo_001', title: form.title, status: 'PENDING_ADMIN_REVIEW' });
-        setSubmitted(true);
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create requirement');
       }
-    } catch {
-      setCreatedReq({ id: 'req_demo_001', title: form.title, status: 'PENDING_ADMIN_REVIEW' });
+
+      setCreatedReq(data.requirement);
       setSubmitted(true);
+    } catch (error) {
+      console.error('Error creating requirement from lead:', error);
+      setSubmitError(error instanceof Error ? error.message : 'Failed to create requirement');
     } finally {
       setSubmitting(false);
     }
@@ -218,6 +214,9 @@ export default function CreateRequirementPage() {
             <p className="text-slate-400 mb-4">
               <strong className="text-white">{createdReq.title}</strong> has been submitted for admin review.
             </p>
+            {createdReq.referenceId && (
+              <p className="mb-3 font-mono text-sm text-cyan-300">Requirement No: {createdReq.referenceId}</p>
+            )}
             <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 mb-6">
               {createdReq.status?.replace(/_/g, ' ')}
             </Badge>
@@ -232,6 +231,21 @@ export default function CreateRequirementPage() {
           </CardContent>
         </Card>
       </div>
+    );
+  }
+
+  if (!leadData) {
+    return (
+      <Card className="bg-slate-800 border-red-500/30">
+        <CardContent className="py-12 text-center">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-white">Unable to load lead data</h3>
+          {leadError && <p className="mt-2 text-sm text-red-300">{leadError}</p>}
+          <Button className="mt-4 bg-red-600 hover:bg-red-700" onClick={() => router.push('/admin/leads')}>
+            Back to Leads
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -468,8 +482,20 @@ export default function CreateRequirementPage() {
       </Card>
 
       {/* Submit */}
+      {!leadData?.convertedUserId && (
+        <div className="rounded-lg border border-yellow-500/30 bg-yellow-900/20 p-4 text-sm text-yellow-200">
+          This lead is not yet converted to a user. Create the user account first from lead details, then return to submit the requirement.
+        </div>
+      )}
+
+      {submitError && (
+        <div className="rounded-lg border border-red-500/30 bg-red-900/20 p-4 text-sm text-red-300">
+          {submitError}
+        </div>
+      )}
+
       <Button className="w-full bg-red-600 hover:bg-red-700 text-white py-6 text-lg" onClick={handleSubmit}
-        disabled={submitting || !form.title || !form.category || !form.quantity || !form.deliveryLocation || !form.deliveryDeadline}>
+        disabled={submitting || !leadData?.convertedUserId || !form.title || !form.category || !form.quantity || !form.deliveryLocation || !form.deliveryDeadline}>
         {submitting ? <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Creating...</> : <><CheckCircle2 className="h-5 w-5 mr-2" /> Submit Requirement for Admin Review</>}
       </Button>
     </div>

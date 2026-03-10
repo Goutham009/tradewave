@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Ban, Search, Plus, Eye, Trash2, Clock, AlertTriangle } from 'lucide-react';
 
 export default function AdminBlacklistPage() {
@@ -10,11 +10,7 @@ export default function AdminBlacklistPage() {
   const [stats, setStats] = useState<Record<string, number>>({});
   const [showAddModal, setShowAddModal] = useState(false);
 
-  useEffect(() => {
-    fetchBlacklist();
-  }, [filters.status, filters.reason]);
-
-  const fetchBlacklist = async () => {
+  const fetchBlacklist = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -33,7 +29,11 @@ export default function AdminBlacklistPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.status, filters.reason, filters.search]);
+
+  useEffect(() => {
+    fetchBlacklist();
+  }, [fetchBlacklist]);
 
   const handleUnblacklist = async (buyerId: string) => {
     if (!confirm('Are you sure you want to remove this buyer from the blacklist?')) return;

@@ -3,6 +3,11 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
 import { formatQuotationReference, formatRequirementReference } from '@/lib/flow-references';
+import {
+  getDemoQuotationByIdPayload,
+  isLikelyDemoIdentifier,
+  shouldUseDemoFallback,
+} from '@/lib/demo/fallback';
 
 // Standard response helpers
 function successResponse(data: any, status = 200) {
@@ -150,50 +155,46 @@ export async function GET(
       return errorResponse('Unauthorized', 401);
     }
 
-    let quotation;
-    try {
-      quotation = await prisma.quotation.findUnique({
-        where: { id: params.id },
-        include: {
-          requirement: {
-            include: {
-              buyer: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                  companyName: true,
-                  phone: true,
-                },
-              },
-              attachments: true,
-            },
-          },
-          supplier: {
-            include: {
-              certifications: {
-                where: { verified: true },
+    const quotation = await prisma.quotation.findUnique({
+      where: { id: params.id },
+      include: {
+        requirement: {
+          include: {
+            buyer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                companyName: true,
+                phone: true,
               },
             },
+            attachments: true,
           },
-          transactions: {
-            select: {
-              id: true,
-              status: true,
-              createdAt: true,
+        },
+        supplier: {
+          include: {
+            certifications: {
+              where: { verified: true },
             },
           },
         },
-      });
-    } catch (dbError) {
-      console.error('Database error, using mock data:', dbError);
-      quotation = null;
-    }
+        transactions: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
 
-    // Use mock data if no quotation found
     if (!quotation) {
-      const mockQuotation = getMockQuotation(params.id);
-      return successResponse({ quotation: mockQuotation });
+      if (isLikelyDemoIdentifier(params.id, ['quo_demo_', 'quo-', 'quo_'])) {
+        return NextResponse.json(getDemoQuotationByIdPayload(params.id));
+      }
+
+      return errorResponse('Quotation not found', 404);
     }
 
     // Check authorization
@@ -222,9 +223,12 @@ export async function GET(
     });
   } catch (error) {
     console.error('Failed to fetch quotation:', error);
-    // Return mock data on error instead of error response
-    const mockQuotation = getMockQuotation(params.id);
-    return successResponse({ quotation: mockQuotation });
+
+    if (shouldUseDemoFallback(error)) {
+      return NextResponse.json(getDemoQuotationByIdPayload(params.id));
+    }
+
+    return errorResponse('Failed to fetch quotation', 500);
   }
 }
 

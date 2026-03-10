@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { createPaymentIntent } from '@/lib/services/paymentService';
+import { sendPaymentConfirmedEmail } from '@/lib/email/triggers';
 import {
   buildOrderReferences,
   formatQuotationReference,
@@ -87,14 +89,50 @@ export async function POST(
       supplierUserId = supplierUser?.id || null;
     }
 
-    // Create payment record
+    if (!paymentType || !['advance', 'balance'].includes(paymentType)) {
+      return NextResponse.json({ error: 'Invalid payment type. Use: advance or balance' }, { status: 400 });
+    }
+
+    const parsedAmount = parseFloat(amount);
+    const isStripe = paymentMethod !== 'BANK_TRANSFER' && paymentMethod !== 'WIRE';
+
+    // --- Stripe integration: create a PaymentIntent instead of marking SUCCEEDED immediately ---
+    let stripePaymentIntentId: string | null = null;
+    let stripeClientSecret: string | null = null;
+
+    if (isStripe) {
+      const stripeResult = await createPaymentIntent({
+        amount: parsedAmount,
+        currency: transaction.currency || 'USD',
+        transactionId: params.id,
+        buyerId: session.user.id,
+        metadata: {
+          paymentType,
+          escrowId: transaction.escrow.id,
+        },
+      });
+
+      if (!stripeResult.success || !stripeResult.clientSecret) {
+        return NextResponse.json(
+          { error: stripeResult.error || 'Failed to create Stripe payment intent' },
+          { status: 502 }
+        );
+      }
+
+      stripePaymentIntentId = stripeResult.paymentIntentId || null;
+      stripeClientSecret = stripeResult.clientSecret;
+    }
+
+    // Create payment record — stays PROCESSING until webhook (Stripe) or manual verification (bank)
     const payment = await prisma.payment.create({
       data: {
         transactionId: params.id,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         currency: transaction.currency,
-        method: paymentMethod === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'STRIPE',
+        method: isStripe ? 'STRIPE' : 'BANK_TRANSFER',
         status: 'PROCESSING',
+        providerPaymentId: stripePaymentIntentId,
+        clientSecret: stripeClientSecret,
         metadata: {
           paymentType,
           buyerId: session.user.id,
@@ -103,135 +141,204 @@ export async function POST(
       },
     });
 
-    if (paymentType === 'advance') {
-      // Update escrow with advance payment
-      await prisma.escrowTransaction.update({
-        where: { id: transaction.escrow.id },
-        data: {
-          advancePaid: true,
-          advancePaidAt: new Date(),
-          advancePaidAmount: parseFloat(amount),
-          status: 'FUNDS_HELD',
-        },
+    // Update transaction to reflect payment is in-progress
+    await prisma.transaction.update({
+      where: { id: params.id },
+      data: {
+        paymentMethod: isStripe ? 'ESCROW' : (paymentMethod || 'BANK_TRANSFER'),
+        paymentStatus: 'PROCESSING',
+      },
+    });
+
+    // --- For non-Stripe methods, mark as SUCCEEDED immediately (bank transfer confirmed externally) ---
+    if (!isStripe) {
+      await finalizePayment({
+        paymentId: payment.id,
+        transactionId: params.id,
+        escrowId: transaction.escrow.id,
+        paymentType,
+        amount: parsedAmount,
+        buyerId: session.user.id,
+        supplierUserId,
+        amId: transaction.requirement.assignedAccountManagerId,
+        references,
       });
 
-      // Update transaction status
-      await prisma.transaction.update({
-        where: { id: params.id },
-        data: {
-          status: 'PAYMENT_RECEIVED',
-          paymentMethod: paymentMethod || 'ESCROW',
-          paymentStatus: 'SUCCEEDED',
-          paymentConfirmedAt: new Date(),
-        },
-      });
-
-      // Update payment to succeeded
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'SUCCEEDED' },
-      });
-
-      const admins = await prisma.user.findMany({
-        where: { role: 'ADMIN' },
-        select: { id: true },
-      });
-
-      const notifications = [
-        {
-          userId: session.user.id,
-          type: 'PAYMENT_RECEIVED' as const,
-          title: 'Advance Payment Submitted',
-          message: `Advance payment for ${references.transactionReference} (${references.buyerOrderId}) was submitted successfully.`,
-          resourceType: 'transaction',
-          resourceId: transaction.id,
-        },
-        ...admins.map((admin) => ({
-          userId: admin.id,
-          type: 'PAYMENT_RECEIVED' as const,
-          title: 'Buyer Payment Submitted',
-          message: `Buyer submitted advance payment for ${references.transactionReference}. Please verify and confirm transaction progression.`,
-          resourceType: 'transaction',
-          resourceId: transaction.id,
-        })),
-        ...(supplierUserId
-          ? [
-              {
-                userId: supplierUserId,
-                type: 'PAYMENT_RECEIVED' as const,
-                title: 'Buyer Payment Received',
-                message: `Advance payment was recorded for ${references.supplierOrderId}. Prepare production kickoff.`,
-                resourceType: 'transaction',
-                resourceId: transaction.id,
-              },
-            ]
-          : []),
-        ...(transaction.requirement.assignedAccountManagerId
-          ? [
-              {
-                userId: transaction.requirement.assignedAccountManagerId,
-                type: 'PAYMENT_RECEIVED' as const,
-                title: 'Client Payment Completed',
-                message: `Your client paid advance for ${references.transactionReference}. Monitor next production milestones.`,
-                resourceType: 'transaction',
-                resourceId: transaction.id,
-              },
-            ]
-          : []),
-      ];
-
-      await prisma.notification.createMany({
-        data: notifications,
-      });
+      // Send payment confirmed email
+      sendPaymentConfirmedEmail(params.id).catch(console.error);
 
       return NextResponse.json({
         status: 'success',
         payment: {
           id: payment.id,
-          type: 'advance',
-          amount: parseFloat(amount),
+          type: paymentType,
+          amount: parsedAmount,
           status: 'SUCCEEDED',
+          method: 'BANK_TRANSFER',
         },
         transaction: {
           id: params.id,
-          status: 'PAYMENT_RECEIVED',
-          nextStep: 'Supplier will begin production',
+          status: paymentType === 'advance' ? 'PAYMENT_RECEIVED' : transaction.status,
+          nextStep: paymentType === 'advance' ? 'Supplier will begin production' : 'Balance payment recorded',
         },
         references: buyerVisibleReferences,
       });
-    } else if (paymentType === 'balance') {
-      // Update escrow with balance payment
-      await prisma.escrowTransaction.update({
-        where: { id: transaction.escrow.id },
-        data: {
-          balancePaid: true,
-          balancePaidAt: new Date(),
-          balanceReleasedAmount: parseFloat(amount),
-        },
-      });
-
-      // Update payment to succeeded
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'SUCCEEDED' },
-      });
-
-      return NextResponse.json({
-        status: 'success',
-        payment: {
-          id: payment.id,
-          type: 'balance',
-          amount: parseFloat(amount),
-          status: 'SUCCEEDED',
-        },
-        references: buyerVisibleReferences,
-      });
-    } else {
-      return NextResponse.json({ error: 'Invalid payment type. Use: advance or balance' }, { status: 400 });
     }
+
+    // --- For Stripe, return clientSecret so frontend can confirm on client side ---
+    // Payment stays PROCESSING until Stripe webhook confirms it
+    return NextResponse.json({
+      status: 'pending_confirmation',
+      payment: {
+        id: payment.id,
+        type: paymentType,
+        amount: parsedAmount,
+        status: 'PROCESSING',
+        method: 'STRIPE',
+      },
+      stripe: {
+        clientSecret: stripeClientSecret,
+        paymentIntentId: stripePaymentIntentId,
+      },
+      transaction: {
+        id: params.id,
+        status: transaction.status,
+        nextStep: 'Complete payment via Stripe checkout',
+      },
+      references: buyerVisibleReferences,
+    });
   } catch (error) {
     console.error('Error processing payment:', error);
     return NextResponse.json({ error: 'Failed to process payment' }, { status: 500 });
+  }
+}
+
+// Helper: finalize a payment (mark SUCCEEDED, update escrow, create notifications)
+// Used by both the bank-transfer immediate path and the Stripe webhook
+interface FinalizePaymentParams {
+  paymentId: string;
+  transactionId: string;
+  escrowId: string;
+  paymentType: string;
+  amount: number;
+  buyerId: string;
+  supplierUserId: string | null;
+  amId: string | null;
+  references: Record<string, string>;
+}
+
+export async function finalizePayment(params: FinalizePaymentParams) {
+  const { paymentId, transactionId, escrowId, paymentType, amount, buyerId, supplierUserId, amId, references } = params;
+
+  // Mark payment SUCCEEDED
+  await prisma.payment.update({
+    where: { id: paymentId },
+    data: {
+      status: 'SUCCEEDED',
+      paidAt: new Date(),
+      failedAt: null,
+    },
+  });
+
+  if (paymentType === 'advance') {
+    await prisma.escrowTransaction.update({
+      where: { id: escrowId },
+      data: {
+        advancePaid: true,
+        advancePaidAt: new Date(),
+        advancePaidAmount: amount,
+        status: 'FUNDS_HELD',
+      },
+    });
+
+    await prisma.transaction.update({
+      where: { id: transactionId },
+      data: {
+        status: 'PAYMENT_RECEIVED',
+        paymentStatus: 'SUCCEEDED',
+        paymentConfirmedAt: new Date(),
+      },
+    });
+  } else {
+    // balance
+    await prisma.escrowTransaction.update({
+      where: { id: escrowId },
+      data: {
+        balancePaid: true,
+        balancePaidAt: new Date(),
+        balanceReleasedAmount: amount,
+      },
+    });
+
+    await prisma.transaction.update({
+      where: { id: transactionId },
+      data: { paymentStatus: 'SUCCEEDED' },
+    });
+  }
+
+  // Create notifications for all stakeholders
+  const txRef = references.transactionReference || transactionId;
+  const notifications: Array<{
+    userId: string;
+    type: 'PAYMENT_RECEIVED';
+    title: string;
+    message: string;
+    resourceType: string;
+    resourceId: string;
+  }> = [];
+
+  // Buyer
+  notifications.push({
+    userId: buyerId,
+    type: 'PAYMENT_RECEIVED',
+    title: paymentType === 'advance' ? 'Advance Payment Confirmed' : 'Balance Payment Confirmed',
+    message: `Your ${paymentType} payment for ${txRef} has been confirmed.`,
+    resourceType: 'transaction',
+    resourceId: transactionId,
+  });
+
+  // Supplier
+  if (supplierUserId) {
+    notifications.push({
+      userId: supplierUserId,
+      type: 'PAYMENT_RECEIVED',
+      title: 'Buyer Payment Received',
+      message: `${paymentType === 'advance' ? 'Advance' : 'Balance'} payment received for ${txRef}. ${paymentType === 'advance' ? 'Prepare production kickoff.' : ''}`,
+      resourceType: 'transaction',
+      resourceId: transactionId,
+    });
+  }
+
+  // AM
+  if (amId) {
+    notifications.push({
+      userId: amId,
+      type: 'PAYMENT_RECEIVED',
+      title: 'Client Payment Completed',
+      message: `Client paid ${paymentType} for ${txRef}.`,
+      resourceType: 'transaction',
+      resourceId: transactionId,
+    });
+  }
+
+  // Admins
+  const admins = await prisma.user.findMany({
+    where: { role: 'ADMIN' },
+    select: { id: true },
+  });
+  for (const admin of admins) {
+    notifications.push({
+      userId: admin.id,
+      type: 'PAYMENT_RECEIVED',
+      title: 'Buyer Payment Submitted',
+      message: `Buyer submitted ${paymentType} payment for ${txRef}. Verify and confirm.`,
+      resourceType: 'transaction',
+      resourceId: transactionId,
+    });
+  }
+
+  if (notifications.length > 0) {
+    await prisma.notification.createMany({ data: notifications });
   }
 }
 

@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import prisma from '@/lib/db';
+import { createHash } from 'crypto';
 import * as escrowService from '@/lib/services/escrowService';
+import { recordAuditAction, registerDocumentHash } from '@/lib/services/blockchainService';
 import {
   buildOrderReferences,
   formatQuotationReference,
   formatRequirementReference,
   formatTransactionReference,
 } from '@/lib/flow-references';
+import {
+  getDemoTransactionByIdPayload,
+  isLikelyDemoIdentifier,
+  shouldUseDemoFallback,
+} from '@/lib/demo/fallback';
 
 // Standard response helpers
 function successResponse(data: any, status = 200) {
@@ -17,6 +24,92 @@ function successResponse(data: any, status = 200) {
 
 function errorResponse(message: string, status: number, details?: any) {
   return NextResponse.json({ status: 'error', error: message, details }, { status });
+}
+
+const AUDIT_LOG_CONTRACT_ADDRESS =
+  process.env.BLOCKCHAIN_AUDIT_LOG_CONTRACT_ADDRESS || process.env.AUDIT_LOG_CONTRACT_ADDRESS || '';
+const DOCUMENT_VERIFICATION_CONTRACT_ADDRESS =
+  process.env.BLOCKCHAIN_DOCUMENT_VERIFICATION_CONTRACT_ADDRESS ||
+  process.env.DOCUMENT_VERIFICATION_CONTRACT_ADDRESS ||
+  '';
+
+type TransactionDocumentForChain = {
+  id: string;
+  type: string;
+  name: string;
+  url: string;
+  hash: string | null;
+};
+
+function buildDocumentHash(document: TransactionDocumentForChain, transactionId: string) {
+  if (document.hash) {
+    return document.hash;
+  }
+
+  return createHash('sha256')
+    .update(`${transactionId}:${document.id}:${document.type}:${document.name}:${document.url}`)
+    .digest('hex');
+}
+
+async function writeBlockchainAudit(
+  action: string,
+  transactionId: string,
+  actorId: string,
+  details: string
+) {
+  if (!AUDIT_LOG_CONTRACT_ADDRESS) {
+    return;
+  }
+
+  try {
+    await recordAuditAction(
+      action,
+      transactionId,
+      'transaction',
+      actorId,
+      details,
+      AUDIT_LOG_CONTRACT_ADDRESS
+    );
+  } catch (error) {
+    console.error('Failed to record on-chain audit action:', error);
+  }
+}
+
+async function registerVerifiedDocumentsOnChain(
+  transactionId: string,
+  documents: TransactionDocumentForChain[]
+) {
+  if (!DOCUMENT_VERIFICATION_CONTRACT_ADDRESS || documents.length === 0) {
+    return;
+  }
+
+  try {
+    const existingDocumentHashes = await prisma.documentHash.findMany({
+      where: { transactionId },
+      select: { hash: true },
+    });
+    const existingHashSet = new Set(existingDocumentHashes.map((item) => item.hash));
+
+    const pending = documents
+      .map((document) => ({
+        document,
+        hash: buildDocumentHash(document, transactionId),
+      }))
+      .filter((item) => !existingHashSet.has(item.hash));
+
+    await Promise.allSettled(
+      pending.map((item) =>
+        registerDocumentHash(
+          item.hash,
+          item.document.type,
+          transactionId,
+          DOCUMENT_VERIFICATION_CONTRACT_ADDRESS
+        )
+      )
+    );
+  } catch (error) {
+    console.error('Failed to register document hashes on-chain:', error);
+  }
 }
 
 // Helper to check and release escrow funds if all conditions met
@@ -199,81 +292,77 @@ export async function GET(
       return errorResponse('Unauthorized', 401);
     }
 
-    let transaction;
-    try {
-      transaction = await prisma.transaction.findUnique({
-        where: { id: params.id },
-        include: {
-          requirement: {
-            include: {
-              attachments: true,
-            },
-          },
-          quotation: {
-            include: {
-              supplier: {
-                select: {
-                  id: true,
-                  name: true,
-                  companyName: true,
-                  location: true,
-                  email: true,
-                  phone: true,
-                  verified: true,
-                  overallRating: true,
-                  totalReviews: true,
-                },
-              },
-            },
-          },
-          buyer: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              companyName: true,
-              phone: true,
-            },
-          },
-          supplier: {
-            select: {
-              id: true,
-              name: true,
-              companyName: true,
-              location: true,
-              email: true,
-              phone: true,
-              verified: true,
-              overallRating: true,
-            },
-          },
-          escrow: {
-            include: {
-              releaseConditions: {
-                orderBy: { type: 'asc' },
-              },
-            },
-          },
-          milestones: {
-            orderBy: { timestamp: 'desc' },
-          },
-          documents: {
-            orderBy: { uploadedAt: 'desc' },
-          },
-          payments: {
-            orderBy: { createdAt: 'desc' },
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: params.id },
+      include: {
+        requirement: {
+          include: {
+            attachments: true,
           },
         },
-      });
-    } catch (dbError) {
-      console.error('Database error, using mock data:', dbError);
-      transaction = null;
-    }
+        quotation: {
+          include: {
+            supplier: {
+              select: {
+                id: true,
+                name: true,
+                companyName: true,
+                location: true,
+                email: true,
+                phone: true,
+                verified: true,
+                overallRating: true,
+                totalReviews: true,
+              },
+            },
+          },
+        },
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            companyName: true,
+            phone: true,
+          },
+        },
+        supplier: {
+          select: {
+            id: true,
+            name: true,
+            companyName: true,
+            location: true,
+            email: true,
+            phone: true,
+            verified: true,
+            overallRating: true,
+          },
+        },
+        escrow: {
+          include: {
+            releaseConditions: {
+              orderBy: { type: 'asc' },
+            },
+          },
+        },
+        milestones: {
+          orderBy: { timestamp: 'desc' },
+        },
+        documents: {
+          orderBy: { uploadedAt: 'desc' },
+        },
+        payments: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
 
-    // Use mock data if no transaction found
     if (!transaction) {
-      const mockTransaction = getMockTransaction(params.id);
-      return successResponse({ transaction: mockTransaction });
+      if (isLikelyDemoIdentifier(params.id, ['txn_demo_', 'txn-', 'txn_', 'TXN-'])) {
+        return NextResponse.json(getDemoTransactionByIdPayload(params.id));
+      }
+
+      return errorResponse('Transaction not found', 404);
     }
 
     // Authorization check
@@ -310,9 +399,12 @@ export async function GET(
     });
   } catch (error) {
     console.error('Failed to fetch transaction:', error);
-    // Return mock data on error
-    const mockTransaction = getMockTransaction(params.id);
-    return successResponse({ transaction: mockTransaction });
+
+    if (shouldUseDemoFallback(error)) {
+      return NextResponse.json(getDemoTransactionByIdPayload(params.id));
+    }
+
+    return errorResponse('Failed to fetch transaction', 500);
   }
 }
 
@@ -336,7 +428,21 @@ export async function PATCH(
         escrow: {
           include: { releaseConditions: true },
         },
+        supplier: {
+          select: {
+            email: true,
+          },
+        },
         requirement: true,
+        documents: {
+          select: {
+            id: true,
+            type: true,
+            name: true,
+            url: true,
+            hash: true,
+          },
+        },
       },
     });
 
@@ -420,6 +526,21 @@ export async function PATCH(
         // Check if we can auto-release funds
         const releaseResult = await checkAndReleaseFunds(params.id, transaction.escrow.id);
 
+        writeBlockchainAudit(
+          'DELIVERY_CONFIRMED',
+          params.id,
+          session.user.id,
+          'Buyer confirmed delivery'
+        ).catch(console.error);
+        if (releaseResult.released) {
+          writeBlockchainAudit(
+            'FUNDS_RELEASED',
+            params.id,
+            session.user.id,
+            'Escrow funds released after delivery confirmation'
+          ).catch(console.error);
+        }
+
         // Fetch updated escrow state
         const updatedEscrow = await prisma.escrowTransaction.findUnique({
           where: { id: transaction.escrow.id },
@@ -495,6 +616,21 @@ export async function PATCH(
 
         // Check if we can auto-release funds
         const releaseResult = await checkAndReleaseFunds(params.id, transaction.escrow.id);
+
+        writeBlockchainAudit(
+          'QUALITY_APPROVED',
+          params.id,
+          session.user.id,
+          'Buyer approved product quality'
+        ).catch(console.error);
+        if (releaseResult.released) {
+          writeBlockchainAudit(
+            'FUNDS_RELEASED',
+            params.id,
+            session.user.id,
+            'Escrow funds released after quality approval'
+          ).catch(console.error);
+        }
 
         // Fetch updated state
         const updatedTransaction = await prisma.transaction.findUnique({
@@ -573,6 +709,31 @@ export async function PATCH(
         // Check if we can auto-release funds
         const releaseResult = await checkAndReleaseFunds(params.id, transaction.escrow.id);
 
+        registerVerifiedDocumentsOnChain(
+          params.id,
+          transaction.documents.map((document) => ({
+            id: document.id,
+            type: String(document.type),
+            name: document.name,
+            url: document.url,
+            hash: document.hash,
+          }))
+        ).catch(console.error);
+        writeBlockchainAudit(
+          'DOCUMENTS_VERIFIED',
+          params.id,
+          session.user.id,
+          'Admin verified transaction documents'
+        ).catch(console.error);
+        if (releaseResult.released) {
+          writeBlockchainAudit(
+            'FUNDS_RELEASED',
+            params.id,
+            session.user.id,
+            'Escrow funds released after document verification'
+          ).catch(console.error);
+        }
+
         // Fetch updated state
         const updatedTransaction = await prisma.transaction.findUnique({
           where: { id: params.id },
@@ -641,6 +802,13 @@ export async function PATCH(
         } catch (e) {
           console.error('Blockchain release failed:', e);
         }
+
+        writeBlockchainAudit(
+          'FUNDS_RELEASED',
+          params.id,
+          session.user.id,
+          'Funds force-released by admin'
+        ).catch(console.error);
 
         return successResponse({
           transaction: { id: params.id, status: 'COMPLETED' },
@@ -725,9 +893,131 @@ export async function PATCH(
           });
         });
 
+        writeBlockchainAudit(
+          'DISPUTE_OPENED',
+          params.id,
+          session.user.id,
+          String(updateData.reason || 'Dispute opened')
+        ).catch(console.error);
+
         return successResponse({
           transaction: { id: params.id, status: 'DISPUTED' },
           escrow: { status: 'DISPUTED' },
+        });
+      }
+
+      case 'CONFIRMPAYMENT':
+      case 'CONFIRM_PAYMENT': {
+        if (session.user.role !== 'ADMIN') {
+          return errorResponse('Forbidden: Only admin can confirm payment', 403);
+        }
+
+        if (transaction.status === 'CONFIRMED') {
+          return errorResponse('Payment has already been confirmed', 409);
+        }
+
+        const validStatuses = new Set([
+          'PAYMENT_RECEIVED',
+          'PAYMENT_CONFIRMED',
+          'PAID',
+          'ESCROW_HELD',
+        ]);
+
+        if (!validStatuses.has(transaction.status)) {
+          return errorResponse(
+            `Cannot confirm payment for transaction in ${transaction.status} status`,
+            400
+          );
+        }
+
+        const updatedTransaction = await prisma.$transaction(async (tx) => {
+          const updated = await tx.transaction.update({
+            where: { id: params.id },
+            data: {
+              status: 'CONFIRMED',
+              paymentStatus: 'SUCCEEDED',
+              paymentConfirmedAt: transaction.paymentConfirmedAt || new Date(),
+            },
+          });
+
+          await tx.transactionMilestone.create({
+            data: {
+              transactionId: params.id,
+              status: 'CONFIRMED',
+              description: 'Payment verified by admin. Order confirmed for production.',
+              actor: session.user.id,
+            },
+          });
+
+          return updated;
+        });
+
+        const references = {
+          requirementReference: formatRequirementReference(transaction.requirementId),
+          quotationReference: formatQuotationReference(transaction.quotationId),
+          transactionReference: formatTransactionReference(transaction.id),
+          ...buildOrderReferences(transaction.id),
+        };
+
+        let supplierUserId: string | null = null;
+        if (transaction.supplier?.email) {
+          const supplierUser = await prisma.user.findFirst({
+            where: {
+              role: 'SUPPLIER',
+              email: transaction.supplier.email,
+            },
+            select: { id: true },
+          });
+          supplierUserId = supplierUser?.id || null;
+        }
+
+        const notifications = [
+          {
+            userId: transaction.buyerId,
+            type: 'SYSTEM' as const,
+            title: 'Payment Verified - Order Confirmed',
+            message: `${references.transactionReference} (${references.buyerOrderId}) has been verified by admin. Your order is now confirmed for production.`,
+            resourceType: 'transaction',
+            resourceId: transaction.id,
+          },
+          ...(supplierUserId
+            ? [
+                {
+                  userId: supplierUserId,
+                  type: 'SYSTEM' as const,
+                  title: 'Order Confirmed - Start Production',
+                  message: `${references.transactionReference} (${references.supplierOrderId}) payment is verified by admin. You can proceed with production.`,
+                  resourceType: 'transaction',
+                  resourceId: transaction.id,
+                },
+              ]
+            : []),
+          ...(transaction.requirement?.assignedAccountManagerId
+            ? [
+                {
+                  userId: transaction.requirement.assignedAccountManagerId,
+                  type: 'SYSTEM' as const,
+                  title: 'Client Order Confirmed',
+                  message: `${references.transactionReference} is now confirmed after payment verification. Follow production and shipment milestones.`,
+                  resourceType: 'transaction',
+                  resourceId: transaction.id,
+                },
+              ]
+            : []),
+        ];
+
+        if (notifications.length > 0) {
+          await prisma.notification.createMany({ data: notifications });
+        }
+
+        return successResponse({
+          transaction: {
+            id: updatedTransaction.id,
+            status: updatedTransaction.status,
+            paymentStatus: updatedTransaction.paymentStatus,
+            paymentConfirmedAt: updatedTransaction.paymentConfirmedAt,
+          },
+          references,
         });
       }
 
@@ -737,7 +1027,7 @@ export async function PATCH(
           // Validate status transition
           const validTransitions: Record<string, string[]> = {
             PAYMENT_PENDING: ['PAYMENT_RECEIVED', 'CANCELLED'],
-            PAYMENT_RECEIVED: ['ESCROW_HELD', 'CANCELLED'],
+            PAYMENT_RECEIVED: ['ESCROW_HELD', 'CONFIRMED', 'CANCELLED'],
             ESCROW_HELD: ['PRODUCTION', 'CANCELLED'],
             PRODUCTION: ['QUALITY_CHECK', 'CANCELLED'],
             QUALITY_CHECK: ['SHIPPED', 'CANCELLED'],
@@ -745,7 +1035,7 @@ export async function PATCH(
             IN_TRANSIT: ['CUSTOMS', 'DELIVERED'],
             CUSTOMS: ['DELIVERED'],
             DELIVERED: ['CONFIRMED', 'DISPUTED'],
-            CONFIRMED: ['COMPLETED'],
+            CONFIRMED: ['PRODUCTION', 'COMPLETED'],
           };
 
           const allowed = validTransitions[transaction.status] || [];

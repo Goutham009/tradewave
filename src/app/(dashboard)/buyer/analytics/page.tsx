@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { 
   TrendingUp, DollarSign, ShoppingCart, RefreshCw, 
   AlertTriangle, Users, BarChart3, PieChart 
@@ -30,11 +31,7 @@ export default function PurchaseAnalyticsPage() {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, []);
-
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
       const res = await fetch('/api/buyer/purchase-history/analytics');
       const data = await res.json();
@@ -44,7 +41,11 @@ export default function PurchaseAnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
   const formatCurrency = (amount: string) => {
     return new Intl.NumberFormat('en-US', {
@@ -223,7 +224,7 @@ export default function PurchaseAnalyticsPage() {
               <div key={supplier.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                 <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                   {supplier.avatar ? (
-                    <img src={supplier.avatar} alt={supplier.name} className="w-10 h-10 rounded-full" />
+                    <Image src={supplier.avatar} alt={supplier.name} width={40} height={40} className="w-10 h-10 rounded-full" />
                   ) : (
                     <span className="text-blue-600 font-medium">
                       {(supplier.companyName || supplier.name).charAt(0)}

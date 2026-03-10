@@ -19,6 +19,12 @@ export async function GET(
     const transaction = await prisma.transaction.findUnique({
       where: { id: transactionId },
       include: {
+        supplier: {
+          select: {
+            id: true,
+            email: true,
+          },
+        },
         customsClearance: {
           include: {
             documents: true,
@@ -37,38 +43,22 @@ export async function GET(
     // Check authorization
     const userId = session.user.id;
     const userRole = session.user.role;
+    const isSupplierOwner =
+      !!session.user.email && transaction.supplier?.email === session.user.email;
     
     if (
       transaction.buyerId !== userId &&
-      transaction.supplierId !== userId &&
+      !isSupplierOwner &&
       !['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole || '')
     ) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     if (!transaction.customsClearance) {
-      // Return mock data for demo if no customs clearance exists
-      return NextResponse.json({
-        entryNumber: `CE-${transactionId.slice(0, 8).toUpperCase()}`,
-        portOfEntry: 'Los Angeles, CA',
-        brokerName: 'Global Customs Brokers Inc.',
-        status: 'DOCUMENTS_SUBMITTED',
-        dutyAmount: 1250.00,
-        estimatedClearanceDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-        documents: [
-          { name: 'Commercial Invoice', description: 'Original invoice from supplier', status: 'APPROVED' },
-          { name: 'Packing List', description: 'Detailed list of shipment contents', status: 'APPROVED' },
-          { name: 'Bill of Lading', description: 'Ocean cargo shipping document', status: 'SUBMITTED' },
-          { name: 'Certificate of Origin', description: 'Country of manufacture certificate', status: 'PENDING' },
-        ],
-        timeline: [
-          { title: 'Arrived at Port', description: 'Shipment arrived at port of entry', completed: true, timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() },
-          { title: 'Documents Submitted', description: 'Customs documentation submitted for review', completed: true, timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString() },
-          { title: 'Under Review', description: 'Customs officials reviewing documentation', completed: false },
-          { title: 'Duties Paid', description: 'Import duties and taxes paid', completed: false },
-          { title: 'Cleared', description: 'Shipment cleared for delivery', completed: false },
-        ],
-      });
+      return NextResponse.json(
+        { error: 'Customs clearance record not found for this transaction' },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json(transaction.customsClearance);

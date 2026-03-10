@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,44 +11,74 @@ import {
   Mail,
   Phone,
   Package,
-  DollarSign,
-  Star,
+  Loader2,
   Eye,
 } from 'lucide-react';
 import Link from 'next/link';
 
 interface Client {
   id: string;
+  accountNumber?: string;
   companyName: string;
   contactPerson: string;
   email: string;
-  phone: string;
+  phone?: string | null;
   type: 'buyer' | 'supplier';
   status: 'active' | 'inactive';
   totalOrders: number;
-  totalValue: number;
-  rating: number;
   joinedDate: string;
 }
 
-const MOCK_CLIENTS: Client[] = [
-  { id: 'CLI-001', companyName: 'Acme Corporation', contactPerson: 'John Smith', email: 'john@acme.com', phone: '+1 234 567 8900', type: 'buyer', status: 'active', totalOrders: 45, totalValue: 125000, rating: 4.8, joinedDate: '2023-06-15' },
-  { id: 'CLI-002', companyName: 'Tech Solutions Inc', contactPerson: 'Sarah Johnson', email: 'sarah@techsolutions.com', phone: '+1 345 678 9012', type: 'buyer', status: 'active', totalOrders: 32, totalValue: 89000, rating: 4.6, joinedDate: '2023-08-22' },
-  { id: 'CLI-003', companyName: 'Steel Industries Ltd', contactPerson: 'Mike Chen', email: 'mike@steelindustries.com', phone: '+1 456 789 0123', type: 'supplier', status: 'active', totalOrders: 156, totalValue: 450000, rating: 4.9, joinedDate: '2023-03-10' },
-  { id: 'CLI-004', companyName: 'Fashion Hub Ltd', contactPerson: 'Emily Davis', email: 'emily@fashionhub.com', phone: '+1 567 890 1234', type: 'buyer', status: 'active', totalOrders: 28, totalValue: 67000, rating: 4.5, joinedDate: '2023-09-05' },
-  { id: 'CLI-005', companyName: 'Global Traders LLC', contactPerson: 'Robert Wilson', email: 'robert@globaltraders.com', phone: '+1 678 901 2345', type: 'supplier', status: 'inactive', totalOrders: 12, totalValue: 34000, rating: 4.2, joinedDate: '2023-11-18' },
-];
-
 export default function ClientsPage() {
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
-  const filteredClients = MOCK_CLIENTS.filter((client) => {
-    const matchesSearch = client.companyName.toLowerCase().includes(search.toLowerCase()) ||
-      client.contactPerson.toLowerCase().includes(search.toLowerCase());
-    const matchesType = typeFilter === 'all' || client.type === typeFilter;
-    return matchesSearch && matchesType;
-  });
+  const fetchClients = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const params = new URLSearchParams();
+      if (typeFilter !== 'all') {
+        params.set('type', typeFilter);
+      }
+
+      const response = await fetch(`/api/am/clients?${params.toString()}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch clients');
+      }
+
+      setClients(data.clients || []);
+    } catch (fetchError) {
+      console.error('Error fetching clients:', fetchError);
+      setClients([]);
+      setError(fetchError instanceof Error ? fetchError.message : 'Failed to fetch clients');
+    } finally {
+      setLoading(false);
+    }
+  }, [typeFilter]);
+
+  useEffect(() => {
+    void fetchClients();
+  }, [fetchClients]);
+
+  const filteredClients = useMemo(
+    () =>
+      clients.filter((client) => {
+        const matchesSearch =
+          client.companyName.toLowerCase().includes(search.toLowerCase()) ||
+          client.contactPerson.toLowerCase().includes(search.toLowerCase()) ||
+          client.email.toLowerCase().includes(search.toLowerCase());
+        const matchesType = typeFilter === 'all' || client.type === typeFilter;
+        return matchesSearch && matchesType;
+      }),
+    [clients, search, typeFilter]
+  );
 
   return (
     <div className="space-y-6">
@@ -94,65 +124,84 @@ export default function ClientsPage() {
       </div>
 
       {/* Clients Grid */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {filteredClients.map((client) => (
-          <Card key={client.id} className="bg-slate-900 border-slate-800">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <div className={`h-12 w-12 rounded-lg flex items-center justify-center ${
-                  client.type === 'buyer' ? 'bg-blue-500/20' : 'bg-green-500/20'
-                }`}>
-                  <Building2 className={`h-6 w-6 ${client.type === 'buyer' ? 'text-blue-500' : 'text-green-500'}`} />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-white">{client.companyName}</h3>
-                      <Badge variant="outline" className="text-xs capitalize">{client.type}</Badge>
-                      <Badge className={client.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-slate-500/20 text-slate-400'}>
-                        {client.status}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-1 text-yellow-500">
-                      <Star className="h-4 w-4 fill-current" />
-                      <span className="text-sm font-medium">{client.rating}</span>
-                    </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-red-500" />
+        </div>
+      ) : filteredClients.length === 0 ? (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="py-10 text-center text-slate-400">
+            No clients found.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {filteredClients.map((client) => (
+            <Card key={client.id} className="bg-slate-900 border-slate-800">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4">
+                  <div className={`h-12 w-12 rounded-lg flex items-center justify-center ${
+                    client.type === 'buyer' ? 'bg-blue-500/20' : 'bg-green-500/20'
+                  }`}>
+                    <Building2 className={`h-6 w-6 ${client.type === 'buyer' ? 'text-blue-500' : 'text-green-500'}`} />
                   </div>
-                  <p className="text-sm text-slate-400 mt-1">{client.contactPerson}</p>
-                  
-                  <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <Mail className="h-3 w-3" />
-                      {client.email}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Phone className="h-3 w-3" />
-                      {client.phone}
-                    </span>
-                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-white">{client.companyName}</h3>
+                        <Badge variant="outline" className="text-xs capitalize">{client.type}</Badge>
+                        <Badge className={client.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-slate-500/20 text-slate-400'}>
+                          {client.status}
+                        </Badge>
+                      </div>
+                    </div>
 
-                  <div className="flex items-center gap-6 mt-4 pt-4 border-t border-slate-800">
-                    <div className="flex items-center gap-2">
-                      <Package className="h-4 w-4 text-slate-400" />
-                      <span className="text-sm text-white">{client.totalOrders} orders</span>
+                    <p className="text-sm text-slate-400 mt-1">{client.contactPerson}</p>
+                    {client.accountNumber && (
+                      <p className="text-xs text-slate-500 mt-1 font-mono">{client.accountNumber}</p>
+                    )}
+
+                    <div className="flex items-center gap-4 mt-3 text-xs text-slate-500 flex-wrap">
+                      <span className="flex items-center gap-1">
+                        <Mail className="h-3 w-3" />
+                        {client.email}
+                      </span>
+                      {client.phone && (
+                        <span className="flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          {client.phone}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-slate-400" />
-                      <span className="text-sm text-white">${client.totalValue.toLocaleString()}</span>
+
+                    <div className="flex items-center gap-6 mt-4 pt-4 border-t border-slate-800">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-slate-400" />
+                        <span className="text-sm text-white">{client.totalOrders} orders</span>
+                      </div>
+                      <span className="text-xs text-slate-500">
+                        Joined {new Date(client.joinedDate).toLocaleDateString()}
+                      </span>
+                      <Link href={`/internal/clients/${client.id}`}>
+                        <Button variant="ghost" size="sm" className="ml-auto">
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
+                        </Button>
+                      </Link>
                     </div>
-                    <Link href={`/internal/clients/${client.id}`}>
-                      <Button variant="ghost" size="sm" className="ml-auto">
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
-                      </Button>
-                    </Link>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <Card className="bg-slate-900 border-red-500/30">
+          <CardContent className="py-3 text-sm text-red-300">{error}</CardContent>
+        </Card>
+      )}
     </div>
   );
 }

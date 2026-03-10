@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { sendWelcomeEmail as triggerWelcomeEmail } from '@/lib/email/triggers';
+import { formatAccountReference } from '@/lib/flow-references';
 
 // POST /api/am/leads/[id]/create-account - AM creates buyer account from lead
 export async function POST(
@@ -30,8 +32,9 @@ export async function POST(
       role, // BUYER, SUPPLIER, BOTH
       notes,
       sendWelcomeEmail,
+      accountManagerId: requestedAccountManagerId,
     } = body;
-    const accountManagerId = session.user.id;
+    const createdByUserId = session.user.id;
 
     // Validate required fields
     if (!name || !email || !companyName) {
@@ -56,6 +59,27 @@ export async function POST(
       lead.assignedTo !== session.user.id
     ) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    let accountManagerId: string | null = null;
+    if (session.user.role === 'ACCOUNT_MANAGER') {
+      accountManagerId = session.user.id;
+    } else {
+      accountManagerId = requestedAccountManagerId || lead.assignedTo || null;
+    }
+
+    if (accountManagerId) {
+      const assignedAccountManager = await prisma.user.findUnique({
+        where: { id: accountManagerId },
+        select: { id: true, role: true },
+      });
+
+      if (!assignedAccountManager || assignedAccountManager.role !== 'ACCOUNT_MANAGER') {
+        return NextResponse.json(
+          { error: 'Assigned account manager is invalid' },
+          { status: 400 }
+        );
+      }
     }
 
     // Check if user with this email already exists
@@ -93,7 +117,7 @@ export async function POST(
         role: userRole,
         status: 'ACTIVE',
         source: 'ACCOUNT_MANAGER',
-        createdByUserId: accountManagerId,
+        createdByUserId,
         accountManagerId,
         firstLogin: true,
       },
@@ -106,17 +130,22 @@ export async function POST(
         status: 'CONVERTED',
         convertedAt: new Date(),
         convertedUserId: user.id,
+        assignedTo: lead.assignedTo || accountManagerId,
+        assignedAt: lead.assignedAt || new Date(),
         notes: notes ? `${lead.notes || ''}\n\nConversion Notes: ${notes}`.trim() : lead.notes,
       },
     });
 
-    // TODO: Send welcome email with temporary password if sendWelcomeEmail is true
-    // In production, use a proper email service (e.g., SendGrid, Resend)
+    // Send welcome email with temporary password if requested
+    if (sendWelcomeEmail) {
+      triggerWelcomeEmail(user.id, email, name).catch(console.error);
+    }
 
     return NextResponse.json({
       status: 'success',
       user: {
         id: user.id,
+        accountNumber: formatAccountReference(user.id),
         name: user.name,
         email: user.email,
         phone: user.phone,

@@ -4,6 +4,7 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/auth-options';
 import { prisma } from '@/lib/db';
 import { emitToUser } from '@/lib/socket/server';
 import { getTrackingService } from '@/lib/logistics/tracking';
+import { sendDeliveryReadyEmail } from '@/lib/email/triggers';
 
 export async function POST(
   request: NextRequest,
@@ -68,7 +69,16 @@ export async function POST(
     }
 
     // Verify transaction is in correct status
-    const validStatuses = ['PAID', 'PAYMENT_RECEIVED', 'ESCROW_HELD', 'PRODUCTION'];
+    const validStatuses = [
+      'PAID',
+      'PAYMENT_RECEIVED',
+      'PAYMENT_CONFIRMED',
+      'ESCROW_HELD',
+      'CONFIRMED',
+      'PRODUCTION',
+      'QUALITY_INSPECTION',
+      'QUALITY_APPROVED',
+    ];
     if (!validStatuses.includes(transaction.status)) {
       return NextResponse.json(
         { error: `Cannot ship transaction in ${transaction.status} status` },
@@ -151,6 +161,35 @@ export async function POST(
       },
     });
 
+    const notificationEntries = [
+      {
+        userId: transaction.buyerId,
+        type: 'SHIPMENT_UPDATE' as const,
+        title: 'Order Shipped',
+        message: `Your order has been shipped via ${shippingProvider}. Tracking number: ${trackingNumber}.`,
+        resourceType: 'transaction',
+        resourceId: transactionId,
+      },
+      ...(transaction.requirement?.assignedAccountManagerId
+        ? [
+            {
+              userId: transaction.requirement.assignedAccountManagerId,
+              type: 'SHIPMENT_UPDATE' as const,
+              title: 'Client Order Shipped',
+              message: `Transaction ${transactionId} has been shipped. Tracking number: ${trackingNumber}.`,
+              resourceType: 'transaction',
+              resourceId: transactionId,
+            },
+          ]
+        : []),
+    ];
+
+    if (notificationEntries.length > 0) {
+      await prisma.notification.createMany({
+        data: notificationEntries,
+      });
+    }
+
     // Emit Socket.io event to buyer
     try {
       emitToUser(transaction.buyerId, 'shipmentConfirmed', {
@@ -165,8 +204,7 @@ export async function POST(
       console.error('Socket emit error:', socketError);
     }
 
-    // TODO: Send email notification to buyer
-    // await sendShipmentConfirmedEmail(transactionId);
+    sendDeliveryReadyEmail(transactionId, trackingNumber).catch(console.error);
 
     return NextResponse.json({
       success: true,
